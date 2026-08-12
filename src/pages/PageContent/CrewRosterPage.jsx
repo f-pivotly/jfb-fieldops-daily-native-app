@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { Box, Text, Group, Button, Table, Modal, TextInput, Badge } from '@mantine/core'
-import { IconPlus, IconRefresh, IconPencil } from '@tabler/icons-react'
-import { useOfflinePersonRoster } from '../../hooks/useOfflinePersonRoster'
-import StatusPill from '../../components/StatusPill'
+import { Box, Text, Group, Button, Table, Modal, TextInput } from '@mantine/core'
+import { IconPlus, IconPencil } from '@tabler/icons-react'
+import { useDomainData } from '../../hooks/useDomainData'
 import LoadingSpinner from '../../components/LoadingSpinner'
+import SafeError from '../../components/SafeError'
 
 export default function CrewRosterPage({ domain, system, actions = [] }) {
   const isEnabled = (key) => {
@@ -13,19 +13,7 @@ export default function CrewRosterPage({ domain, system, actions = [] }) {
   const canCreate = isEnabled('create_record')
   const canUpdate = isEnabled('update_record')
 
-  const {
-    records,
-    loading,
-    isOnline,
-    cachedOnly,
-    lastSyncedAt,
-    pendingCount,
-    failedCount,
-    statusByLocalId,
-    createPerson,
-    updatePerson,
-    retryFailed,
-  } = useOfflinePersonRoster({ domain, system })
+  const { records, loading, error, creating, updating, create, update } = useDomainData({ domain, system })
 
   const [createOpen, setCreateOpen] = useState(false)
   const [createName, setCreateName] = useState('')
@@ -36,7 +24,7 @@ export default function CrewRosterPage({ domain, system, actions = [] }) {
 
   async function handleCreate() {
     if (!createName.trim()) return
-    await createPerson(createName.trim())
+    await create({ name: createName.trim() })
     setCreateName('')
     setCreateOpen(false)
   }
@@ -49,7 +37,7 @@ export default function CrewRosterPage({ domain, system, actions = [] }) {
 
   async function handleEdit() {
     if (!editName.trim() || !editRow) return
-    await updatePerson(editRow.local_id, { name: editName.trim() })
+    await update(editRow.id, { name: editName.trim() })
     setEditOpen(false)
     setEditRow(null)
   }
@@ -58,18 +46,9 @@ export default function CrewRosterPage({ domain, system, actions = [] }) {
     <Box style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: 6, overflow: 'hidden', margin: 16 }}>
       <Box px={16} py={10} style={{ background: '#f9f9f9', borderBottom: '1px solid #ebebeb' }}>
         <Group justify="space-between" align="center">
-          <Group gap={10}>
-            <Text size="xs" fw={700} style={{ letterSpacing: '1px', textTransform: 'uppercase', color: '#888' }}>
-              Crew Roster
-            </Text>
-            <StatusPill val={isOnline ? 'Online' : 'Offline'} />
-            {pendingCount > 0 && (
-              <Badge size="xs" color="yellow" variant="light">{pendingCount} pending</Badge>
-            )}
-            {failedCount > 0 && (
-              <Badge size="xs" color="red" variant="light">{failedCount} failed</Badge>
-            )}
-          </Group>
+          <Text size="xs" fw={700} style={{ letterSpacing: '1px', textTransform: 'uppercase', color: '#888' }}>
+            Crew Roster
+          </Text>
           {canCreate && (
             <Button
               size="xs"
@@ -81,52 +60,38 @@ export default function CrewRosterPage({ domain, system, actions = [] }) {
             </Button>
           )}
         </Group>
-        {cachedOnly && (
-          <Text size="xs" c="#b45309" mt={6}>
-            Showing cached data{lastSyncedAt ? ` — last synced ${new Date(lastSyncedAt).toLocaleTimeString()}` : ''}.
-          </Text>
-        )}
       </Box>
 
       <Box p={16}>
         {loading && <LoadingSpinner py={24} />}
-        {!loading && records.length === 0 && (
+        {!loading && <SafeError message={error} />}
+        {!loading && !error && records.length === 0 && (
           <Text size="xs" c="#aaa" ta="center" py={24}>No crew members yet</Text>
         )}
-        {!loading && records.length > 0 && (
+        {!loading && !error && records.length > 0 && (
           <Box style={{ overflowX: 'auto' }}>
             <Table striped highlightOnHover withTableBorder withColumnBorders style={{ fontSize: 12, minWidth: 400 }}>
               <Table.Thead>
                 <Table.Tr>
                   <Table.Th style={{ textTransform: 'uppercase', fontSize: 10, letterSpacing: '0.5px', color: '#888', fontWeight: 700 }}>Name</Table.Th>
-                  <Table.Th style={{ textTransform: 'uppercase', fontSize: 10, letterSpacing: '0.5px', color: '#888', fontWeight: 700 }}>Status</Table.Th>
-                  <Table.Th style={{ width: 80 }} />
+                  <Table.Th style={{ width: 40 }} />
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
-                {records.map((row) => {
-                  const status = statusByLocalId[row.local_id] ?? 'Synced'
-                  return (
-                    <Table.Tr key={row.local_id}>
-                      <Table.Td style={{ color: '#333' }}>{row.name}</Table.Td>
-                      <Table.Td><StatusPill val={status} /></Table.Td>
-                      <Table.Td>
+                {records.map((row) => (
+                  <Table.Tr key={row.id}>
+                    <Table.Td style={{ color: '#333' }}>{row.name}</Table.Td>
+                    <Table.Td>
+                      {canUpdate && (
                         <Group gap={6} justify="center">
-                          {canUpdate && (
-                            <Box onClick={() => openEdit(row)} style={{ cursor: 'pointer', color: '#888', display: 'flex', alignItems: 'center' }} title="Edit">
-                              <IconPencil size={13} />
-                            </Box>
-                          )}
-                          {status === 'Failed' && (
-                            <Box onClick={() => retryFailed(row.local_id)} style={{ cursor: 'pointer', color: '#2563eb', display: 'flex', alignItems: 'center' }} title="Retry now">
-                              <IconRefresh size={13} />
-                            </Box>
-                          )}
+                          <Box onClick={() => openEdit(row)} style={{ cursor: 'pointer', color: '#888', display: 'flex', alignItems: 'center' }} title="Edit">
+                            <IconPencil size={13} />
+                          </Box>
                         </Group>
-                      </Table.Td>
-                    </Table.Tr>
-                  )
-                })}
+                      )}
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
               </Table.Tbody>
             </Table>
           </Box>
@@ -150,7 +115,7 @@ export default function CrewRosterPage({ domain, system, actions = [] }) {
         />
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => { setCreateOpen(false); setCreateName('') }}>Cancel</Button>
-          <Button size="xs" onClick={handleCreate} disabled={!createName.trim()} style={{ background: '#dc2626', border: 'none' }}>
+          <Button size="xs" loading={creating} onClick={handleCreate} disabled={!createName.trim()} style={{ background: '#dc2626', border: 'none' }}>
             Add
           </Button>
         </Group>
@@ -172,7 +137,7 @@ export default function CrewRosterPage({ domain, system, actions = [] }) {
         />
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => { setEditOpen(false); setEditRow(null) }}>Cancel</Button>
-          <Button size="xs" onClick={handleEdit} disabled={!editName.trim()} style={{ background: '#dc2626', border: 'none' }}>
+          <Button size="xs" loading={updating} onClick={handleEdit} disabled={!editName.trim()} style={{ background: '#dc2626', border: 'none' }}>
             Save
           </Button>
         </Group>

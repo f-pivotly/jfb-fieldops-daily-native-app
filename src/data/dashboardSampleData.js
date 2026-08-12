@@ -1,7 +1,8 @@
-// Static sample data for DashboardPage while apg-jfbo-dashboard / the `project`
-// domain don't exist yet. Field names match the `project` table as read by
-// jfb-fieldops-daily/src/pages/ProjectDashboard.tsx, so swapping this for a real
-// domain read later is a data-source change, not a UI rewrite.
+// Static sample data shared by DashboardPage + ReportListPage while
+// apg-jfbo-dashboard / apg-jfbo-report-list and the `project` / `report_day`
+// domains don't exist yet. Field names match jfb-fieldops-daily's
+// src/pages/ProjectDashboard.tsx + src/pages/ReportList.tsx, so swapping this
+// for a real domain read later is a data-source change, not a UI rewrite.
 //
 // project_code / name / work_type are the real active projects (per
 // jfb-fieldops-daily/README.md and its sql/ seed files). `client` is a
@@ -60,6 +61,10 @@ export const SAMPLE_PROJECTS = [
   },
 ];
 
+export function findProject(id) {
+  return SAMPLE_PROJECTS.find((p) => p.id === id) ?? null;
+}
+
 // Mirrors jfb-fieldops-daily/src/types/db.ts REPORT_STATUS_LABEL.
 export const REPORT_STATUS_LABEL = {
   no_report: 'No Report',
@@ -76,4 +81,30 @@ export const REPORT_STATUS_COLOR = {
   cqc_review: 'yellow',
   approved: 'green',
   released: 'teal',
+};
+
+// Report rows per project, grouped by cal week — mirrors ReportList.tsx's
+// WeekGroup shape. One project (Fountain Lake) gets a fuller history so the
+// week-grouping UI has something to show; the rest get a lighter set.
+export const SAMPLE_REPORTS_BY_PROJECT = {
+  'sample-172603': [
+    { date: '2026-08-11', day: 'Tue', status: 'draft', calWeek: 33, projectWeek: 12 },
+    { date: '2026-08-10', day: 'Mon', status: 'released', calWeek: 33, projectWeek: 12 },
+    { date: '2026-08-08', day: 'Sat', status: 'released', calWeek: 32, projectWeek: 11 },
+    { date: '2026-08-07', day: 'Fri', status: 'released', calWeek: 32, projectWeek: 11 },
+    { date: '2026-08-06', day: 'Thu', status: 'released', calWeek: 32, projectWeek: 11 },
+  ],
+  'sample-422509': [
+    { date: '2026-08-10', day: 'Mon', status: 'cqc_review', calWeek: 33, projectWeek: 6 },
+    { date: '2026-08-08', day: 'Sat', status: 'released', calWeek: 32, projectWeek: 5 },
+    { date: '2026-08-07', day: 'Fri', status: 'released', calWeek: 32, projectWeek: 5 },
+  ],
+  'sample-172507': [
+    { date: '2026-08-09', day: 'Sun', status: 'draft', calWeek: 32, projectWeek: 2 },
+  ],
+  'sample-152601': [
+    { date: '2026-08-11', day: 'Tue', status: 'approved', calWeek: 33, projectWeek: 20 },
+    { date: '2026-08-10', day: 'Mon', status: 'released', calWeek: 33, projectWeek: 20 },
+  ],
+  'sample-152407': [],
 };

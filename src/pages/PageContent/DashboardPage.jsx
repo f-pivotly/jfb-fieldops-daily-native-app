@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom'
 import { Box, SimpleGrid, Card, Text, Badge, Group, Stack, ScrollArea } from '@mantine/core'
 import { SAMPLE_PROJECTS, REPORT_STATUS_LABEL, REPORT_STATUS_COLOR } from '../../data/dashboardSampleData'
 
@@ -23,8 +24,15 @@ export default function DashboardPage() {
 }
 
 function ProjectCard({ project }) {
+  const navigate = useNavigate()
   return (
-    <Card withBorder radius="md" padding="lg">
+    <Card
+      withBorder
+      radius="md"
+      padding="lg"
+      style={{ cursor: 'pointer' }}
+      onClick={() => navigate(`/projects/${project.id}/reports`)}
+    >
       <Group justify="space-between" align="flex-start" mb={10} wrap="nowrap">
         <Box style={{ minWidth: 0 }}>
           <Text fw={600} truncate="end">{project.name}</Text>

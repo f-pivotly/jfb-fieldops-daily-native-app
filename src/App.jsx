@@ -1,8 +1,15 @@
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, Routes, Route } from "react-router-dom";
 import { Box, Text, Loader, Center } from "@mantine/core";
 import AppHeader from "./components/AppHeader";
 import PageContent from "./pages/PageContent";
 import DashboardPage from "./pages/PageContent/DashboardPage";
+import ReportListPage from "./pages/PageContent/ReportListPage";
+import ReportEditorPage from "./pages/PageContent/ReportEditorPage";
+import RealizedToDatePage from "./pages/PageContent/RealizedToDatePage";
+import WeeklySummaryPage from "./pages/PageContent/WeeklySummaryPage";
+import ProjectSettingsPage from "./pages/PageContent/ProjectSettingsPage";
+import OperatorHoursPage from "./pages/PageContent/OperatorHoursPage";
+import CappingSetupPage from "./pages/PageContent/CappingSetupPage";
 
 import { useNav } from "./hooks/useNav";
 import { usePageDetails } from "./hooks/usePageDetails";
@@ -11,31 +18,46 @@ import { usePicklistCatalog } from "./hooks/usePicklistCatalog";
 import { REQUIRED_PICKLISTS } from "./config/requiredPicklists";
 import { SAMPLE_MODE } from "./config/sampleMode";
 
+// Mirrors the draft app.pages[] composition in
+// JFB_FIELDOPS_DAILY_SCREENS_AND_PAGE_SLUGS.md §5 — only the show_in_menu:
+// true entries appear in the top nav; the rest are reached by drilling in
+// (Dashboard → Report List → Report Editor, etc.), same as the real app.
+const SAMPLE_MENU_ITEMS = [
+  { page_slug: "apg-jfbo-dashboard", label: "Dashboard", path: "/" },
+  { page_slug: "apg-jfbo-operator-hours", label: "Operator Hours", path: "/admin/operators" },
+  { page_slug: "apg-jfbo-capping-setup", label: "Capping Setup", path: "/admin/capping-setup" },
+];
+
 export default function App() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { ready, error: configError, fromCache: configFromCache } = useAppConfig();
+  const { ready, error: configError } = useAppConfig();
   const { loading: picklistsLoading, missing: missingPicklists } = usePicklistCatalog(REQUIRED_PICKLISTS);
 
-  const { menuItems, defaultItem, loading: navLoading, fromCache: navFromCache } = useNav();
+  const { menuItems, defaultItem, loading: navLoading } = useNav();
   const {
     pageData,
     loading: pageLoading,
     error: pageError,
     slug,
     loadPage,
-    fromCache: pageFromCache,
   } = usePageDetails();
 
-  const usingCachedShell = configFromCache || navFromCache || pageFromCache;
-
-  // Sample-mode bypass: renders DashboardPage directly with static data instead
-  // of waiting on a real Pivotly parent handshake + backend app_page registration
-  // (neither exists yet — apg-jfbo-dashboard is still planned, not created). See
-  // src/config/sampleMode.js. All the hooks above still get called normally
-  // (rules-of-hooks) — they just never fire real network requests since
-  // `ready`/`config.appSlug` never resolve without a real parent.
+  // Sample-mode bypass: renders every planned screen from static data instead
+  // of waiting on a real Pivotly parent handshake + backend app_page
+  // registration (none of the apg-jfbo-* slugs are created yet — see
+  // JFB_FIELDOPS_DAILY_SCREENS_AND_PAGE_SLUGS.md). See src/config/sampleMode.js.
+  // All the hooks above still get called normally (rules-of-hooks) — they just
+  // never fire real network requests since `ready`/`config.appSlug` never
+  // resolve without a real parent.
+  //
+  // Routing note: real apg-jfbo-* pages will be registered as top-level Portal
+  // routes, not nested React Router routes — this <Routes> block is a
+  // sample-mode-only convenience so the sample screens can link to each other
+  // with real paths/useNavigate today. It goes away (along with SAMPLE_MODE)
+  // once each page reads from a real resolve() call instead.
   if (SAMPLE_MODE) {
+    const resolvedSlug = SAMPLE_MENU_ITEMS.find((n) => n.path === pathname)?.page_slug ?? null;
     return (
       <Box
         style={{
@@ -47,8 +69,22 @@ export default function App() {
           fontSize: 13,
         }}
       >
-        <AppHeader menuItems={[]} activeSlug={null} onNav={() => {}} navLoading={false} />
-        <DashboardPage />
+        <AppHeader
+          menuItems={SAMPLE_MENU_ITEMS}
+          activeSlug={resolvedSlug}
+          onNav={(navItem) => navigate(navItem.path)}
+          navLoading={false}
+        />
+        <Routes>
+          <Route path="/" element={<DashboardPage />} />
+          <Route path="/projects/:projectId/reports" element={<ReportListPage />} />
+          <Route path="/projects/:projectId/reports/:date" element={<ReportEditorPage />} />
+          <Route path="/projects/:projectId/realized" element={<RealizedToDatePage />} />
+          <Route path="/projects/:projectId/weekly" element={<WeeklySummaryPage />} />
+          <Route path="/projects/:projectId/settings" element={<ProjectSettingsPage />} />
+          <Route path="/admin/operators" element={<OperatorHoursPage />} />
+          <Route path="/admin/capping-setup" element={<CappingSetupPage />} />
+        </Routes>
       </Box>
     );
   }
@@ -160,23 +196,6 @@ export default function App() {
         onNav={handleNav}
         navLoading={navLoading}
       />
-
-      {usingCachedShell && (
-        <Box
-          py={4}
-          style={{
-            textAlign: "center",
-            fontSize: 11,
-            fontWeight: 600,
-            color: "#92400e",
-            background: "#fef3c7",
-            borderBottom: "1px solid #fde68a",
-            flexShrink: 0,
-          }}
-        >
-          Offline — showing cached data
-        </Box>
-      )}
 
       {activeItem ? (
         <PageContent

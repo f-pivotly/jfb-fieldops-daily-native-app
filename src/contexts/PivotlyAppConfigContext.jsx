@@ -6,7 +6,6 @@ import {
 } from "react";
 import { api, applyAuthToken, applyAppSlug } from "../data";
 import { onTokenUpdated, requestNewToken } from "../helpers/PivotlyHelpers";
-import { getShellCache, setShellCache } from "../data/offlineDb";
 import { AppConfigContext, decodeJwtUser, MSG } from "./appConfigContext";
 
 const CONFIG_HANDSHAKE_TIMEOUT_MS = 3000;
@@ -18,19 +17,9 @@ export function PivotlyAppConfigProvider({ children }) {
   });
   const [ready, setReady] = useState(false);
   const [error, setError] = useState(null);
-  const [fromCache, setFromCache] = useState(false);
 
   useEffect(() => {
     let settled = false;
-
-    function applyConfig(authToken, appSlug, cached) {
-      applyAuthToken(authToken);
-      applyAppSlug(appSlug);
-      setConfig({ authToken, appSlug, user: decodeJwtUser(authToken) });
-      setReady(true);
-      setFromCache(cached);
-      setError(null);
-    }
 
     function handleMessage(event) {
       if (!event.data?.type || event.data.type !== MSG.APP_CONFIG) return;
@@ -47,8 +36,11 @@ export function PivotlyAppConfigProvider({ children }) {
       }
 
       settled = true;
-      applyConfig(authToken, appSlug, false);
-      setShellCache("appConfig", { authToken, appSlug });
+      applyAuthToken(authToken);
+      applyAppSlug(appSlug);
+      setConfig({ authToken, appSlug, user: decodeJwtUser(authToken) });
+      setReady(true);
+      setError(null);
     }
 
     window.addEventListener("message", handleMessage);
@@ -57,11 +49,7 @@ export function PivotlyAppConfigProvider({ children }) {
 
     const timeoutId = setTimeout(() => {
       if (settled) return;
-      getShellCache("appConfig").then((cached) => {
-        if (settled || !cached) return;
-        settled = true;
-        applyConfig(cached.authToken, cached.appSlug, true);
-      });
+      setError("No configuration received from parent — check connection.");
     }, CONFIG_HANDSHAKE_TIMEOUT_MS);
 
     return () => {
@@ -81,8 +69,8 @@ export function PivotlyAppConfigProvider({ children }) {
   }, []);
 
   const value = useMemo(
-    () => ({ config, ready, error, fromCache, requestTokenRefresh }),
-    [config, ready, error, fromCache, requestTokenRefresh],
+    () => ({ config, ready, error, requestTokenRefresh }),
+    [config, ready, error, requestTokenRefresh],
   );
 
   return (
