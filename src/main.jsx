@@ -7,10 +7,8 @@ import { theme } from "./theme";
 import App from "./App";
 import { PivotlyAppConfigProvider } from "./contexts/PivotlyAppConfigContext";
 
-// ── Router ────────────────────────────────────────────────────────────────────
 const router = createMemoryRouter([{ path: "*", element: <App /> }]);
 
-// ── Mount ─────────────────────────────────────────────────────────────────────
 ReactDOM.createRoot(document.getElementById("root")).render(
   <MantineProvider theme={theme} defaultColorScheme="light">
     <PivotlyAppConfigProvider>

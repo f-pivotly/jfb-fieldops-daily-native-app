@@ -1,6 +1,5 @@
 import { useParams, Link } from 'react-router-dom'
 import { Box, ScrollArea, Grid, Text, Table, Badge, Group, Button, Stack } from '@mantine/core'
-import { findProject } from '../../data/dashboardSampleData'
 import {
   SAMPLE_REALIZED_SUMMARY,
   SAMPLE_PROJECTIONS,
@@ -9,11 +8,8 @@ import {
   SAMPLE_SHUTDOWN_PERIODS,
 } from '../../data/realizedSampleData'
 
-// apg-jfbo-realized-to-date. Sample-mode stand-in for
-// jfb-fieldops-daily/src/pages/RealizedToDatePage.tsx.
 export default function RealizedToDatePage() {
   const { projectId } = useParams()
-  const project = findProject(projectId)
   const s = SAMPLE_REALIZED_SUMMARY
 
   return (

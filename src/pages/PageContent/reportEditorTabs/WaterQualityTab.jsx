@@ -1,8 +1,6 @@
 import { Table, Badge, Text, Box } from '@mantine/core'
 import { SAMPLE_WATER_QUALITY } from '../../../data/reportEditorSampleData'
 
-// Real WaterQualityTab auto-pulls HydroVu turbidity readings. This shows the
-// same reading shape as a static sample table.
 export default function WaterQualityTab() {
   return (
     <Box>

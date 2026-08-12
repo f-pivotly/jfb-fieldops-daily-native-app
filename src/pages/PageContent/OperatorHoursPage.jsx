@@ -2,8 +2,6 @@ import { Link } from 'react-router-dom'
 import { Box, ScrollArea, Text, Group, Table } from '@mantine/core'
 import { SAMPLE_OPERATORS } from '../../data/operatorsSampleData'
 
-// apg-jfbo-operator-hours. Sample-mode stand-in for
-// jfb-fieldops-daily/src/pages/OperatorHoursPage.tsx.
 export default function OperatorHoursPage() {
   return (
     <ScrollArea flex={1} style={{ minHeight: 0 }}>

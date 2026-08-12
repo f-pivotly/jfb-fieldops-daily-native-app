@@ -1,5 +1,3 @@
-// Sample data for ProjectSettingsPage (apg-jfbo-project-settings) — mirrors
-// jfb-fieldops-daily/src/pages/ProjectSettingsPage.tsx + its 5 manager tabs.
 
 export const SAMPLE_PRODUCTION_PLAN = {
   expectedGohPerDay: 10,

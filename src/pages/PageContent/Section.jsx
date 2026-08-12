@@ -1,6 +1,5 @@
 import { Box, Text, Code } from "@mantine/core";
 
-// ── Section renderer for each top-level key in data.data ─────────────────────
 export default function Section({ title, data }) {
   return (
     <Box

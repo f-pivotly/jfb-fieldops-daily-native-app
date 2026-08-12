@@ -2,9 +2,6 @@ import { Box, SimpleGrid, Text, Progress } from '@mantine/core'
 import { IconChartAreaLine } from '@tabler/icons-react'
 import { SAMPLE_DREDGE_PROGRESS } from '../../../data/reportEditorSampleData'
 
-// Real DredgeProgressTab renders a canvas chart from HYPACK survey/DXF data —
-// out of scope for a sample-data UI. This shows the same summary stats with
-// a placeholder chart area.
 export default function DredgeProgressTab() {
   const d = SAMPLE_DREDGE_PROGRESS
   return (

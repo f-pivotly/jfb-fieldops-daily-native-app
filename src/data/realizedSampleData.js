@@ -1,6 +1,3 @@
-// Sample data for RealizedToDatePage (apg-jfbo-realized-to-date). Field
-// shapes mirror jfb-fieldops-daily/src/pages/RealizedToDatePage.tsx's
-// SummaryCard / ProjectionsCard / DelaySummaryCard / WeeklyLog.
 
 export const SAMPLE_REALIZED_SUMMARY = {
   projectName: 'Fountain Lake Phase 3',

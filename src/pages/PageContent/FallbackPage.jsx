@@ -25,7 +25,6 @@ export default function FallbackPage({ page, claims, data_access, actions, pageD
               ),
           )}
 
-          {/* Fallback: show full raw response if structure is unexpected */}
           {!page && !claims && !data_access && !actions && (
             <Section title="Raw Response" data={pageData} />
           )}

@@ -1,29 +1,29 @@
-import { createTheme } from "@mantine/core";
+import { createTheme, Table, Tabs } from "@mantine/core";
 
-const brandRed = [
-  "#FDEDEE", // 0
-  "#FBDBDD", // 1
-  "#F7B7BB", // 2
-  "#F09499", // 3
-  "#E86B72", // 4
-  "#DE4249", // 5
-  "#D32129", // 6 
-  "#B81C23", // 7 
-  "#A8181F", // 8 
-  "#7A1015", // 9
+const brennanNavy = [
+  "#EEF1F5",
+  "#D7DCE3",
+  "#AFB8C3",
+  "#8793A2",
+  "#5F6F82",
+  "#374B63",
+  "#0F2744",
+  "#0C1F37",
+  "#081526",
+  "#040B14",
 ];
 
 const ink = [
-  "#FAFAFB", // 0 — --gray-50
-  "#F4F5F6", // 1 — --gray-100
-  "#EDEEF0", // 2 — --gray-150
-  "#E5E7EA", // 3 — --gray-200
-  "#D1D5D9", // 4 — --gray-300
-  "#A4A9B0", // 5 — --gray-400
-  "#7A8088", // 6 — --gray-500
-  "#5A5F66", // 7 — --gray-600
-  "#3B3F45", // 8 — --gray-700
-  "#24272B", // 9 — --gray-800
+  "#FAFAFB",
+  "#F4F5F6",
+  "#EDEEF0",
+  "#E5E7EA",
+  "#D1D5D9",
+  "#A4A9B0",
+  "#7A8088",
+  "#5A5F66",
+  "#3B3F45",
+  "#24272B",
 ];
 
 const status = {
@@ -36,10 +36,10 @@ const status = {
 
 
 export const theme = createTheme({
-  primaryColor: "brandRed",
+  primaryColor: "brennanNavy",
   primaryShade: { light: 6, dark: 6 },
   colors: {
-    brandRed,
+    brennanNavy,
     gray: ink,
   },
   black: "#0E0F11",
@@ -66,5 +66,19 @@ export const theme = createTheme({
 
   other: {
     status,
+  },
+
+  components: {
+    Table: Table.extend({
+      styles: {
+        thead: { backgroundColor: "#0F2744" },
+        th: { color: "#fff", fontWeight: 700 },
+      },
+    }),
+    Tabs: Tabs.extend({
+      styles: {
+        tabLabel: { fontWeight: 700 },
+      },
+    }),
   },
 });

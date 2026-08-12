@@ -1,5 +1,3 @@
-// Sample data for OperatorHoursPage (apg-jfbo-operator-hours). Mirrors
-// jfb-fieldops-daily/src/pages/OperatorHoursPage.tsx's OperatorPortfolioRow.
 
 export const SAMPLE_OPERATORS = [
   { person_id: 'op-1', full_name: 'Adam Trofka', operating_hours: 186.5, delay_hours: 22.0, cy_moved: 24680, project_count: 1, event_count: 412 },

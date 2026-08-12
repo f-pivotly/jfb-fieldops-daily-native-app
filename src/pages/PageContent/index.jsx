@@ -45,7 +45,7 @@ export default function PageContent({
           background: "#f7f7f7",
         }}
       >
-        <Loader color="red" size="sm" />
+        <Loader color="brennanNavy" size="sm" />
         <Text size="xs" c="#aaa">
           Loading page details for <strong>{slug}</strong>…
         </Text>
@@ -74,7 +74,7 @@ export default function PageContent({
             alignItems: "center",
             gap: 5,
             fontSize: 12,
-            color: "#dc2626",
+            color: "#0F2744",
             cursor: "pointer",
             marginTop: 4,
           }}

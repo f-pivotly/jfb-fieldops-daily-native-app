@@ -2,7 +2,6 @@ import { createContext, useContext } from "react";
 
 export const AppConfigContext = createContext(null);
 
-// ── Decode JWT payload for display-only user info (no verification) ──────────
 export function decodeJwtUser(token) {
   try {
     const payload = JSON.parse(atob(token.split('.')[1].replaceAll('-', '+').replaceAll('_', '/')))
@@ -19,12 +18,9 @@ export function decodeJwtUser(token) {
   }
 }
 
-// ── postMessage event types shared between iframe and parent ─────────────────
 export const MSG = {
-  // Iframe → Parent
   APP_READY: "PIVOTLY_APP_READY",
   REFRESH_AUTH_TOKEN: "PIVOTLY_REFRESH_AUTH_TOKEN",
-  // Parent → Iframe
   APP_CONFIG: "PIVOTLY_APP_CONFIG",
   AUTH_TOKEN_UPDATED: "PIVOTLY_AUTH_TOKEN_UPDATED",
 };

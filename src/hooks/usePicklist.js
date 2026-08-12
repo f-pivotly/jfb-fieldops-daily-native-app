@@ -3,8 +3,6 @@ import { fetchPicklistValues } from '../data'
 
 const inflight = new Map()
 
-// Exported so usePicklistCatalog can warm/check the same cache this hook
-// reads from, instead of issuing a second round of requests at app startup.
 export function loadPicklist(slug) {
   if (!inflight.has(slug)) {
     inflight.set(

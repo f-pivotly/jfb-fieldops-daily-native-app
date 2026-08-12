@@ -54,7 +54,7 @@ export default function CrewRosterPage({ domain, system, actions = [] }) {
               size="xs"
               leftSection={<IconPlus size={12} />}
               onClick={() => setCreateOpen(true)}
-              style={{ background: '#dc2626', border: 'none', fontSize: 12 }}
+              style={{ background: '#0F2744', border: 'none', fontSize: 12 }}
             >
               Add Crew Member
             </Button>
@@ -73,7 +73,7 @@ export default function CrewRosterPage({ domain, system, actions = [] }) {
             <Table striped highlightOnHover withTableBorder withColumnBorders style={{ fontSize: 12, minWidth: 400 }}>
               <Table.Thead>
                 <Table.Tr>
-                  <Table.Th style={{ textTransform: 'uppercase', fontSize: 10, letterSpacing: '0.5px', color: '#888', fontWeight: 700 }}>Name</Table.Th>
+                  <Table.Th style={{ textTransform: 'uppercase', fontSize: 10, letterSpacing: '0.5px' }}>Name</Table.Th>
                   <Table.Th style={{ width: 40 }} />
                 </Table.Tr>
               </Table.Thead>
@@ -115,7 +115,7 @@ export default function CrewRosterPage({ domain, system, actions = [] }) {
         />
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => { setCreateOpen(false); setCreateName('') }}>Cancel</Button>
-          <Button size="xs" loading={creating} onClick={handleCreate} disabled={!createName.trim()} style={{ background: '#dc2626', border: 'none' }}>
+          <Button size="xs" loading={creating} onClick={handleCreate} disabled={!createName.trim()} style={{ background: '#0F2744', border: 'none' }}>
             Add
           </Button>
         </Group>
@@ -137,7 +137,7 @@ export default function CrewRosterPage({ domain, system, actions = [] }) {
         />
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => { setEditOpen(false); setEditRow(null) }}>Cancel</Button>
-          <Button size="xs" loading={updating} onClick={handleEdit} disabled={!editName.trim()} style={{ background: '#dc2626', border: 'none' }}>
+          <Button size="xs" loading={updating} onClick={handleEdit} disabled={!editName.trim()} style={{ background: '#0F2744', border: 'none' }}>
             Save
           </Button>
         </Group>

@@ -1,5 +1,3 @@
-// Sample data for WeeklySummaryPage (apg-jfbo-weekly-summary). Mirrors
-// jfb-fieldops-daily/src/pages/WeeklySummaryPage.tsx's section shapes.
 
 export const SAMPLE_WEEK_RANGE = { start: '2026-08-09', end: '2026-08-15', reportedCount: 3 };
 

@@ -1,9 +1,3 @@
-// Static sample data for the Report Editor screen (apg-jfbo-report-editor)
-// and its 10 content tabs. Field names/shapes mirror jfb-fieldops-daily's
-// src/pages/ReportEditor.tsx and its tab components (EventLogTab,
-// ProductionStatsTab, PhotosTab, NarrativesTab, MetricsTab, SafetyTab,
-// DredgeProgressTab, PlacementProgressTab, WaterQualityTab, AirQualityTab).
-// All data below is fixed/sample — nothing persists across a reload.
 
 export const SAMPLE_EQUIPMENT = [
   { id: 'eq-1', name: 'Dredge 1 — Illinois' },
@@ -20,7 +14,6 @@ export const SAMPLE_CHECKLIST = {
   metrics_entered: false,
 };
 
-// ─── Event Log ──────────────────────────────────────────────────────────────
 export const SAMPLE_EVENTS = [
   { id: 'ev-1', from: '06:00', to: '06:15', category: 'STARTUP/SHUTDOWN', area: 'Bancroft Bay', pass: '1st Pass', tsca: 'No', operator: 'A. Trofka', notes: 'Startup checks', source: 'operator' },
   { id: 'ev-2', from: '06:15', to: '11:30', category: 'ACTIVE DREDGING', area: 'Bancroft Bay › Cell 4', pass: '1st Pass', tsca: 'No', operator: 'A. Trofka', notes: '', source: 'operator' },
@@ -38,7 +31,6 @@ export const SAMPLE_EVENT_TOTALS = {
   balanced: true,
 };
 
-// ─── Production Stats ───────────────────────────────────────────────────────
 export const SAMPLE_PRODUCTION_ROWS = [
   { key: 'p1', area: 'Bancroft Bay', pass: '1st Pass', goh: 9.75, noh: 9.75, cy: 1240, sf: 18500, avgFace: 1.81, notes: '' },
   { key: 'p2', area: 'Bancroft Bay › Cell 5', pass: '1st Pass', goh: 2.25, noh: 0, cy: null, sf: null, avgFace: null, notes: 'Not started' },
@@ -46,13 +38,11 @@ export const SAMPLE_PRODUCTION_ROWS = [
 
 export const SAMPLE_PRODUCTION_TOTALS = { goh: 12.0, noh: 9.75, cy: 1240, sf: 18500, avgFace: 1.81 };
 
-// ─── Photos ─────────────────────────────────────────────────────────────────
 export const SAMPLE_PHOTOS = [
   { slot: 1, label: 'Cutterhead — Cell 4', uploaded: true, rejected: false },
   { slot: 2, label: '', uploaded: false, rejected: false },
 ];
 
-// ─── Narratives ─────────────────────────────────────────────────────────────
 export const SAMPLE_NARRATIVE_SECTIONS = [
   { key: 'production', label: 'Production Summary', content: 'Dredge 1 worked Cell 4 all shift after a barge-swap delay midday. Production on pace for the week.' },
   { key: 'safety', label: 'Safety Summary', content: 'No incidents. Toolbox talk covered barge mooring lines.' },
@@ -60,7 +50,6 @@ export const SAMPLE_NARRATIVE_SECTIONS = [
   { key: 'planned', label: 'Plan for Tomorrow', content: 'Continue Cell 4, begin Cell 5 pass if weather holds.' },
 ];
 
-// ─── Metrics ────────────────────────────────────────────────────────────────
 export const SAMPLE_METRICS = [
   { key: 'cy', label: 'CY Dredged', source: 'Auto', unit: 'CY', day: 1240, week: 6820, total: 48210 },
   { key: 'sf', label: 'SF Covered', source: 'Auto', unit: 'SF', day: 18500, week: 102300, total: 712400 },
@@ -68,7 +57,6 @@ export const SAMPLE_METRICS = [
   { key: 'samples', label: 'Samples Collected', source: 'Manual', unit: 'ea', day: 2, week: 9, total: 61 },
 ];
 
-// ─── Safety ─────────────────────────────────────────────────────────────────
 export const SAMPLE_SAFETY_TENETS = [
   { label: 'PPE compliant', status: 'pass' },
   { label: 'Housekeeping', status: 'pass' },
@@ -100,7 +88,6 @@ export const SAMPLE_SIGNATURES = {
   sssho: { name: 'M. Sunday', signedAt: null },
 };
 
-// ─── Dredge / Placement progress + Water / Air quality (conditional tabs) ──
 export const SAMPLE_DREDGE_PROGRESS = {
   totalCoveragePct: 62,
   cellsComplete: 14,

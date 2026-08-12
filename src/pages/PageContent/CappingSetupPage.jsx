@@ -8,9 +8,6 @@ import {
   SAMPLE_MATERIAL_COMPONENT_MAP,
 } from '../../data/cappingSetupSampleData'
 
-// apg-jfbo-capping-setup — bespoke wizard called out in
-// JFB_FIELDOPS_DAILY_SCREENS_AND_PAGE_SLUGS.md §3, folded up from the
-// bundled admin console's Capping Setup sub-tab (admin/index.html).
 export default function CappingSetupPage() {
   return (
     <ScrollArea flex={1} style={{ minHeight: 0 }}>

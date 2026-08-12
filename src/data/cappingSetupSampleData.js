@@ -1,7 +1,3 @@
-// Sample data for CappingSetupPage (apg-jfbo-capping-setup) — the bespoke
-// wizard called out in JFB_FIELDOPS_DAILY_SCREENS_AND_PAGE_SLUGS.md §3.
-// Field names mirror the admin console's Layers/Materials/Components/
-// Mappings sub-tabs (jfb-fieldops-daily/admin/index.html).
 
 export const SAMPLE_LAYERS = [
   { id: 'lyr-1', name: 'Lift 1', type: 'Sand Cap', sortOrder: 1, reportName: 'Lift 1' },

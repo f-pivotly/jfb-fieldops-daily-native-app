@@ -10,8 +10,6 @@ import {
   SAMPLE_WEEKLY_DELAYS,
 } from '../../data/weeklySummarySampleData'
 
-// apg-jfbo-weekly-summary. Sample-mode stand-in for
-// jfb-fieldops-daily/src/pages/WeeklySummaryPage.tsx.
 export default function WeeklySummaryPage() {
   const { projectId } = useParams()
   const [aiOn, setAiOn] = useState(false)

@@ -1,4 +1,4 @@
-import { Box, Group, ActionIcon, Avatar, Loader } from '@mantine/core'
+import { Box, Group, ActionIcon, Avatar, Loader, Text } from '@mantine/core'
 import { IconBell, IconSettings } from '@tabler/icons-react'
 import { useAppConfig } from '../contexts/appConfigContext'
 
@@ -9,27 +9,21 @@ export default function AppHeader({ menuItems = [], activeSlug, onNav, navLoadin
     <Box
       h={40}
       style={{
-        background: '#141414',
-        borderBottom: '1px solid #2a2a2a',
+        background: '#0F2744',
+        borderBottom: '1px solid rgba(255,255,255,0.15)',
         display: 'flex',
         alignItems: 'center',
-        paddingLeft: 12,
+        paddingLeft: 14,
         flexShrink: 0,
         zIndex: 200,
       }}
     >
-      {/* Logo */}
-      <Group gap={0} mr={6} style={{ flexShrink: 0 }}>
-        <Box style={{
-          background: '#dc2626', color: '#fff', fontWeight: 900,
-          fontSize: 13, letterSpacing: '.5px', padding: '3px 8px', borderRadius: 3,
-        }}>
-          OFA
-        </Box>
-
+      <Group gap={0} mr={14} style={{ flexShrink: 0 }}>
+        <Text fw={700} size="sm" c="#fff" style={{ letterSpacing: '.3px', whiteSpace: 'nowrap' }}>
+          Brennan Field Ops
+        </Text>
       </Group>
 
-      {/* Nav items */}
       {navLoading ? (
         <Loader size={12} color="gray" ml={10} />
       ) : (
@@ -42,12 +36,12 @@ export default function AppHeader({ menuItems = [], activeSlug, onNav, navLoadin
               display: 'flex',
               alignItems: 'center',
               padding: '0 14px',
-              color: activeSlug === n.page_slug ? '#fff' : '#777',
+              color: activeSlug === n.page_slug ? '#fff' : 'rgba(255,255,255,0.55)',
               fontSize: 11,
               fontWeight: 600,
               letterSpacing: '.5px',
               cursor: 'pointer',
-              borderBottom: activeSlug === n.page_slug ? '2px solid #dc2626' : '2px solid transparent',
+              borderBottom: activeSlug === n.page_slug ? '2px solid #fff' : '2px solid transparent',
               textTransform: 'uppercase',
               transition: 'color .15s',
               whiteSpace: 'nowrap',
@@ -58,15 +52,14 @@ export default function AppHeader({ menuItems = [], activeSlug, onNav, navLoadin
         ))
       )}
 
-      {/* Right side */}
       <Group gap={10} ml="auto" pr={14} style={{ flexShrink: 0 }}>
         <ActionIcon variant="subtle" color="gray" size="sm">
-          <IconBell size={15} color="#555" />
+          <IconBell size={15} color="rgba(255,255,255,0.6)" />
         </ActionIcon>
         <ActionIcon variant="subtle" color="gray" size="sm">
-          <IconSettings size={15} color="#555" />
+          <IconSettings size={15} color="rgba(255,255,255,0.6)" />
         </ActionIcon>
-        <Avatar size={28} title={user.name} style={{ background: '#dc2626', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+        <Avatar size={28} title={user.name} style={{ background: '#1A5CA8', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
           {user.initials}
         </Avatar>
       </Group>

@@ -1,6 +1,6 @@
 import { useParams, Link } from 'react-router-dom'
 import { Box, ScrollArea, Text, Group, Tabs, Table, TextInput, Button, SimpleGrid, Stack } from '@mantine/core'
-import { findProject } from '../../data/dashboardSampleData'
+import { useProject } from '../../hooks/useProject'
 import {
   SAMPLE_PRODUCTION_PLAN,
   SAMPLE_SCHEDULED_OFF_DAYS,
@@ -11,11 +11,9 @@ import {
   SAMPLE_DREDGE_CHART_CONFIG,
 } from '../../data/projectSettingsSampleData'
 
-// apg-jfbo-project-settings. Sample-mode stand-in for
-// jfb-fieldops-daily/src/pages/ProjectSettingsPage.tsx.
 export default function ProjectSettingsPage() {
   const { projectId } = useParams()
-  const project = findProject(projectId)
+  const { project } = useProject(projectId)
   const plan = SAMPLE_PRODUCTION_PLAN
 
   return (

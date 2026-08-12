@@ -1,15 +1,14 @@
 import { useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { Box, ScrollArea, Group, Text, Badge, Table, Button, TextInput } from '@mantine/core'
-import { findProject, SAMPLE_REPORTS_BY_PROJECT, REPORT_STATUS_LABEL, REPORT_STATUS_COLOR } from '../../data/dashboardSampleData'
+import { SAMPLE_REPORTS_BY_PROJECT, REPORT_STATUS_LABEL, REPORT_STATUS_COLOR } from '../../data/dashboardSampleData'
+import { useProject } from '../../hooks/useProject'
 
-// apg-jfbo-report-list — per-project report list. Sample-mode stand-in for
-// jfb-fieldops-daily/src/pages/ReportList.tsx. See src/config/sampleMode.js.
 export default function ReportListPage() {
   const { projectId } = useParams()
   const navigate = useNavigate()
-  const project = findProject(projectId)
-  const reports = SAMPLE_REPORTS_BY_PROJECT[projectId] ?? []
+  const { project } = useProject(projectId)
+  const reports = SAMPLE_REPORTS_BY_PROJECT[project?.project_code] ?? []
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pickerDate, setPickerDate] = useState('2026-08-11')
 
@@ -25,7 +24,7 @@ export default function ReportListPage() {
             <Text fw={700} size="lg">{project?.name ?? 'Reports'}</Text>
             {project && (
               <Text size="xs" c="dimmed">
-                #{project.project_code} · {project.client} · {project.work_type}
+                #{project.project_code} · {project.client_name} · {project.work_type}
               </Text>
             )}
           </Box>

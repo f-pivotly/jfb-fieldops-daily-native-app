@@ -1,16 +1,3 @@
-// Verifies the built app satisfies the single-file delivery contract the
-// Portal's blob-URL iframe requires (TD3 §7):
-//   1. dist/ contains exactly one file — no separate .js/.css/asset files
-//      that vite-plugin-singlefile failed to inline (a blob: document can't
-//      resolve any external reference, so a stray file means a silent
-//      runtime failure, not a build failure).
-//   2. That file contains no external or root-relative src=/href= references.
-//   3. The literal string "live_commit" never appears — the client submit_mode
-//      enum must stay restricted to {dry_run, mock_commit}.
-//   4. The gzipped size stays within the 2.5 MB budget.
-//
-// Usage: node scripts/verify-singlefile.mjs
-// Exits 0 when everything passes, 1 and prints every failure otherwise.
 
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { gzipSync } from 'node:zlib'

@@ -1,6 +1,5 @@
 import { Box, Text, Group } from "@mantine/core";
 
-// ── Page identity badge ───────────────────────────────────────────────────────
 export default function PageIdentityBar({ page }) {
   const identity = page?.identity || {};
   return (

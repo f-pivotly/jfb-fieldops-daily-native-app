@@ -2,8 +2,6 @@ import { Box, SimpleGrid, Text, Progress } from '@mantine/core'
 import { SAMPLE_PLACEMENT_PROGRESS } from '../../../data/reportEditorSampleData'
 import { ChartPlaceholder } from './DredgeProgressTab'
 
-// Real PlacementProgressTab parses an uploaded .bkt bucket-log file and
-// attributes it against layer windows — out of scope for a sample-data UI.
 export default function PlacementProgressTab() {
   const p = SAMPLE_PLACEMENT_PROGRESS
   return (

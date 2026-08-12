@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { Box, ScrollArea, Grid, Text, Badge, Checkbox, Stack, Button, Tabs } from '@mantine/core'
-import { findProject, REPORT_STATUS_LABEL, REPORT_STATUS_COLOR } from '../../data/dashboardSampleData'
+import { REPORT_STATUS_LABEL, REPORT_STATUS_COLOR } from '../../data/dashboardSampleData'
 import { SAMPLE_EQUIPMENT, SAMPLE_CHECKLIST } from '../../data/reportEditorSampleData'
+import { useProject } from '../../hooks/useProject'
 import EventLogTab from './reportEditorTabs/EventLogTab'
 import ProductionStatsTab from './reportEditorTabs/ProductionStatsTab'
 import PhotosTab from './reportEditorTabs/PhotosTab'
@@ -14,10 +15,6 @@ import PlacementProgressTab from './reportEditorTabs/PlacementProgressTab'
 import WaterQualityTab from './reportEditorTabs/WaterQualityTab'
 import AirQualityTab from './reportEditorTabs/AirQualityTab'
 
-// apg-jfbo-report-editor — Screen 3. Sample-mode stand-in for
-// jfb-fieldops-daily/src/pages/ReportEditor.tsx. All 10 content tabs are
-// shown (the real app hides dredge/placement/water/air unless the project
-// has the matching config row — sample mode shows every tab for review).
 const CONTENT_TABS = [
   { key: 'event_log', label: 'Event Log', Comp: EventLogTab },
   { key: 'production', label: 'Production Stats', Comp: ProductionStatsTab },
@@ -42,7 +39,7 @@ const CHECKLIST_LABELS = {
 
 export default function ReportEditorPage() {
   const { projectId, date } = useParams()
-  const project = findProject(projectId)
+  const { project } = useProject(projectId)
   const [status] = useState('cqc_review')
   const [mobDay, setMobDay] = useState(false)
   const [selectedEquipment, setSelectedEquipment] = useState(SAMPLE_EQUIPMENT[0].id)

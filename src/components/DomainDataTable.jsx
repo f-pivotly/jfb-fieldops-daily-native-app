@@ -8,23 +8,20 @@ import SafeError from './SafeError'
 export default function DomainDataTable({ domain, system, actions = [] }) {
   const isEnabled = (key) => {
     const match = actions.find(a => a.action_key === key)
-    return match ? match.enabled : true  // default to true if action not declared
+    return match ? match.enabled : true
   }
   const canCreate = isEnabled('create_record')
   const canUpdate = isEnabled('update_record')
   const canDelete = isEnabled('delete_record')
   const { records, loading, error, creating, updating, deleting, reload, create, update, remove } = useDomainData({ domain, system })
 
-  // Create modal
   const [createOpen, setCreateOpen] = useState(false)
   const [createName, setCreateName] = useState('')
 
-  // Edit modal
   const [editOpen, setEditOpen] = useState(false)
   const [editRow, setEditRow] = useState(null)
   const [editName, setEditName] = useState('')
 
-  // Delete confirm
   const [deleteRow, setDeleteRow] = useState(null)
 
   async function handleCreate() {
@@ -59,7 +56,6 @@ export default function DomainDataTable({ domain, system, actions = [] }) {
 
   return (
     <Box style={{ background: '#fff', border: '1px solid #ebebeb', borderRadius: 6, overflow: 'hidden', marginBottom: 16 }}>
-      {/* Header */}
       <Box px={16} py={10} style={{ background: '#f9f9f9', borderBottom: '1px solid #ebebeb' }}>
         <Group justify="space-between" align="center">
           <Text size="xs" fw={700} style={{ letterSpacing: '1px', textTransform: 'uppercase', color: '#888' }}>
@@ -74,7 +70,7 @@ export default function DomainDataTable({ domain, system, actions = [] }) {
                 size="xs"
                 leftSection={<IconPlus size={12} />}
                 onClick={() => setCreateOpen(true)}
-                style={{ background: '#dc2626', border: 'none', fontSize: 12 }}
+                style={{ background: '#0F2744', border: 'none', fontSize: 12 }}
               >
                 New Record
               </Button>
@@ -83,7 +79,6 @@ export default function DomainDataTable({ domain, system, actions = [] }) {
         </Group>
       </Box>
 
-      {/* Body */}
       <Box p={16}>
         {loading && <LoadingSpinner py={24} />}
         {!loading && <SafeError message={error} />}
@@ -96,7 +91,7 @@ export default function DomainDataTable({ domain, system, actions = [] }) {
               <Table.Thead>
                 <Table.Tr>
                   {columns.map(col => (
-                    <Table.Th key={col} style={{ textTransform: 'uppercase', fontSize: 10, letterSpacing: '0.5px', color: '#888', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                    <Table.Th key={col} style={{ textTransform: 'uppercase', fontSize: 10, letterSpacing: '0.5px', whiteSpace: 'nowrap' }}>
                       {col}
                     </Table.Th>
                   ))}
@@ -139,7 +134,6 @@ export default function DomainDataTable({ domain, system, actions = [] }) {
         )}
       </Box>
 
-      {/* Create modal */}
       <Modal
         opened={createOpen}
         onClose={() => { setCreateOpen(false); setCreateName('') }}
@@ -157,13 +151,12 @@ export default function DomainDataTable({ domain, system, actions = [] }) {
         />
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => { setCreateOpen(false); setCreateName('') }}>Cancel</Button>
-          <Button size="xs" loading={creating} onClick={handleCreate} disabled={!createName.trim()} style={{ background: '#dc2626', border: 'none' }}>
+          <Button size="xs" loading={creating} onClick={handleCreate} disabled={!createName.trim()} style={{ background: '#0F2744', border: 'none' }}>
             Create
           </Button>
         </Group>
       </Modal>
 
-      {/* Edit modal */}
       <Modal
         opened={editOpen}
         onClose={() => { setEditOpen(false); setEditRow(null) }}
@@ -181,13 +174,12 @@ export default function DomainDataTable({ domain, system, actions = [] }) {
         />
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => { setEditOpen(false); setEditRow(null) }}>Cancel</Button>
-          <Button size="xs" loading={updating} onClick={handleEdit} disabled={!editName.trim()} style={{ background: '#dc2626', border: 'none' }}>
+          <Button size="xs" loading={updating} onClick={handleEdit} disabled={!editName.trim()} style={{ background: '#0F2744', border: 'none' }}>
             Save
           </Button>
         </Group>
       </Modal>
 
-      {/* Delete confirm modal */}
       <Modal
         opened={!!deleteRow}
         onClose={() => setDeleteRow(null)}

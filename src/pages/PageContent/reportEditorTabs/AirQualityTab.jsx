@@ -1,8 +1,6 @@
 import { Table, Badge, Text, Box } from '@mantine/core'
 import { SAMPLE_AIR_QUALITY } from '../../../data/reportEditorSampleData'
 
-// Real AirQualityTab auto-pulls SGS SmartSense PM10 readings. This shows the
-// same reading shape as a static sample table.
 export default function AirQualityTab() {
   return (
     <Box>
