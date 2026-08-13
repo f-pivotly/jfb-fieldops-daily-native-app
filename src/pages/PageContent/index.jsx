@@ -2,9 +2,9 @@ import { Box, Text, Loader, Center } from "@mantine/core";
 import { IconRefresh } from "@tabler/icons-react";
 import SafeError from "../../components/SafeError";
 import FallbackPage from "./FallbackPage";
-import CrewRosterPage from "./CrewRosterPage";
+import OperatorsPage from "./OperatorsPage";
 
-const CREW_ROSTER_PAGE_SLUG = "apg-ofa_person";
+const OPERATORS_PAGE_SLUG = "apg-ofa_person";
 
 export default function PageContent({
   pageData,
@@ -96,10 +96,10 @@ export default function PageContent({
     { key: "actions", title: "Actions", data: actions },
   ];
 
-  if (slug === CREW_ROSTER_PAGE_SLUG) {
+  if (slug === OPERATORS_PAGE_SLUG) {
     const personSource = domainSources[0];
     return (
-      <CrewRosterPage
+      <OperatorsPage
         domain={personSource?.domain}
         system={personSource?.system}
         actions={actions}

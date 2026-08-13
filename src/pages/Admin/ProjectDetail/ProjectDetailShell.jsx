@@ -26,7 +26,7 @@ export default function ProjectDetailShell({ project, onBack }) {
         {[project?.project_code, project?.client_name, project?.work_type].filter(Boolean).join(" · ") || "—"}
       </Text>
       <Text size="10px" c="dimmed" mb={16}>
-        Areas, Delay Codes, and Operators below show sample data for now — Equipment is live.
+        Delay Codes and Operators below show sample data for now — Areas and Equipment are live.
       </Text>
 
       <Tabs value={tab} onChange={setTab}>

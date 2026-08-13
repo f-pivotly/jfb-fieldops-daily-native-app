@@ -5,7 +5,7 @@ import { useDomainData } from '../../hooks/useDomainData'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import SafeError from '../../components/SafeError'
 
-export default function CrewRosterPage({ domain, system, actions = [] }) {
+export default function OperatorsPage({ domain, system, actions = [] }) {
   const isEnabled = (key) => {
     const match = actions.find((a) => a.action_key === key)
     return match ? match.enabled : true

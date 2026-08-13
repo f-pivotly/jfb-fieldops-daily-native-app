@@ -7,12 +7,12 @@ import SafeError from "../../../components/SafeError";
 
 export default function EquipmentTab({ project }) {
   const { records, loading, error, creating, updating, reload, create, update, remove } = useDomainData({
-    domain: "equipments",
+    domain: "jfb_equipments",
     system: "core",
   });
 
-  const hasProjectKey = !!project?.project_id;
-  const equipment = hasProjectKey ? records.filter((r) => r.project_id === project.project_id) : [];
+  const hasProject = !!project?.id;
+  const equipment = hasProject ? records.filter((r) => r.project_id === project.id) : [];
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editRow, setEditRow] = useState(null);
@@ -35,8 +35,8 @@ export default function EquipmentTab({ project }) {
     if (editRow) {
       await update(editRow.id, { name: name.trim() });
     } else {
-      if (!hasProjectKey) return;
-      await create({ name: name.trim(), project_id: project.project_id });
+      if (!hasProject) return;
+      await create({ name: name.trim(), project_id: project.id });
     }
     setModalOpen(false);
   }
@@ -58,8 +58,8 @@ export default function EquipmentTab({ project }) {
             size="xs"
             leftSection={<IconPlus size={12} />}
             onClick={openAdd}
-            disabled={!hasProjectKey}
-            title={hasProjectKey ? undefined : "This project has no project_id set, so equipment can't be linked to it yet"}
+            disabled={!hasProject}
+            title={hasProject ? undefined : "Select a project to manage its equipment"}
             style={{ background: "#0F2744", border: "none" }}
           >
             Add Equipment
@@ -70,12 +70,12 @@ export default function EquipmentTab({ project }) {
       <Box style={{ background: "#fff", border: "1px solid #ebebeb", borderRadius: 6, padding: 12 }}>
         {loading && <LoadingSpinner py={16} />}
         {!loading && <SafeError message={error} />}
-        {!loading && !error && !hasProjectKey && (
+        {!loading && !error && !hasProject && (
           <Text size="xs" c="dimmed" ta="center" py={16}>
-            This project has no project_id set, so equipment can't be linked to it yet.
+            Select a project to manage its equipment.
           </Text>
         )}
-        {!loading && !error && hasProjectKey && equipment.length === 0 && (
+        {!loading && !error && hasProject && equipment.length === 0 && (
           <Text size="xs" c="dimmed" ta="center" py={16}>No equipment configured</Text>
         )}
         {!loading && !error && equipment.map((row) => (

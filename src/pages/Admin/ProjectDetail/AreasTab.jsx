@@ -1,35 +1,46 @@
 import { useState } from "react";
 import { Box, Text, Group, Button, Modal, TextInput, NumberInput, Textarea, Checkbox } from "@mantine/core";
-import { IconPlus, IconFolder } from "@tabler/icons-react";
-import { SAMPLE_AREAS } from "../../../data/adminProjectDetailSampleData";
+import { IconPlus, IconFolder, IconRefresh } from "@tabler/icons-react";
+import { useProjectAreas } from "../../../hooks/useProjectAreas";
+import { useAreaLevels } from "../../../hooks/useAreaLevels";
+import LoadingSpinner from "../../../components/LoadingSpinner";
+import SafeError from "../../../components/SafeError";
 
 const EMPTY_FORM = { name: "", volume_goal_cy: "", volume_goal_sf: "", notes: "", sort_order: 0 };
 
 export default function AreasTab({ project }) {
-  const [areas, setAreas] = useState(SAMPLE_AREAS);
+  const hasProject = !!project?.id;
+  const { areaLevels, loading: levelsLoading, error: levelsError } = useAreaLevels(project?.id);
+  const {
+    areas, loading: areasLoading, error: areasError,
+    creating, updating, reload, create, update, remove,
+  } = useProjectAreas(project?.id);
+
   const [modalOpen, setModalOpen] = useState(false);
   const [editRow, setEditRow] = useState(null);
-  const [parentContext, setParentContext] = useState({ parentId: null, level: 1 });
+  const [parentContext, setParentContext] = useState({ parentId: null, depth: 1 });
   const [form, setForm] = useState(EMPTY_FORM);
 
-  const l1Label = project?.area_lvl1_label || "Area";
-  const l2Label = project?.area_lvl2_label || "";
-  const l3Label = project?.area_lvl3_label || "";
+  const levelByDepth = new Map(areaLevels.map((l) => [l.depth, l]));
+  const depthByLevelId = new Map(areaLevels.map((l) => [l.id, l.depth]));
+  const maxDepth = areaLevels.reduce((m, l) => Math.max(m, l.depth), 0);
+  const areasWithDepth = areas.map((a) => ({ ...a, depth: depthByLevelId.get(a.area_level_id) ?? null }));
+  const l1 = levelByDepth.get(1);
 
-  function levelLabel(level) {
-    return level === 1 ? l1Label : level === 2 ? l2Label || "Zone" : l3Label || "Cell";
+  function labelFor(depth) {
+    return levelByDepth.get(depth)?.label || `Level ${depth}`;
   }
 
-  function openAdd(parentId, level) {
+  function openAdd(parentId, depth) {
     setEditRow(null);
-    setParentContext({ parentId, level });
+    setParentContext({ parentId, depth });
     setForm(EMPTY_FORM);
     setModalOpen(true);
   }
 
   function openEdit(row) {
     setEditRow(row);
-    setParentContext({ parentId: row.parent_id, level: row.level });
+    setParentContext({ parentId: row.parent_id, depth: row.depth });
     setForm({
       name: row.name,
       volume_goal_cy: row.volume_goal_cy ?? "",
@@ -44,7 +55,7 @@ export default function AreasTab({ project }) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!form.name.trim()) return;
     const payload = {
       name: form.name.trim(),
@@ -54,96 +65,130 @@ export default function AreasTab({ project }) {
       sort_order: Number(form.sort_order) || 0,
     };
     if (editRow) {
-      setAreas((prev) => prev.map((a) => (a.id === editRow.id ? { ...a, ...payload } : a)));
+      await update(editRow.id, payload);
     } else {
-      setAreas((prev) => [
-        ...prev,
-        { id: `area-${Date.now()}`, level: parentContext.level, parent_id: parentContext.parentId, active: true, ...payload },
-      ]);
+      const level = levelByDepth.get(parentContext.depth);
+      if (!level || !hasProject) return;
+      await create({
+        ...payload,
+        project_id: project.id,
+        parent_id: parentContext.parentId,
+        area_level_id: level.id,
+        is_active: true,
+      });
     }
     setModalOpen(false);
   }
 
-  function toggleActive(row) {
-    setAreas((prev) => prev.map((a) => (a.id === row.id ? { ...a, active: !a.active } : a)));
+  async function toggleActive(row) {
+    await update(row.id, { is_active: !row.is_active });
   }
 
-  function removeArea(row) {
+  async function removeArea(row) {
     if (!confirm(`Delete "${row.name}"? This also removes its children.`)) return;
-    setAreas((prev) => {
-      const idsToRemove = new Set([row.id]);
-      let changed = true;
-      while (changed) {
-        changed = false;
-        for (const a of prev) {
-          if (a.parent_id && idsToRemove.has(a.parent_id) && !idsToRemove.has(a.id)) {
-            idsToRemove.add(a.id);
-            changed = true;
-          }
+    // area_level_id/parent_id have no DB-level cascade -- walk the tree client-side.
+    const idsToRemove = new Set([row.id]);
+    let changed = true;
+    while (changed) {
+      changed = false;
+      for (const a of areasWithDepth) {
+        if (a.parent_id && idsToRemove.has(a.parent_id) && !idsToRemove.has(a.id)) {
+          idsToRemove.add(a.id);
+          changed = true;
         }
       }
-      return prev.filter((a) => !idsToRemove.has(a.id));
-    });
+    }
+    for (const id of idsToRemove) {
+      await remove(id);
+    }
   }
 
-  const level1Areas = areas.filter((a) => a.level === 1).sort((a, b) => a.sort_order - b.sort_order);
-  const anyGoalSet = areas.some((a) => a.volume_goal_cy || a.volume_goal_sf);
-  const sumCy = areas.reduce((sum, a) => sum + (a.volume_goal_cy || 0), 0);
+  const level1Areas = areasWithDepth.filter((a) => a.depth === 1).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+  const anyGoalSet = areasWithDepth.some((a) => a.volume_goal_cy || a.volume_goal_sf);
+  const sumCy = areasWithDepth.reduce((sum, a) => sum + (a.volume_goal_cy || 0), 0);
   const projectGoal = project?.volume_goal ? Number(project.volume_goal) : null;
   const reconciles = projectGoal != null && Math.abs(projectGoal - sumCy) <= 100;
+
+  const loading = levelsLoading || areasLoading;
+  const error = levelsError || areasError;
 
   return (
     <Box>
       <Group justify="space-between" mb={12}>
-        <Text fw={700} size="sm">
-          {l1Label}s
-        </Text>
-        <Button size="xs" leftSection={<IconPlus size={12} />} onClick={() => openAdd(null, 1)} style={{ background: "#0F2744", border: "none" }}>
-          Add {l1Label}
-        </Button>
+        <Text fw={700} size="sm">{l1 ? `${l1.label}s` : "Areas"}</Text>
+        <Group gap={8}>
+          <Box onClick={reload} style={{ cursor: "pointer", color: "#aaa", display: "flex", alignItems: "center" }} title="Refresh">
+            <IconRefresh size={14} />
+          </Box>
+          <Button
+            size="xs"
+            leftSection={<IconPlus size={12} />}
+            onClick={() => openAdd(null, 1)}
+            disabled={!hasProject || !l1}
+            title={!hasProject ? "Select a project" : !l1 ? "No area levels configured for this project yet" : undefined}
+            style={{ background: "#0F2744", border: "none" }}
+          >
+            Add {l1 ? l1.label : "Area"}
+          </Button>
+        </Group>
       </Group>
 
-      {anyGoalSet && (
-        <Box mb={12} p={10} style={{ background: projectGoal == null ? "#f5f6f8" : reconciles ? "#e6f4ec" : "#fbe6e7", border: `1px solid ${projectGoal == null ? "#e7ecf5" : reconciles ? "#b7ddc4" : "#edb8bb"}`, borderRadius: 6 }}>
-          <Group gap={20}>
-            <Box>
-              <Text size="10px" c="dimmed" style={{ textTransform: "uppercase" }}>Project Goal</Text>
-              <Text size="sm" fw={700}>{projectGoal != null ? `${projectGoal.toLocaleString()} CY` : "—"}</Text>
-            </Box>
-            <Box>
-              <Text size="10px" c="dimmed" style={{ textTransform: "uppercase" }}>Sum of Area Goals</Text>
-              <Text size="sm" fw={700}>{sumCy.toLocaleString()} CY</Text>
-            </Box>
-            {projectGoal != null && (
-              <Text size="xs" fw={600} c={reconciles ? "#1e7a3d" : "#d32129"}>
-                {reconciles ? "✓ Reconciles" : "⚠ Differs by more than 100 CY"}
-              </Text>
-            )}
-          </Group>
-        </Box>
+      {loading && <LoadingSpinner py={16} />}
+      {!loading && <SafeError message={error} />}
+
+      {!loading && !error && !hasProject && (
+        <Text size="xs" c="dimmed" ta="center" py={16}>Select a project to manage its areas.</Text>
       )}
 
-      <Box style={{ background: "#fff", border: "1px solid #ebebeb", borderRadius: 6, padding: 12 }}>
-        {level1Areas.length === 0 && (
-          <Text size="xs" c="dimmed" ta="center" py={16}>No {l1Label.toLowerCase()}s yet</Text>
-        )}
-        {level1Areas.map((a1) => (
-          <AreaNode
-            key={a1.id}
-            area={a1}
-            areas={areas}
-            l2Label={l2Label}
-            l3Label={l3Label}
-            onAdd={openAdd}
-            onEdit={openEdit}
-            onToggle={toggleActive}
-            onRemove={removeArea}
-            depth={0}
-          />
-        ))}
-      </Box>
+      {!loading && !error && hasProject && !l1 && (
+        <Text size="xs" c="dimmed" ta="center" py={16}>No area levels configured for this project yet.</Text>
+      )}
 
-      <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit" : "Add"} {levelLabel(parentContext.level)}</Text>} size="sm">
+      {!loading && !error && hasProject && l1 && (
+        <>
+          {anyGoalSet && (
+            <Box mb={12} p={10} style={{ background: projectGoal == null ? "#f5f6f8" : reconciles ? "#e6f4ec" : "#fbe6e7", border: `1px solid ${projectGoal == null ? "#e7ecf5" : reconciles ? "#b7ddc4" : "#edb8bb"}`, borderRadius: 6 }}>
+              <Group gap={20}>
+                <Box>
+                  <Text size="10px" c="dimmed" style={{ textTransform: "uppercase" }}>Project Goal</Text>
+                  <Text size="sm" fw={700}>{projectGoal != null ? `${projectGoal.toLocaleString()} CY` : "—"}</Text>
+                </Box>
+                <Box>
+                  <Text size="10px" c="dimmed" style={{ textTransform: "uppercase" }}>Sum of Area Goals</Text>
+                  <Text size="sm" fw={700}>{sumCy.toLocaleString()} CY</Text>
+                </Box>
+                {projectGoal != null && (
+                  <Text size="xs" fw={600} c={reconciles ? "#1e7a3d" : "#d32129"}>
+                    {reconciles ? "✓ Reconciles" : "⚠ Differs by more than 100 CY"}
+                  </Text>
+                )}
+              </Group>
+            </Box>
+          )}
+
+          <Box style={{ background: "#fff", border: "1px solid #ebebeb", borderRadius: 6, padding: 12 }}>
+            {level1Areas.length === 0 && (
+              <Text size="xs" c="dimmed" ta="center" py={16}>No {l1.label.toLowerCase()}s yet</Text>
+            )}
+            {level1Areas.map((a1) => (
+              <AreaNode
+                key={a1.id}
+                area={a1}
+                areas={areasWithDepth}
+                maxDepth={maxDepth}
+                labelFor={labelFor}
+                onAdd={openAdd}
+                onEdit={openEdit}
+                onToggle={toggleActive}
+                onRemove={removeArea}
+                renderDepth={0}
+              />
+            ))}
+          </Box>
+        </>
+      )}
+
+      <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit" : "Add"} {labelFor(parentContext.depth)}</Text>} size="sm">
         <TextInput label="Name" required value={form.name} onChange={(e) => setField("name", e.currentTarget.value)} mb={10} autoFocus />
         <Group grow mb={10}>
           <NumberInput label="Volume Goal (CY)" hideControls value={form.volume_goal_cy} onChange={(v) => setField("volume_goal_cy", v)} />
@@ -153,42 +198,42 @@ export default function AreasTab({ project }) {
         <NumberInput label="Sort Order" hideControls value={form.sort_order} onChange={(v) => setField("sort_order", v)} mb={16} />
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => setModalOpen(false)}>Cancel</Button>
-          <Button size="xs" onClick={handleSave} disabled={!form.name.trim()} style={{ background: "#0F2744", border: "none" }}>Save</Button>
+          <Button size="xs" loading={editRow ? updating : creating} onClick={handleSave} disabled={!form.name.trim()} style={{ background: "#0F2744", border: "none" }}>Save</Button>
         </Group>
       </Modal>
     </Box>
   );
 }
 
-function AreaNode({ area, areas, l2Label, l3Label, onAdd, onEdit, onToggle, onRemove, depth }) {
-  const canHaveChildren = (area.level === 1 && l2Label) || (area.level === 2 && l3Label);
-  const children = areas.filter((a) => a.parent_id === area.id).sort((a, b) => a.sort_order - b.sort_order);
+function AreaNode({ area, areas, maxDepth, labelFor, onAdd, onEdit, onToggle, onRemove, renderDepth }) {
+  const canHaveChildren = area.depth != null && area.depth < maxDepth;
+  const children = areas.filter((a) => a.parent_id === area.id).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
   const goalTag = area.volume_goal_cy || area.volume_goal_sf
     ? [area.volume_goal_cy ? `${Number(area.volume_goal_cy).toLocaleString()} CY` : null, area.volume_goal_sf ? `${Number(area.volume_goal_sf).toLocaleString()} SF` : null].filter(Boolean).join(" · ")
     : null;
 
   return (
-    <Box mb={6} ml={depth * 20}>
-      <Group justify="space-between" p={8} style={{ background: depth === 0 ? "#f5f6f8" : "#fff", border: "1px solid #ebebeb", borderRadius: 6, opacity: area.active ? 1 : 0.5 }}>
+    <Box mb={6} ml={renderDepth * 20}>
+      <Group justify="space-between" p={8} style={{ background: renderDepth === 0 ? "#f5f6f8" : "#fff", border: "1px solid #ebebeb", borderRadius: 6, opacity: area.is_active ? 1 : 0.5 }}>
         <Group gap={8}>
-          {depth > 0 && <Text c="dimmed" size="xs">└</Text>}
-          {depth === 0 && <IconFolder size={14} color="#0F2744" />}
-          <Text size="xs" fw={depth === 0 ? 700 : 500}>{area.name}</Text>
+          {renderDepth > 0 && <Text c="dimmed" size="xs">└</Text>}
+          {renderDepth === 0 && <IconFolder size={14} color="#0F2744" />}
+          <Text size="xs" fw={renderDepth === 0 ? 700 : 500}>{area.name}</Text>
           {goalTag && <Text size="10px" c="dimmed" style={{ background: "#eef2f8", padding: "1px 6px", borderRadius: 3 }}>{goalTag}</Text>}
         </Group>
         <Group gap={10} wrap="nowrap">
           {canHaveChildren && (
-            <Box onClick={() => onAdd(area.id, area.level + 1)} style={{ cursor: "pointer", fontSize: 11, color: "#0F2744", fontWeight: 600 }}>
-              + {area.level === 1 ? l2Label : l3Label}
+            <Box onClick={() => onAdd(area.id, area.depth + 1)} style={{ cursor: "pointer", fontSize: 11, color: "#0F2744", fontWeight: 600 }}>
+              + {labelFor(area.depth + 1)}
             </Box>
           )}
-          <Checkbox size="xs" checked={area.active} onChange={() => onToggle(area)} title="Active" />
+          <Checkbox size="xs" checked={!!area.is_active} onChange={() => onToggle(area)} title="Active" />
           <Button size="xs" variant="subtle" onClick={() => onEdit(area)}>Edit</Button>
           <Button size="xs" variant="subtle" color="red" onClick={() => onRemove(area)}>Delete</Button>
         </Group>
       </Group>
       {children.map((child) => (
-        <AreaNode key={child.id} area={child} areas={areas} l2Label={l2Label} l3Label={l3Label} onAdd={onAdd} onEdit={onEdit} onToggle={onToggle} onRemove={onRemove} depth={depth + 1} />
+        <AreaNode key={child.id} area={child} areas={areas} maxDepth={maxDepth} labelFor={labelFor} onAdd={onAdd} onEdit={onEdit} onToggle={onToggle} onRemove={onRemove} renderDepth={renderDepth + 1} />
       ))}
     </Box>
   );

@@ -37,8 +37,9 @@ export function useDomainData({ domain, system }) {
   const create = useCallback(async (recordData) => {
     setCreating(true)
     try {
-      await createDomainRecord({ domain, system, appSlug: config.appSlug, recordData })
+      const res = await createDomainRecord({ domain, system, appSlug: config.appSlug, recordData })
       await load()
+      return res
     } finally {
       setCreating(false)
     }
@@ -47,8 +48,9 @@ export function useDomainData({ domain, system }) {
   const update = useCallback(async (recordId, recordData) => {
     setUpdating(true)
     try {
-      await updateDomainRecord({ domain, system, appSlug: config.appSlug, recordId, recordData })
+      const res = await updateDomainRecord({ domain, system, appSlug: config.appSlug, recordId, recordData })
       await load()
+      return res
     } finally {
       setUpdating(false)
     }
@@ -57,8 +59,9 @@ export function useDomainData({ domain, system }) {
   const remove = useCallback(async (recordId) => {
     setDeleting(true)
     try {
-      await deleteDomainRecord({ domain, system, appSlug: config.appSlug, recordId })
+      const res = await deleteDomainRecord({ domain, system, appSlug: config.appSlug, recordId })
       await load()
+      return res
     } finally {
       setDeleting(false)
     }

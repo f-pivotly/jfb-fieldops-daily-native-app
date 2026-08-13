@@ -40,7 +40,9 @@ const EMPTY_FORM = {
   is_pipe_tracking: true,
 };
 
-function toFormValues(row) {
+
+function toFormValues(row, areaLevels = []) {
+  const labelAt = (depth) => areaLevels.find((l) => l.depth === depth)?.label ?? "";
   return {
     name: row.name ?? "",
     project_code: row.project_code ?? "",
@@ -52,9 +54,9 @@ function toFormValues(row) {
     primary_measure: row.primary_measure ?? FALLBACK_PRIMARY_MEASURE,
     site_city: row.site_city ?? "",
     site_state: row.site_state ?? "",
-    area_lvl1_label: row.area_lvl1_label ?? "Area",
-    area_lvl2_label: row.area_lvl2_label ?? "",
-    area_lvl3_label: row.area_lvl3_label ?? "",
+    area_lvl1_label: labelAt(1) || "Area",
+    area_lvl2_label: labelAt(2),
+    area_lvl3_label: labelAt(3),
     is_tsca_zone_tracking: row.is_tsca_zone_tracking ?? false,
     is_soil_type: row.is_soil_type ?? true,
     is_pipe_tracking: row.is_pipe_tracking ?? true,
@@ -73,9 +75,6 @@ function toPayload(form) {
     primary_measure: form.primary_measure,
     site_city: form.site_city.trim() || null,
     site_state: form.site_state.trim().toUpperCase() || null,
-    area_lvl1_label: form.area_lvl1_label.trim() || "Area",
-    area_lvl2_label: form.area_lvl2_label.trim() || null,
-    area_lvl3_label: form.area_lvl3_label.trim() || null,
     is_tsca_zone_tracking: form.is_tsca_zone_tracking,
     is_soil_type: form.is_soil_type,
     is_pipe_tracking: form.is_pipe_tracking,
@@ -84,9 +83,14 @@ function toPayload(form) {
 
 export default function AdminProjectsSection({ onConfigure }) {
   const { records, loading, error, creating, updating, reload, create, update } = useDomainData({
-    domain: "projects",
+    domain: "jfb_projects",
     system: "core",
   });
+  const {
+    records: areaLevelRecords,
+    create: createAreaLevel,
+    update: updateAreaLevel,
+  } = useDomainData({ domain: "jfb_project_area_levels", system: "core" });
   const { values: workTypeOptions } = usePicklist("jfb_work_type");
   const { values: primaryMeasureOptions } = usePicklist("jfb_primary_measure");
 
@@ -106,7 +110,8 @@ export default function AdminProjectsSection({ onConfigure }) {
 
   function openEdit(row) {
     setEditRow(row);
-    setForm(toFormValues(row));
+    const levels = areaLevelRecords.filter((l) => l.project_id === row.id);
+    setForm(toFormValues(row, levels));
     setModalOpen(true);
   }
 
@@ -114,14 +119,40 @@ export default function AdminProjectsSection({ onConfigure }) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
+  // Create/update the depth-1/2/3 jfb_project_area_levels rows for a project
+  // from the form's 3 label inputs. Never deletes a level if its label is
+  // cleared -- clearing a label in this form just leaves the existing level
+  // (and anything nested under it) untouched rather than risking orphaning
+  // jfb_project_areas rows that reference it.
+  async function syncAreaLevels(projectId) {
+    const existing = areaLevelRecords.filter((l) => l.project_id === projectId);
+    const desired = [
+      { depth: 1, label: form.area_lvl1_label.trim() || "Area" },
+      { depth: 2, label: form.area_lvl2_label.trim() },
+      { depth: 3, label: form.area_lvl3_label.trim() },
+    ];
+    for (const d of desired) {
+      if (!d.label) continue;
+      const match = existing.find((l) => l.depth === d.depth);
+      if (!match) {
+        await createAreaLevel({ project_id: projectId, depth: d.depth, label: d.label, sort_order: d.depth });
+      } else if (match.label !== d.label) {
+        await updateAreaLevel(match.id, { label: d.label });
+      }
+    }
+  }
+
   async function handleSave() {
     if (!form.name.trim() || !form.project_code) return;
     const payload = toPayload(form);
+    let projectId = editRow?.id;
     if (editRow) {
       await update(editRow.id, payload);
     } else {
-      await create({ ...payload, is_active: true });
+      const res = await create({ ...payload, is_active: true });
+      projectId = res?.data?.id;
     }
+    if (projectId) await syncAreaLevels(projectId);
     setModalOpen(false);
   }
 

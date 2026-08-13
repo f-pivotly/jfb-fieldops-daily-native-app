@@ -5,7 +5,7 @@ import LoadingSpinner from '../../components/LoadingSpinner'
 import SafeError from '../../components/SafeError'
 
 export default function DashboardPage() {
-  const { records, loading, error } = useDomainData({ domain: 'projects', system: 'core' })
+  const { records, loading, error } = useDomainData({ domain: 'jfb_projects', system: 'core' })
 
   return (
     <ScrollArea flex={1} style={{ minHeight: 0 }}>

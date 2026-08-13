@@ -5,8 +5,8 @@ import SafeError from "../../components/SafeError";
 import { SAMPLE_ADMIN_KPIS } from "../../data/adminSampleData";
 
 export default function AdminDashboardSection() {
-  const { records, loading, error } = useDomainData({ domain: "projects", system: "core" });
-  const activeCount = records.filter((r) => r.is_active).length;
+  const { records, loading, error } = useDomainData({ domain: "jfb_projects", system: "core" });
+  const activeProjects = records.filter((r) => r.is_active);
 
   return (
     <Box>
@@ -15,7 +15,7 @@ export default function AdminDashboardSection() {
       </Text>
 
       <SimpleGrid cols={{ base: 2, sm: 4 }} mb={20}>
-        <Kpi label="Active Projects" value={loading ? "…" : activeCount} />
+        <Kpi label="Active Projects" value={loading ? "…" : activeProjects.length} />
         <Kpi label="Total Operators" value={SAMPLE_ADMIN_KPIS.operators} />
         <Kpi label="Equipment Units" value={SAMPLE_ADMIN_KPIS.equipment} />
         <Kpi label="Events Today" value={SAMPLE_ADMIN_KPIS.eventsToday} />
@@ -30,12 +30,12 @@ export default function AdminDashboardSection() {
         <Box p={16}>
           {loading && <LoadingSpinner py={24} />}
           {!loading && <SafeError message={error} />}
-          {!loading && !error && records.length === 0 && (
+          {!loading && !error && activeProjects.length === 0 && (
             <Text size="xs" c="#aaa" ta="center" py={24}>
-              No projects yet
+              No active projects
             </Text>
           )}
-          {!loading && !error && records.length > 0 && (
+          {!loading && !error && activeProjects.length > 0 && (
             <Box style={{ overflowX: "auto" }}>
               <Table striped highlightOnHover withTableBorder withColumnBorders style={{ fontSize: 12, minWidth: 600 }}>
                 <Table.Thead>
@@ -48,7 +48,7 @@ export default function AdminDashboardSection() {
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
-                  {records.map((row) => (
+                  {activeProjects.map((row) => (
                     <Table.Tr key={row.id}>
                       <Table.Td style={{ fontWeight: 600 }}>{row.name}</Table.Td>
                       <Table.Td>{row.client_name ?? "—"}</Table.Td>
