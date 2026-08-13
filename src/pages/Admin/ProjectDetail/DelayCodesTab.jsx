@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Box, Text, Group, Button, Modal, TextInput, Select, Switch } from "@mantine/core";
-import { IconPlus, IconList, IconTrash } from "@tabler/icons-react";
+import { IconPlus, IconList } from "@tabler/icons-react";
 import {
   SAMPLE_PROJECT_DELAY_CODES,
   SAMPLE_DELAY_CODE_MASTER,
@@ -177,7 +177,7 @@ export default function DelayCodesTab({ project }) {
                   {catItems.map((m) => (
                     <Group key={m.id} gap={6} p={6} style={{ background: "#f5f6f8", border: "1px solid #e7ecf5", borderRadius: 6 }}>
                       <Text size="xs">{m.code} <Text component="span" c="dimmed" size="10px">#{m.code_num}</Text></Text>
-                      <Box onClick={() => deleteMasterCode(m)} style={{ cursor: "pointer", color: "#ef4444", display: "flex" }}><IconTrash size={11} /></Box>
+                      <Text size="10px" fw={700} c="#ef4444" onClick={() => deleteMasterCode(m)} style={{ cursor: "pointer" }}>Delete</Text>
                     </Group>
                   ))}
                 </Group>

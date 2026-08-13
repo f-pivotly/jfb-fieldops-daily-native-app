@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Box, Text, Group, Button, Table, Tabs, Modal, TextInput, Select, NumberInput } from "@mantine/core";
-import { IconPlus, IconTrash } from "@tabler/icons-react";
+import { IconPlus } from "@tabler/icons-react";
 import {
   SAMPLE_AREAS,
   SAMPLE_LAYER_TYPE_REF,
@@ -136,7 +136,7 @@ function NamedTypeTable({ rows, setRows, typeRef, nameField, typeField, reportNa
       </Group>
       <Table withTableBorder verticalSpacing="xs" fz="sm">
         <Table.Thead>
-          <Table.Tr><Table.Th>Name</Table.Th><Table.Th>Type</Table.Th><Table.Th ta="right">Sort</Table.Th><Table.Th>Report Name</Table.Th><Table.Th style={{ width: 110 }} /></Table.Tr>
+          <Table.Tr><Table.Th>Name</Table.Th><Table.Th>Type</Table.Th><Table.Th ta="right">Sort</Table.Th><Table.Th>Report Name</Table.Th><Table.Th style={{ width: 150 }} /></Table.Tr>
         </Table.Thead>
         <Table.Tbody>
           {rows.map((r) => (
@@ -148,7 +148,7 @@ function NamedTypeTable({ rows, setRows, typeRef, nameField, typeField, reportNa
               <Table.Td>
                 <Group gap={8} wrap="nowrap">
                   <Button size="xs" variant="subtle" onClick={() => openEdit(r)}>Edit</Button>
-                  <Box onClick={() => remove(r)} style={{ cursor: "pointer", color: "#ef4444", display: "flex" }}><IconTrash size={12} /></Box>
+                  <Button size="xs" variant="subtle" color="red" onClick={() => remove(r)}>Delete</Button>
                 </Group>
               </Table.Td>
             </Table.Tr>
@@ -227,7 +227,7 @@ function ComponentsTable({ rows, setRows, typeRef }) {
       </Group>
       <Table withTableBorder verticalSpacing="xs" fz="sm">
         <Table.Thead>
-          <Table.Tr><Table.Th>Name</Table.Th><Table.Th>Type</Table.Th><Table.Th>Report UOM</Table.Th><Table.Th>Inventory UOM</Table.Th><Table.Th style={{ width: 110 }} /></Table.Tr>
+          <Table.Tr><Table.Th>Name</Table.Th><Table.Th>Type</Table.Th><Table.Th>Report UOM</Table.Th><Table.Th>Inventory UOM</Table.Th><Table.Th style={{ width: 150 }} /></Table.Tr>
         </Table.Thead>
         <Table.Tbody>
           {rows.map((r) => (
@@ -239,7 +239,7 @@ function ComponentsTable({ rows, setRows, typeRef }) {
               <Table.Td>
                 <Group gap={8} wrap="nowrap">
                   <Button size="xs" variant="subtle" onClick={() => openEdit(r)}>Edit</Button>
-                  <Box onClick={() => remove(r)} style={{ cursor: "pointer", color: "#ef4444", display: "flex" }}><IconTrash size={12} /></Box>
+                  <Button size="xs" variant="subtle" color="red" onClick={() => remove(r)}>Delete</Button>
                 </Group>
               </Table.Td>
             </Table.Tr>

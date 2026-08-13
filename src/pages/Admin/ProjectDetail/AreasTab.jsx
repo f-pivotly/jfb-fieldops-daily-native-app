@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Box, Text, Group, Button, Modal, TextInput, NumberInput, Textarea, Checkbox } from "@mantine/core";
-import { IconPlus, IconTrash, IconFolder } from "@tabler/icons-react";
+import { IconPlus, IconFolder } from "@tabler/icons-react";
 import { SAMPLE_AREAS } from "../../../data/adminProjectDetailSampleData";
 
 const EMPTY_FORM = { name: "", volume_goal_cy: "", volume_goal_sf: "", notes: "", sort_order: 0 };
@@ -176,7 +176,7 @@ function AreaNode({ area, areas, l2Label, l3Label, onAdd, onEdit, onToggle, onRe
           <Text size="xs" fw={depth === 0 ? 700 : 500}>{area.name}</Text>
           {goalTag && <Text size="10px" c="dimmed" style={{ background: "#eef2f8", padding: "1px 6px", borderRadius: 3 }}>{goalTag}</Text>}
         </Group>
-        <Group gap={10}>
+        <Group gap={10} wrap="nowrap">
           {canHaveChildren && (
             <Box onClick={() => onAdd(area.id, area.level + 1)} style={{ cursor: "pointer", fontSize: 11, color: "#0F2744", fontWeight: 600 }}>
               + {area.level === 1 ? l2Label : l3Label}
@@ -184,7 +184,7 @@ function AreaNode({ area, areas, l2Label, l3Label, onAdd, onEdit, onToggle, onRe
           )}
           <Checkbox size="xs" checked={area.active} onChange={() => onToggle(area)} title="Active" />
           <Button size="xs" variant="subtle" onClick={() => onEdit(area)}>Edit</Button>
-          <Box onClick={() => onRemove(area)} style={{ cursor: "pointer", color: "#ef4444", display: "flex" }}><IconTrash size={12} /></Box>
+          <Button size="xs" variant="subtle" color="red" onClick={() => onRemove(area)}>Delete</Button>
         </Group>
       </Group>
       {children.map((child) => (

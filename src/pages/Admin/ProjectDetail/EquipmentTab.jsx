@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Box, Text, Group, Button, Modal, TextInput } from "@mantine/core";
-import { IconPlus, IconTrash, IconAnchor, IconRefresh } from "@tabler/icons-react";
+import { IconPlus, IconAnchor, IconRefresh } from "@tabler/icons-react";
 import { useDomainData } from "../../../hooks/useDomainData";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import SafeError from "../../../components/SafeError";
@@ -86,7 +86,7 @@ export default function EquipmentTab({ project }) {
             </Group>
             <Group gap={10} wrap="nowrap">
               <Button size="xs" variant="subtle" onClick={() => openEdit(row)}>Edit</Button>
-              <Box onClick={() => handleRemove(row)} style={{ cursor: "pointer", color: "#ef4444", display: "flex" }}><IconTrash size={12} /></Box>
+              <Button size="xs" variant="subtle" color="red" onClick={() => handleRemove(row)}>Delete</Button>
             </Group>
           </Group>
         ))}
