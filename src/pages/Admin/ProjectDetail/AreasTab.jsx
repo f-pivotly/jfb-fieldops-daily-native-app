@@ -1,12 +1,12 @@
 import { useState } from "react";
-import { Box, Text, Group, Button, Modal, TextInput, NumberInput, Textarea, Checkbox } from "@mantine/core";
+import { Box, Text, Group, Button, Modal, TextInput, NumberInput, Textarea, Checkbox, Stack } from "@mantine/core";
 import { IconPlus, IconFolder, IconRefresh } from "@tabler/icons-react";
 import { useProjectAreas } from "../../../hooks/useProjectAreas";
 import { useAreaLevels } from "../../../hooks/useAreaLevels";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import SafeError from "../../../components/SafeError";
 
-const EMPTY_FORM = { name: "", volume_goal_cy: "", volume_goal_sf: "", notes: "", sort_order: 0 };
+const EMPTY_FORM = { name: "", volume_goal_cy: "", area_goal_sf: "", notes: "", sort_order: 0 };
 
 export default function AreasTab({ project }) {
   const hasProject = !!project?.id;
@@ -44,7 +44,7 @@ export default function AreasTab({ project }) {
     setForm({
       name: row.name,
       volume_goal_cy: row.volume_goal_cy ?? "",
-      volume_goal_sf: row.volume_goal_sf ?? "",
+      area_goal_sf: row.area_goal_sf ?? "",
       notes: row.notes ?? "",
       sort_order: row.sort_order ?? 0,
     });
@@ -60,7 +60,7 @@ export default function AreasTab({ project }) {
     const payload = {
       name: form.name.trim(),
       volume_goal_cy: form.volume_goal_cy === "" ? null : Number(form.volume_goal_cy),
-      volume_goal_sf: form.volume_goal_sf === "" ? null : Number(form.volume_goal_sf),
+      area_goal_sf: form.area_goal_sf === "" ? null : Number(form.area_goal_sf),
       notes: form.notes.trim() || null,
       sort_order: Number(form.sort_order) || 0,
     };
@@ -104,7 +104,7 @@ export default function AreasTab({ project }) {
   }
 
   const level1Areas = areasWithDepth.filter((a) => a.depth === 1).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-  const anyGoalSet = areasWithDepth.some((a) => a.volume_goal_cy || a.volume_goal_sf);
+  const anyGoalSet = areasWithDepth.some((a) => a.volume_goal_cy || a.area_goal_sf);
   const sumCy = areasWithDepth.reduce((sum, a) => sum + (a.volume_goal_cy || 0), 0);
   const projectGoal = project?.volume_goal ? Number(project.volume_goal) : null;
   const reconciles = projectGoal != null && Math.abs(projectGoal - sumCy) <= 100;
@@ -166,24 +166,26 @@ export default function AreasTab({ project }) {
             </Box>
           )}
 
-          <Box style={{ background: "#fff", border: "1px solid #ebebeb", borderRadius: 6, padding: 12 }}>
+          <Box style={{ background: "#fff", border: "1px solid #ebebeb", borderRadius: 6, padding: 12, overflow: "hidden" }}>
             {level1Areas.length === 0 && (
               <Text size="xs" c="dimmed" ta="center" py={16}>No {l1.label.toLowerCase()}s yet</Text>
             )}
-            {level1Areas.map((a1) => (
-              <AreaNode
-                key={a1.id}
-                area={a1}
-                areas={areasWithDepth}
-                maxDepth={maxDepth}
-                labelFor={labelFor}
-                onAdd={openAdd}
-                onEdit={openEdit}
-                onToggle={toggleActive}
-                onRemove={removeArea}
-                renderDepth={0}
-              />
-            ))}
+            <Stack gap={8}>
+              {level1Areas.map((a1) => (
+                <AreaNode
+                  key={a1.id}
+                  area={a1}
+                  areas={areasWithDepth}
+                  maxDepth={maxDepth}
+                  labelFor={labelFor}
+                  onAdd={openAdd}
+                  onEdit={openEdit}
+                  onToggle={toggleActive}
+                  onRemove={removeArea}
+                  renderDepth={0}
+                />
+              ))}
+            </Stack>
           </Box>
         </>
       )}
@@ -192,7 +194,7 @@ export default function AreasTab({ project }) {
         <TextInput label="Name" required value={form.name} onChange={(e) => setField("name", e.currentTarget.value)} mb={10} autoFocus />
         <Group grow mb={10}>
           <NumberInput label="Volume Goal (CY)" hideControls value={form.volume_goal_cy} onChange={(v) => setField("volume_goal_cy", v)} />
-          <NumberInput label="Area Goal (SF)" hideControls value={form.volume_goal_sf} onChange={(v) => setField("volume_goal_sf", v)} />
+          <NumberInput label="Area Goal (SF)" hideControls value={form.area_goal_sf} onChange={(v) => setField("area_goal_sf", v)} />
         </Group>
         <Textarea label="Notes" value={form.notes} onChange={(e) => setField("notes", e.currentTarget.value)} mb={10} minRows={2} />
         <NumberInput label="Sort Order" hideControls value={form.sort_order} onChange={(v) => setField("sort_order", v)} mb={16} />
@@ -208,12 +210,12 @@ export default function AreasTab({ project }) {
 function AreaNode({ area, areas, maxDepth, labelFor, onAdd, onEdit, onToggle, onRemove, renderDepth }) {
   const canHaveChildren = area.depth != null && area.depth < maxDepth;
   const children = areas.filter((a) => a.parent_id === area.id).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-  const goalTag = area.volume_goal_cy || area.volume_goal_sf
-    ? [area.volume_goal_cy ? `${Number(area.volume_goal_cy).toLocaleString()} CY` : null, area.volume_goal_sf ? `${Number(area.volume_goal_sf).toLocaleString()} SF` : null].filter(Boolean).join(" · ")
+  const goalTag = area.volume_goal_cy || area.area_goal_sf
+    ? [area.volume_goal_cy ? `${Number(area.volume_goal_cy).toLocaleString()} CY` : null, area.area_goal_sf ? `${Number(area.area_goal_sf).toLocaleString()} SF` : null].filter(Boolean).join(" · ")
     : null;
 
   return (
-    <Box mb={6} ml={renderDepth * 20}>
+    <Box ml={renderDepth * 20}>
       <Group justify="space-between" p={8} style={{ background: renderDepth === 0 ? "#f5f6f8" : "#fff", border: "1px solid #ebebeb", borderRadius: 6, opacity: area.is_active ? 1 : 0.5 }}>
         <Group gap={8}>
           {renderDepth > 0 && <Text c="dimmed" size="xs">└</Text>}
@@ -223,18 +225,27 @@ function AreaNode({ area, areas, maxDepth, labelFor, onAdd, onEdit, onToggle, on
         </Group>
         <Group gap={10} wrap="nowrap">
           {canHaveChildren && (
-            <Box onClick={() => onAdd(area.id, area.depth + 1)} style={{ cursor: "pointer", fontSize: 11, color: "#0F2744", fontWeight: 600 }}>
-              + {labelFor(area.depth + 1)}
-            </Box>
+            <Button
+              size="xs"
+              variant="light"
+              leftSection={<IconPlus size={10} />}
+              onClick={() => onAdd(area.id, area.depth + 1)}
+            >
+              {labelFor(area.depth + 1)}
+            </Button>
           )}
-          <Checkbox size="xs" checked={!!area.is_active} onChange={() => onToggle(area)} title="Active" />
+          <Checkbox size="xs" label="Active" checked={!!area.is_active} onChange={() => onToggle(area)} />
           <Button size="xs" variant="subtle" onClick={() => onEdit(area)}>Edit</Button>
           <Button size="xs" variant="subtle" color="red" onClick={() => onRemove(area)}>Delete</Button>
         </Group>
       </Group>
-      {children.map((child) => (
-        <AreaNode key={child.id} area={child} areas={areas} maxDepth={maxDepth} labelFor={labelFor} onAdd={onAdd} onEdit={onEdit} onToggle={onToggle} onRemove={onRemove} renderDepth={renderDepth + 1} />
-      ))}
+      {children.length > 0 && (
+        <Stack gap={8} mt={8}>
+          {children.map((child) => (
+            <AreaNode key={child.id} area={child} areas={areas} maxDepth={maxDepth} labelFor={labelFor} onAdd={onAdd} onEdit={onEdit} onToggle={onToggle} onRemove={onRemove} renderDepth={renderDepth + 1} />
+          ))}
+        </Stack>
+      )}
     </Box>
   );
 }

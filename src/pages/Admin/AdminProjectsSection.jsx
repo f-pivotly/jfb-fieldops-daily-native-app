@@ -91,8 +91,8 @@ export default function AdminProjectsSection({ onConfigure }) {
     create: createAreaLevel,
     update: updateAreaLevel,
   } = useDomainData({ domain: "jfb_project_area_levels", system: "core" });
-  const { values: workTypeOptions } = usePicklist("jfb_work_type");
-  const { values: primaryMeasureOptions } = usePicklist("jfb_primary_measure");
+  const { values: workTypeOptions } = usePicklist("pkl-jfb-work-type");
+  const { values: primaryMeasureOptions } = usePicklist("pkl-jfb-primary-measure");
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editRow, setEditRow] = useState(null);

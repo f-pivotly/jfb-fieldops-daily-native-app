@@ -1,11 +1,11 @@
 
 export const SAMPLE_AREAS = [
-  { id: "area-1", name: "North Basin", level: 1, parent_id: null, sort_order: 1, volume_goal_cy: 20000, volume_goal_sf: null, active: true },
-  { id: "area-1-1", name: "NB-1", level: 2, parent_id: "area-1", sort_order: 1, volume_goal_cy: null, volume_goal_sf: 5000, active: true },
-  { id: "area-1-1-a", name: "NB-1-A", level: 3, parent_id: "area-1-1", sort_order: 1, volume_goal_cy: null, volume_goal_sf: 2500, active: true },
-  { id: "area-1-1-b", name: "NB-1-B", level: 3, parent_id: "area-1-1", sort_order: 2, volume_goal_cy: null, volume_goal_sf: 2500, active: true },
-  { id: "area-1-2", name: "NB-2", level: 2, parent_id: "area-1", sort_order: 2, volume_goal_cy: null, volume_goal_sf: 4000, active: true },
-  { id: "area-2", name: "South Basin", level: 1, parent_id: null, sort_order: 2, volume_goal_cy: 15000, volume_goal_sf: null, active: true },
+  { id: "area-1", name: "North Basin", level: 1, parent_id: null, sort_order: 1, volume_goal_cy: 20000, area_goal_sf: null, active: true },
+  { id: "area-1-1", name: "NB-1", level: 2, parent_id: "area-1", sort_order: 1, volume_goal_cy: null, area_goal_sf: 5000, active: true },
+  { id: "area-1-1-a", name: "NB-1-A", level: 3, parent_id: "area-1-1", sort_order: 1, volume_goal_cy: null, area_goal_sf: 2500, active: true },
+  { id: "area-1-1-b", name: "NB-1-B", level: 3, parent_id: "area-1-1", sort_order: 2, volume_goal_cy: null, area_goal_sf: 2500, active: true },
+  { id: "area-1-2", name: "NB-2", level: 2, parent_id: "area-1", sort_order: 2, volume_goal_cy: null, area_goal_sf: 4000, active: true },
+  { id: "area-2", name: "South Basin", level: 1, parent_id: null, sort_order: 2, volume_goal_cy: 15000, area_goal_sf: null, active: true },
 ];
 
 export const DELAY_CODE_WORK_TYPES = [
