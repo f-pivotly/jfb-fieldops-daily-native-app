@@ -1,9 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { Box, ScrollArea, Grid, Text, Badge, Checkbox, Stack, Button, Tabs } from '@mantine/core'
 import { REPORT_STATUS_LABEL, REPORT_STATUS_COLOR } from '../../data/dashboardSampleData'
 import { SAMPLE_EQUIPMENT, SAMPLE_CHECKLIST } from '../../data/reportEditorSampleData'
 import { useProject } from '../../hooks/useProject'
+import { useReports } from '../../hooks/useReports'
+import { calWeekOf, projectWeekOf } from '../../helpers/reportWeeks'
+import PMReviewPanel from '../../components/PMReviewPanel'
 import EventLogTab from './reportEditorTabs/EventLogTab'
 import ProductionStatsTab from './reportEditorTabs/ProductionStatsTab'
 import PhotosTab from './reportEditorTabs/PhotosTab'
@@ -40,7 +43,21 @@ const CHECKLIST_LABELS = {
 export default function ReportEditorPage() {
   const { projectId, date } = useParams()
   const { project } = useProject(projectId)
-  const [status] = useState('cqc_review')
+  const { reports, create } = useReports(projectId)
+  const report = reports.find((r) => r.report_date === date)
+  const status = report?.status ?? 'draft'
+
+  useEffect(() => {
+    if (!project || report) return
+    create({
+      project_id: project.id,
+      report_date: date,
+      status: 'draft',
+      cal_week: calWeekOf(date),
+      project_week: projectWeekOf(date, project.start_date),
+    })
+  }, [project, report, date, create])
+
   const [mobDay, setMobDay] = useState(false)
   const [selectedEquipment, setSelectedEquipment] = useState(SAMPLE_EQUIPMENT[0].id)
   const [tab, setTab] = useState('event_log')
@@ -96,13 +113,7 @@ export default function ReportEditorPage() {
                 </Stack>
               </Box>
 
-              <Box pt={8} style={{ borderTop: '1px solid var(--mantine-color-gray-2)' }}>
-                <Text size="xs" fw={700} tt="uppercase" c="dimmed" mb={6}>PM review</Text>
-                <Stack gap={4}>
-                  <Button size="xs" color="green">Approve</Button>
-                  <Button size="xs" variant="default">Send back to PE</Button>
-                </Stack>
-              </Box>
+              <PMReviewPanel />
             </Stack>
           </Grid.Col>
 

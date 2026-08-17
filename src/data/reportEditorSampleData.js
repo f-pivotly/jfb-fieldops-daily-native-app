@@ -17,9 +17,23 @@ export const SAMPLE_CHECKLIST = {
 export const SAMPLE_EVENTS = [
   { id: 'ev-1', from: '06:00', to: '06:15', category: 'STARTUP/SHUTDOWN', area: 'Bancroft Bay', pass: '1st Pass', tsca: 'No', operator: 'A. Trofka', notes: 'Startup checks', source: 'operator' },
   { id: 'ev-2', from: '06:15', to: '11:30', category: 'ACTIVE DREDGING', area: 'Bancroft Bay › Cell 4', pass: '1st Pass', tsca: 'No', operator: 'A. Trofka', notes: '', source: 'operator' },
-  { id: 'ev-3', from: '11:30', to: '12:00', category: 'Lunch', area: '—', pass: '—', tsca: '—', operator: 'A. Trofka', notes: '', source: 'operator' },
+  { id: 'ev-3', from: '11:30', to: '11:50', category: 'Lunch', area: '—', pass: '—', tsca: '—', operator: 'A. Trofka', notes: '', source: 'operator' },
+  // Deliberate 10-minute gap (11:50–12:00) so the Unaccounted Hours callout has something to show.
   { id: 'ev-4', from: '12:00', to: '13:20', category: 'Waiting on Material', area: '—', pass: '—', tsca: '—', operator: 'A. Trofka', notes: 'Barge swap delay', source: 'pe' },
   { id: 'ev-5', from: '13:20', to: '18:00', category: 'ACTIVE DREDGING', area: 'Bancroft Bay › Cell 4', pass: '1st Pass', tsca: 'No', operator: 'A. Trofka', notes: '', source: 'operator' },
+];
+
+export const SAMPLE_TRANSITION_AREAS = ['Bancroft Bay', 'Bancroft Bay › Cell 4', 'Bancroft Bay › Cell 5'];
+export const SAMPLE_PASS_OPTIONS = ['1st Pass', '2nd Pass', '3rd Pass'];
+export const SAMPLE_EVENT_CATEGORIES = [
+  'ACTIVE DREDGING',
+  'STARTUP/SHUTDOWN',
+  'Lunch',
+  'Waiting on Material',
+  'Weather Delay',
+  'Pump Repair',
+  'Move Dredge',
+  'Survey',
 ];
 
 export const SAMPLE_EVENT_TOTALS = {
@@ -38,23 +52,72 @@ export const SAMPLE_PRODUCTION_ROWS = [
 
 export const SAMPLE_PRODUCTION_TOTALS = { goh: 12.0, noh: 9.75, cy: 1240, sf: 18500, avgFace: 1.81 };
 
+export const SAMPLE_CAPPING_ROWS = [
+  { key: 'c1', area: 'North Basin', layer: 'Lift 1', tonsPlaced: 340, dryTons: 312, acres: 1.4, material: 'Sand' },
+  { key: 'c2', area: 'North Basin', layer: 'Armor', tonsPlaced: 180, dryTons: 178, acres: 0.6, material: 'Armor Rock' },
+];
+export const SAMPLE_CAPPING_TOTALS = { tonsPlaced: 520, dryTons: 490, acres: 2.0 };
+
+export const SAMPLE_FLOW_STATS = { pipeDiameterIn: 12, avgVelocityFps: 14.2, avgFlowRateGpm: 4180, noh: 9.75 };
+export const SAMPLE_PIPE_LENGTHS = [
+  { id: 'pl-1', name: 'Booster 1 → Cell 4', lengthFt: 1800 },
+  { id: 'pl-2', name: 'Cell 4 discharge', lengthFt: 420 },
+];
+
 export const SAMPLE_PHOTOS = [
   { slot: 1, label: 'Cutterhead — Cell 4', uploaded: true, rejected: false },
   { slot: 2, label: '', uploaded: false, rejected: false },
 ];
 
 export const SAMPLE_NARRATIVE_SECTIONS = [
-  { key: 'production', label: 'Production Summary', content: 'Dredge 1 worked Cell 4 all shift after a barge-swap delay midday. Production on pace for the week.' },
-  { key: 'safety', label: 'Safety Summary', content: 'No incidents. Toolbox talk covered barge mooring lines.' },
-  { key: 'delays', label: 'Delays / Issues', content: 'Waiting on Material (barge swap) — 1h 20m.' },
-  { key: 'planned', label: 'Plan for Tomorrow', content: 'Continue Cell 4, begin Cell 5 pass if weather holds.' },
+  {
+    key: 'production',
+    label: 'Production Summary',
+    content: 'Dredge 1 worked Cell 4 all shift after a barge-swap delay midday. Production on pace for the week.',
+    hidden: false,
+    priorDayContent: 'Dredge 1 worked Cell 3 all shift, no delays. Ahead of pace for the week.',
+    lockedByOther: null,
+  },
+  {
+    key: 'safety',
+    label: 'Safety Summary',
+    content: 'No incidents. Toolbox talk covered barge mooring lines.',
+    hidden: false,
+    priorDayContent: 'No incidents. Toolbox talk covered fall protection near the spud barge.',
+    lockedByOther: null,
+  },
+  {
+    key: 'delays',
+    label: 'Delays / Issues',
+    content: '',
+    hidden: false,
+    priorDayContent: 'Weather delay 0700-0830 (fog).',
+    lockedByOther: { name: 'M. Sunday', minutesAgo: 4 },
+  },
+  {
+    key: 'planned',
+    label: 'Plan for Tomorrow',
+    content: 'Continue Cell 4, begin Cell 5 pass if weather holds.',
+    hidden: false,
+    priorDayContent: 'Continue Cell 3, mobilize booster pump to Cell 4.',
+    lockedByOther: null,
+  },
 ];
 
 export const SAMPLE_METRICS = [
-  { key: 'cy', label: 'CY Dredged', source: 'Auto', unit: 'CY', day: 1240, week: 6820, total: 48210 },
-  { key: 'sf', label: 'SF Covered', source: 'Auto', unit: 'SF', day: 18500, week: 102300, total: 712400 },
-  { key: 'efficiency', label: 'Efficiency', source: 'Auto', unit: '%', day: 81.3, week: 78.9, total: 76.2 },
-  { key: 'samples', label: 'Samples Collected', source: 'Manual', unit: 'ea', day: 2, week: 9, total: 61 },
+  { key: 'cy', label: 'CY Dredged', source: 'Auto', autoKind: 'volume_cy', unit: 'CY', day: 1240, week: 6820, total: 48210, hidden: false },
+  { key: 'sf', label: 'SF Covered', source: 'Auto', autoKind: 'area_sf', unit: 'SF', day: 18500, week: 102300, total: 712400, hidden: false },
+  { key: 'efficiency', label: 'Efficiency', source: 'Auto', autoKind: 'efficiency_pct', unit: '%', day: 81.3, week: 78.9, total: 76.2, hidden: false },
+  { key: 'samples', label: 'Samples Collected', source: 'Manual', autoKind: null, unit: 'ea', day: 2, week: 9, total: 61, hidden: false },
+];
+
+export const AUTO_METRIC_SOURCES = [
+  { value: 'volume_cy', label: 'Volume (CY)' },
+  { value: 'area_sf', label: 'Area (SF)' },
+  { value: 'goh', label: 'Gross Operating Hours' },
+  { value: 'noh', label: 'Net Operating Hours' },
+  { value: 'delay_hours', label: 'Delay Hours' },
+  { value: 'efficiency_pct', label: 'Efficiency %' },
 ];
 
 export const SAMPLE_SAFETY_TENETS = [
@@ -68,9 +131,16 @@ export const SAMPLE_SAFETY_TENETS = [
 ];
 
 export const SAMPLE_CREW = [
-  { category: 'Operators', count: 2, hours: 24 },
-  { category: 'Deckhands', count: 1, hours: 12 },
-  { category: 'Surveyors', count: 1, hours: 8 },
+  { id: 'crew-1', category: 'Operators', count: 2, hours: 24 },
+  { id: 'crew-2', category: 'Deckhands', count: 1, hours: 12 },
+  { id: 'crew-3', category: 'Surveyors', count: 1, hours: 8 },
+];
+
+export const SAMPLE_PRIOR_DAY_CREW = [
+  { id: 'prior-1', category: 'Operators', count: 2, hours: 22 },
+  { id: 'prior-2', category: 'Deckhands', count: 1, hours: 11 },
+  { id: 'prior-3', category: 'Surveyors', count: 1, hours: 8 },
+  { id: 'prior-4', category: 'Sheet Pile Crew', count: 3, hours: 30 },
 ];
 
 export const SAMPLE_CLIMATE = {
@@ -95,12 +165,26 @@ export const SAMPLE_DREDGE_PROGRESS = {
   lastSurveyDate: '2026-08-10',
 };
 
+export const SAMPLE_PM_REVIEW_CHECKS = [
+  { key: 'event_log', label: 'Event log present', status: 'pass' },
+  { key: 'shift_balance', label: 'Shift balance per equipment', status: 'pass' },
+  { key: 'production', label: 'Production stats entered', status: 'pass' },
+  { key: 'narratives', label: 'Narratives complete', status: 'fail', detail: 'Delays / Issues section is empty' },
+  { key: 'photos', label: 'Photos uploaded, labeled, not rejected', status: 'pass' },
+];
+
 export const SAMPLE_PLACEMENT_PROGRESS = {
   layer: 'Lift 2 — Sand Cap',
   tonsPlacedToday: 340,
   tonsPlacedTotal: 4820,
   coveragePct: 44,
 };
+
+export const SAMPLE_BUCKET_ATTRIBUTION = [
+  { id: 'ba-1', layer: 'Lift 1', material: 'Sand', avgSfPerBucket: 42, buckets: 18 },
+  { id: 'ba-2', layer: 'Lift 2', material: 'Amended Sand', avgSfPerBucket: 38, buckets: 12 },
+  { id: 'ba-3', layer: 'Armor', material: 'Armor Rock', avgSfPerBucket: 25, buckets: 6 },
+];
 
 export const SAMPLE_WATER_QUALITY = [
   { time: '06:00', backgroundNtu: 3.1, complianceNtu: 4.0, alert: false },

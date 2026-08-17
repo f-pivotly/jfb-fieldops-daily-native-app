@@ -13,6 +13,8 @@ import WeeklySummaryPage from "./pages/PageContent/WeeklySummaryPage";
 import ProjectSettingsPage from "./pages/PageContent/ProjectSettingsPage";
 import OperatorHoursPage from "./pages/PageContent/OperatorHoursPage";
 import CappingSetupPage from "./pages/PageContent/CappingSetupPage";
+import Forbidden from "./pages/Forbidden";
+import NotFound from "./pages/NotFound";
 
 import { useNav } from "./hooks/useNav";
 import { usePageDetails } from "./hooks/usePageDetails";
@@ -80,6 +82,8 @@ export default function App() {
           <Route path="/projects/:projectId/settings" element={<ProjectSettingsPage />} />
           <Route path="/admin/operators" element={<OperatorHoursPage />} />
           <Route path="/admin/capping-setup" element={<CappingSetupPage />} />
+          <Route path="/forbidden" element={<Forbidden />} />
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </Box>
     );

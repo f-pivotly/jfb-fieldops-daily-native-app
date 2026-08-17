@@ -41,4 +41,17 @@ export const SAMPLE_DREDGE_CHART_CONFIG = {
   configured: true,
   cellGrid: 'CSC numbered cell grid (Kalamazoo style)',
   lastHypackUpload: '2026-08-05',
+  chartStyle: 'csc',
+  overlapToleranceFt: 5,
+  gapWidth: 12,
 };
+
+export const SAMPLE_DREDGE_EXCLUSION_AREAS = [
+  { id: 'excl-1', name: 'Dock pilings — NE corner' },
+  { id: 'excl-2', name: 'Buried cable crossing' },
+];
+
+export const SAMPLE_HYPACK_UPLOADS = [
+  { id: 'up-1', name: '20260805_FL.RAW', uploadedAt: '2026-08-05 06:42' },
+  { id: 'up-2', name: '20260804_FL.RAW', uploadedAt: '2026-08-04 06:38' },
+];

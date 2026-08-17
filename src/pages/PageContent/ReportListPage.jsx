@@ -1,18 +1,50 @@
 import { useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { Box, ScrollArea, Group, Text, Badge, Table, Button, TextInput } from '@mantine/core'
-import { SAMPLE_REPORTS_BY_PROJECT, REPORT_STATUS_LABEL, REPORT_STATUS_COLOR } from '../../data/dashboardSampleData'
+import { REPORT_STATUS_LABEL, REPORT_STATUS_COLOR } from '../../data/dashboardSampleData'
 import { useProject } from '../../hooks/useProject'
+import { useReports } from '../../hooks/useReports'
+import { calWeekOf, projectWeekOf } from '../../helpers/reportWeeks'
+
+const DAY_LABEL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+function dayOf(dateISO) {
+  const d = new Date(`${dateISO}T00:00:00Z`)
+  return Number.isNaN(d.getTime()) ? '' : DAY_LABEL[d.getUTCDay()]
+}
 
 export default function ReportListPage() {
   const { projectId } = useParams()
   const navigate = useNavigate()
   const { project } = useProject(projectId)
-  const reports = SAMPLE_REPORTS_BY_PROJECT[project?.project_code] ?? []
+  const { reports: reportRecords, create } = useReports(project?.id)
+  const reports = reportRecords
+    .map((r) => ({
+      date: r.report_date,
+      day: dayOf(r.report_date),
+      status: r.status,
+      calWeek: r.cal_week,
+      projectWeek: r.project_week,
+    }))
+    .sort((a, b) => b.date.localeCompare(a.date))
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pickerDate, setPickerDate] = useState('2026-08-11')
 
   const groups = groupByCalWeek(reports)
+
+  async function startReport(dateISO) {
+    const exists = reportRecords.some((r) => r.report_date === dateISO)
+    if (!exists && project) {
+      await create({
+        project_id: project.id,
+        report_date: dateISO,
+        status: 'draft',
+        cal_week: calWeekOf(dateISO),
+        project_week: projectWeekOf(dateISO, project.start_date),
+      })
+    }
+    navigate(`/projects/${projectId}/reports/${dateISO}`)
+  }
 
   return (
     <ScrollArea flex={1} style={{ minHeight: 0 }}>
@@ -50,7 +82,7 @@ export default function ReportListPage() {
         ) : (
           <Group gap={8} mb={20} p={10} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 6 }}>
             <TextInput type="date" size="xs" value={pickerDate} onChange={(e) => setPickerDate(e.currentTarget.value)} label="Report date" />
-            <Button size="xs" mt={18} onClick={() => navigate(`/projects/${projectId}/reports/${pickerDate}`)}>
+            <Button size="xs" mt={18} onClick={() => startReport(pickerDate)}>
               Start
             </Button>
             <Button size="xs" mt={18} variant="default" onClick={() => setPickerOpen(false)}>Cancel</Button>

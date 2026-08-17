@@ -1,7 +1,10 @@
-import { Box, Text, SimpleGrid, Table, Badge, Stack, Group } from '@mantine/core'
+import { Box, Text, SimpleGrid, Table, Badge, Stack, Group, Button, TextInput, NumberInput, FileButton } from '@mantine/core'
+import { useState } from 'react'
+import { IconPlus, IconTrash, IconSignature } from '@tabler/icons-react'
 import {
   SAMPLE_SAFETY_TENETS,
   SAMPLE_CREW,
+  SAMPLE_PRIOR_DAY_CREW,
   SAMPLE_CLIMATE,
   SAMPLE_SIGNATURES,
 } from '../../../data/reportEditorSampleData'
@@ -10,6 +13,30 @@ import { SAMPLE_SITE_EQUIPMENT } from '../../../data/projectSettingsSampleData'
 const TENET_COLOR = { pass: 'green', fail: 'red', na: 'gray' }
 
 export default function SafetyTab() {
+  const [crew, setCrew] = useState(SAMPLE_CREW)
+  const [prefillPreview, setPrefillPreview] = useState(false)
+  const [signatureUrl, setSignatureUrl] = useState(null)
+
+  const allBlank = crew.every((c) => !c.category && !c.count && !c.hours)
+
+  function updateCrew(id, patch) {
+    setCrew((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)))
+  }
+  function addCrew() {
+    setCrew((prev) => [...prev, { id: `crew-${Date.now()}`, category: '', count: 0, hours: 0 }])
+  }
+  function removeCrew(id) {
+    setCrew((prev) => prev.filter((c) => c.id !== id))
+  }
+  function acceptPrefill() {
+    setCrew(SAMPLE_PRIOR_DAY_CREW.map((c) => ({ ...c, id: `crew-${Date.now()}-${c.id}` })))
+    setPrefillPreview(false)
+  }
+  function handleSignatureFile(file) {
+    if (!file) return
+    setSignatureUrl(URL.createObjectURL(file))
+  }
+
   return (
     <Stack gap="lg">
       <Section title="Daily Safety Updates">
@@ -24,20 +51,45 @@ export default function SafetyTab() {
       </Section>
 
       <Section title="Crew Summary">
+        {allBlank && !prefillPreview && (
+          <Text size="xs" c="#0F2744" fw={600} mb={8} onClick={() => setPrefillPreview(true)} style={{ cursor: 'pointer', display: 'inline-block' }}>
+            Use crew from M/D
+          </Text>
+        )}
+        {prefillPreview && (
+          <Box mb={10} p={10} style={{ background: '#f5f6f8', border: '1px solid #e7ecf5', borderRadius: 6 }}>
+            <Text size="10px" c="dimmed" mb={6} tt="uppercase">Most recent prior daily's crew</Text>
+            <Stack gap={2} mb={8}>
+              {SAMPLE_PRIOR_DAY_CREW.map((c) => (
+                <Text key={c.id} size="xs">{c.category} — {c.count} · {c.hours}h</Text>
+              ))}
+            </Stack>
+            <Group gap={8}>
+              <Button size="xs" onClick={acceptPrefill} style={{ background: '#0F2744', border: 'none' }}>Accept and insert</Button>
+              <Button size="xs" variant="default" onClick={() => setPrefillPreview(false)}>Cancel</Button>
+            </Group>
+          </Box>
+        )}
         <Table withTableBorder verticalSpacing="xs" fz="sm">
           <Table.Thead>
-            <Table.Tr><Table.Th>Category</Table.Th><Table.Th ta="right">Count</Table.Th><Table.Th ta="right">Hours</Table.Th></Table.Tr>
+            <Table.Tr><Table.Th>Category</Table.Th><Table.Th ta="right">Count</Table.Th><Table.Th ta="right">Hours</Table.Th><Table.Th style={{ width: 40 }} /></Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {SAMPLE_CREW.map((c) => (
-              <Table.Tr key={c.category}>
-                <Table.Td>{c.category}</Table.Td>
-                <Table.Td ta="right">{c.count}</Table.Td>
-                <Table.Td ta="right">{c.hours}</Table.Td>
+            {crew.map((c) => (
+              <Table.Tr key={c.id}>
+                <Table.Td><TextInput size="xs" value={c.category} onChange={(e) => updateCrew(c.id, { category: e.currentTarget.value })} /></Table.Td>
+                <Table.Td><NumberInput size="xs" hideControls value={c.count} onChange={(v) => updateCrew(c.id, { count: v })} /></Table.Td>
+                <Table.Td><NumberInput size="xs" hideControls value={c.hours} onChange={(v) => updateCrew(c.id, { hours: v })} /></Table.Td>
+                <Table.Td>
+                  <Box onClick={() => removeCrew(c.id)} style={{ cursor: 'pointer', color: '#ef4444', display: 'flex' }}>
+                    <IconTrash size={13} />
+                  </Box>
+                </Table.Td>
               </Table.Tr>
             ))}
           </Table.Tbody>
         </Table>
+        <Button size="xs" variant="default" mt={8} leftSection={<IconPlus size={11} />} onClick={addCrew}>Add crew</Button>
       </Section>
 
       <Section title="Climate">
@@ -56,7 +108,24 @@ export default function SafetyTab() {
           <Box>
             <Text size="xs" c="dimmed" tt="uppercase">Report Preparer</Text>
             <Text size="sm" fw={500}>{SAMPLE_SIGNATURES.preparer.name}</Text>
-            <Text size="xs" c="dimmed">{SAMPLE_SIGNATURES.preparer.signedAt}</Text>
+            <Text size="xs" c="dimmed" mb={8}>{SAMPLE_SIGNATURES.preparer.signedAt}</Text>
+
+            {signatureUrl ? (
+              <Box>
+                <img src={signatureUrl} alt="Signature" style={{ height: 40, display: 'block', marginBottom: 6 }} />
+                <FileButton onChange={handleSignatureFile} accept="image/png,image/jpeg,image/webp">
+                  {(props) => <Button {...props} size="xs" variant="default">Replace signature</Button>}
+                </FileButton>
+              </Box>
+            ) : (
+              <FileButton onChange={handleSignatureFile} accept="image/png,image/jpeg,image/webp">
+                {(props) => (
+                  <Button {...props} size="xs" variant="default" leftSection={<IconSignature size={12} />}>
+                    Upload signature
+                  </Button>
+                )}
+              </FileButton>
+            )}
           </Box>
           <Box>
             <Text size="xs" c="dimmed" tt="uppercase">SSHO</Text>
