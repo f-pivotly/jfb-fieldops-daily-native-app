@@ -1,0 +1,169 @@
+{
+  "schema": [
+    {
+      "pii": false,
+      "name": "project_id",
+      "slug": "project_id",
+      "type": "uuid",
+      "label": "Project Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": true,
+        "target_attr": "id",
+        "target_domain": "jfb_projects",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "project_id",
+      "description": "The project this flow-stat reading belongs to.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "equipment_id",
+      "slug": "equipment_id",
+      "type": "uuid",
+      "label": "Equipment Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": true,
+        "target_attr": "id",
+        "target_domain": "jfb_equipments",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "equipment_id",
+      "description": "The equipment this flow reading was taken for.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "log_date",
+      "slug": "log_date",
+      "type": "timestamp with time zone",
+      "label": "Log Date",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "timestamp with time zone",
+      "column_name": "log_date",
+      "description": "The day this flow-stat reading applies to.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "pipe_dia_inches",
+      "slug": "pipe_dia_inches",
+      "type": "numeric",
+      "label": "Pipe Dia Inches",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "pipe_dia_inches",
+      "description": "Pipe inside diameter, in inches.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "avg_line_velocity",
+      "slug": "avg_line_velocity",
+      "type": "numeric",
+      "label": "Avg Line Velocity",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "avg_line_velocity",
+      "description": "Average line velocity, in feet per second. Combined with pipe_dia_inches, every other flow metric (flow rate, daily/project totals) derives from these two numbers -- nothing else needs to be stored.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "avg_flow_rate",
+      "slug": "avg_flow_rate",
+      "type": "numeric",
+      "label": "Avg Flow Rate",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "avg_flow_rate",
+      "description": "Average flow rate, in GPM. Interchangeable with avg_line_velocity via pipe_dia_inches -- the PE enters whichever one they measured and the other derives at render time.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    }
+  ],
+  "archive": true,
+  "contact": {
+    "name": "System Administrator"
+  },
+  "multi_tenant": false,
+  "xref_enabled": true,
+  "access_control": {
+    "model": "all_systems",
+    "read_access": true,
+    "delete_access": true,
+    "insert_access": true,
+    "update_access": true,
+    "hard_delete_allowed": true,
+    "direct_write_enabled": true
+  },
+  "archive_policy": {
+    "retention_days": 365,
+    "max_record_versions": 10000
+  },
+  "track_versions": true,
+  "domain_table_name": "jfb_hydraulic_flow_stats",
+  "slug": "jfb_hydraulic_flow_stats",
+  "domain_name_singular": "jfb_hydraulic_flow_stat",
+  "default_conflict_resolution": {
+    "code": "lww",
+    "human_readable": "Last Write Wins"
+  }
+}
