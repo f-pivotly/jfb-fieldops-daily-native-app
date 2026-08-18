@@ -4,7 +4,6 @@ import { Box, ScrollArea, Group, Text, Badge, Table, Button, TextInput } from '@
 import { REPORT_STATUS_LABEL, REPORT_STATUS_COLOR } from '../../data/dashboardSampleData'
 import { useProject } from '../../hooks/useProject'
 import { useReports } from '../../hooks/useReports'
-import { calWeekOf, projectWeekOf } from '../../helpers/reportWeeks'
 
 const DAY_LABEL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
@@ -17,32 +16,21 @@ export default function ReportListPage() {
   const { projectId } = useParams()
   const navigate = useNavigate()
   const { project } = useProject(projectId)
-  const { reports: reportRecords, create } = useReports(project?.id)
+  const { reports: reportRecords } = useReports(project?.id)
   const reports = reportRecords
     .map((r) => ({
       date: r.report_date,
       day: dayOf(r.report_date),
       status: r.status,
-      calWeek: r.cal_week,
-      projectWeek: r.project_week,
     }))
     .sort((a, b) => b.date.localeCompare(a.date))
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pickerDate, setPickerDate] = useState('2026-08-11')
 
-  const groups = groupByCalWeek(reports)
-
-  async function startReport(dateISO) {
-    const exists = reportRecords.some((r) => r.report_date === dateISO)
-    if (!exists && project) {
-      await create({
-        project_id: project.id,
-        report_date: dateISO,
-        status: 'draft',
-        cal_week: calWeekOf(dateISO),
-        project_week: projectWeekOf(dateISO, project.start_date),
-      })
-    }
+  // Only navigates -- ReportEditorPage's own effect is the single place that
+  // creates a report if one doesn't exist yet for this project+date, so two
+  // independent "check, then create" call sites can't race each other.
+  function startReport(dateISO) {
     navigate(`/projects/${projectId}/reports/${dateISO}`)
   }
 
@@ -89,70 +77,53 @@ export default function ReportListPage() {
           </Group>
         )}
 
-        {groups.length === 0 && (
+        {reports.length === 0 && (
           <Box p={40} ta="center" style={{ border: '1px dashed var(--mantine-color-gray-4)', borderRadius: 8 }}>
             <Text fw={500}>No reports yet for this project.</Text>
             <Text size="sm" c="dimmed" mt={4}>Reports appear here once operators log events, or a PE starts one.</Text>
           </Box>
         )}
 
-        {groups.map((g) => (
-          <Box key={g.key} mb={24}>
-            <Text size="xs" fw={700} c="dimmed" tt="uppercase" mb={6}>{g.label}</Text>
-            <Table withTableBorder verticalSpacing="sm">
-              <Table.Thead>
-                <Table.Tr>
-                  <Table.Th>Date</Table.Th>
-                  <Table.Th>Day</Table.Th>
-                  <Table.Th>Status</Table.Th>
-                  <Table.Th />
-                </Table.Tr>
-              </Table.Thead>
-              <Table.Tbody>
-                {g.rows.map((r) => (
-                  <Table.Tr key={r.date} style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${projectId}/reports/${r.date}`)}>
-                    <Table.Td>
-                      <Text component={Link} to={`/projects/${projectId}/reports/${r.date}`} fw={500} size="sm">
-                        {r.date}
+        {reports.length > 0 && (
+          <Table withTableBorder verticalSpacing="sm">
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Date</Table.Th>
+                <Table.Th>Day</Table.Th>
+                <Table.Th>Status</Table.Th>
+                <Table.Th />
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {reports.map((r) => (
+                <Table.Tr key={r.date} style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${projectId}/reports/${r.date}`)}>
+                  <Table.Td>
+                    <Text component={Link} to={`/projects/${projectId}/reports/${r.date}`} fw={500} size="sm">
+                      {r.date}
+                    </Text>
+                  </Table.Td>
+                  <Table.Td>{r.day}</Table.Td>
+                  <Table.Td>
+                    <Badge color={REPORT_STATUS_COLOR[r.status]} size="sm">{REPORT_STATUS_LABEL[r.status]}</Badge>
+                  </Table.Td>
+                  <Table.Td ta="right">
+                    {r.status === 'released' && (
+                      <Text
+                        component={Link}
+                        to={`/projects/${projectId}/realized`}
+                        size="xs"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        Realized To-Date
                       </Text>
-                    </Table.Td>
-                    <Table.Td>{r.day}</Table.Td>
-                    <Table.Td>
-                      <Badge color={REPORT_STATUS_COLOR[r.status]} size="sm">{REPORT_STATUS_LABEL[r.status]}</Badge>
-                    </Table.Td>
-                    <Table.Td ta="right">
-                      {r.status === 'released' && (
-                        <Text
-                          component={Link}
-                          to={`/projects/${projectId}/realized`}
-                          size="xs"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          Realized To-Date
-                        </Text>
-                      )}
-                    </Table.Td>
-                  </Table.Tr>
-                ))}
-              </Table.Tbody>
-            </Table>
-          </Box>
-        ))}
+                    )}
+                  </Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        )}
       </Box>
     </ScrollArea>
   )
-}
-
-function groupByCalWeek(rows) {
-  const out = []
-  for (const r of rows) {
-    const key = r.calWeek != null ? `cw-${r.calWeek}` : 'uncoded'
-    const label = r.calWeek != null
-      ? (r.projectWeek != null ? `Cal Week ${r.calWeek} · Project Week ${r.projectWeek}` : `Cal Week ${r.calWeek}`)
-      : 'No week assigned'
-    const last = out[out.length - 1]
-    if (last && last.key === key) last.rows.push(r)
-    else out.push({ key, label, rows: [r] })
-  }
-  return out
 }

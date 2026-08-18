@@ -1,101 +1,127 @@
 import { useState } from 'react'
-import { Box, SimpleGrid, Text, Table, Badge, Group, Button, Modal, TextInput, Select, Radio, Textarea } from '@mantine/core'
+import { Box, Text, Table, Group, Button, Modal, TextInput, Select } from '@mantine/core'
 import { IconPlus, IconPencil, IconTrash, IconAlertTriangle } from '@tabler/icons-react'
-import {
-  SAMPLE_EVENTS,
-  SAMPLE_EVENT_TOTALS,
-  SAMPLE_TRANSITION_AREAS,
-  SAMPLE_PASS_OPTIONS,
-  SAMPLE_EVENT_CATEGORIES,
-} from '../../../data/reportEditorSampleData'
+import { useEvents } from '../../../hooks/useEvents'
+import { useOperators } from '../../../hooks/useOperators'
 
-const SOURCE_COLOR = { operator: 'blue', pe: 'grape', auto_gap: 'gray' }
+// jfb_daily_activities has no category/area/pass/tsca/notes fields, so these
+// columns have nothing real to show yet — flagged rather than faked.
+const SAMPLE = '(sampleData)'
 
-const EMPTY_FORM = { from: '', to: '', category: '', area: '', pass: '', tsca: 'No', operator: '', notes: '' }
+const EMPTY_FORM = { from: '', to: '', operatorId: null }
 
-function toMinutes(hhmm) {
-  const [h, m] = hhmm.split(':').map(Number)
-  return h * 60 + m
+function hhmm(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-function findGaps(events) {
-  const sorted = [...events].sort((a, b) => toMinutes(a.from) - toMinutes(b.from))
+// Combines the report's date with a form's HH:MM into a local ISO timestamp.
+// Rolls the end time to the next calendar day when earlier than the start
+// time, so overnight shifts (e.g. 14:00 -> 02:00) work.
+function eventTimestamps(dateISO, fromHHMM, toHHMM) {
+  if (!dateISO || !fromHHMM || !toHHMM) return { start: null, end: null }
+  const start = new Date(`${dateISO}T${fromHHMM}:00`)
+  let end = new Date(`${dateISO}T${toHHMM}:00`)
+  if (end < start) end = new Date(end.getTime() + 24 * 60 * 60 * 1000)
+  return { start: start.toISOString(), end: end.toISOString() }
+}
+
+function fmtDuration(startISO, endISO) {
+  if (!startISO || !endISO) return '—'
+  const ms = new Date(endISO) - new Date(startISO)
+  if (ms <= 0) return '—'
+  const mins = Math.round(ms / 60000)
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  if (h === 0) return `${m} min`
+  if (m === 0) return `${h}h`
+  return `${h}h ${m}m`
+}
+
+function findGaps(sortedEvents) {
   const gaps = []
-  for (let i = 0; i < sorted.length - 1; i++) {
-    const end = toMinutes(sorted[i].to)
-    const nextStart = toMinutes(sorted[i + 1].from)
-    if (nextStart > end) gaps.push({ id: `gap-${sorted[i].id}`, from: sorted[i].to, to: sorted[i + 1].from })
+  for (let i = 0; i < sortedEvents.length - 1; i++) {
+    const end = new Date(sortedEvents[i].end_date_time)
+    const nextStart = new Date(sortedEvents[i + 1].start_date_time)
+    if (nextStart > end) {
+      gaps.push({ id: `gap-${sortedEvents[i].id}`, fromISO: sortedEvents[i].end_date_time, toISO: sortedEvents[i + 1].start_date_time })
+    }
   }
   return gaps
 }
 
-export default function EventLogTab() {
-  const t = SAMPLE_EVENT_TOTALS
-  const [events, setEvents] = useState(SAMPLE_EVENTS)
-  const [deletedEvents, setDeletedEvents] = useState([])
-  const [showDeleted, setShowDeleted] = useState(false)
+export default function EventLogTab({ project, report, equipment = [], selectedEquipmentId }) {
+  const eventDate = report?.report_date
+  const { events, create, update, remove } = useEvents(project?.id, eventDate)
+  const { operators } = useOperators(project?.id)
 
-  const [transitionOpen, setTransitionOpen] = useState(false)
+  const sorted = events
+    .filter((e) => e.equipment_id === selectedEquipmentId)
+    .sort((a, b) => new Date(a.start_date_time) - new Date(b.start_date_time))
+  const gaps = findGaps(sorted)
+  const equipmentName = equipment.find((e) => e.id === selectedEquipmentId)?.name
+
+  const [insertOpen, setInsertOpen] = useState(false)
+  const [insertKey, setInsertKey] = useState(0)
   const [editRow, setEditRow] = useState(null)
   const [deleteRow, setDeleteRow] = useState(null)
-  const [deleteReason, setDeleteReason] = useState('')
   const [form, setForm] = useState(EMPTY_FORM)
-
-  const gaps = findGaps(events)
 
   function setField(key, value) {
     setForm((f) => ({ ...f, [key]: value }))
   }
 
-  function openInsertTransition() {
-    const lastTo = events.length ? [...events].sort((a, b) => toMinutes(a.from) - toMinutes(b.from)).at(-1).to : '06:00'
-    setForm({ ...EMPTY_FORM, from: lastTo, to: lastTo, category: 'TRANSITION', area: SAMPLE_TRANSITION_AREAS[0], pass: SAMPLE_PASS_OPTIONS[0], operator: 'A. Trofka' })
-    setTransitionOpen(true)
+  function openInsert(defaults) {
+    setForm({ ...EMPTY_FORM, ...defaults })
+    setInsertKey((k) => k + 1)
+    setInsertOpen(true)
+  }
+
+  function openInsertNext() {
+    const last = sorted.at(-1)
+    const lastTo = last ? hhmm(last.end_date_time) : '06:00'
+    openInsert({ from: lastTo, to: lastTo, operatorId: last?.operator_id ?? operators[0]?.id ?? null })
   }
 
   function openInsertForGap(gap) {
-    setForm({ ...EMPTY_FORM, from: gap.from, to: gap.to, category: 'UNATTRIBUTED', area: SAMPLE_TRANSITION_AREAS[0], pass: SAMPLE_PASS_OPTIONS[0], operator: 'A. Trofka' })
-    setTransitionOpen(true)
+    openInsert({ from: hhmm(gap.fromISO), to: hhmm(gap.toISO), operatorId: operators[0]?.id ?? null })
   }
 
-  function handleInsert() {
-    if (!form.from || !form.to || !form.category) return
-    setEvents((prev) => [...prev, { id: `ev-${Date.now()}`, ...form, source: 'pe' }])
-    setTransitionOpen(false)
+  async function handleInsert() {
+    if (!form.from || !form.to || !project || !eventDate) return
+    const { start, end } = eventTimestamps(eventDate, form.from, form.to)
+    await create({
+      project_id: project.id,
+      equipment_id: selectedEquipmentId,
+      operator_id: form.operatorId,
+      start_date_time: start,
+      end_date_time: end,
+    })
+    setInsertOpen(false)
   }
 
   function openEdit(row) {
     setEditRow(row)
-    setForm({ from: row.from, to: row.to, category: row.category, area: row.area, pass: row.pass, tsca: row.tsca ?? 'No', operator: row.operator, notes: row.notes })
+    setForm({ from: hhmm(row.start_date_time), to: hhmm(row.end_date_time), operatorId: row.operator_id ?? null })
   }
 
-  function handleSaveEdit() {
-    if (!editRow) return
-    setEvents((prev) => prev.map((e) => (e.id === editRow.id ? { ...e, ...form } : e)))
+  async function handleSaveEdit() {
+    if (!editRow || !eventDate) return
+    const { start, end } = eventTimestamps(eventDate, form.from, form.to)
+    await update(editRow.id, { operator_id: form.operatorId, start_date_time: start, end_date_time: end })
     setEditRow(null)
   }
 
-  function handleDelete() {
-    if (!deleteRow || deleteReason.trim().length < 3) return
-    setEvents((prev) => prev.filter((e) => e.id !== deleteRow.id))
-    setDeletedEvents((prev) => [...prev, { ...deleteRow, reason: deleteReason.trim() }])
+  async function handleDelete() {
+    if (!deleteRow) return
+    await remove(deleteRow.id)
     setDeleteRow(null)
-    setDeleteReason('')
   }
 
   return (
     <Box>
-      <Box p={16} mb={16} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }}>
-        <SimpleGrid cols={{ base: 2, sm: 5 }}>
-          <Stat label="Shift start" value={t.shiftStart} />
-          <Stat label="Shift end" value={t.shiftEnd} />
-          <Stat label="Operational" value={`${t.operationalHours} h`} />
-          <Stat label="Delay" value={`${t.delayHours} h`} />
-          <Stat label="Shift" value={`${t.shiftHours} h`} />
-        </SimpleGrid>
-        <Text size="xs" c="green" mt={10}>✓ Operational + Delay = Shift</Text>
-      </Box>
-
       {gaps.map((g) => (
         <Group
           key={g.id}
@@ -107,7 +133,7 @@ export default function EventLogTab() {
           <Group gap={8}>
             <IconAlertTriangle size={14} color="#b5740a" />
             <Text size="xs" fw={600} c="#7a5206">
-              Unaccounted hours: {g.from}–{g.to}
+              Unaccounted hours: {hhmm(g.fromISO)}–{hhmm(g.toISO)}
             </Text>
           </Group>
           <Button size="xs" variant="default" leftSection={<IconPlus size={11} />} onClick={() => openInsertForGap(g)}>
@@ -117,27 +143,25 @@ export default function EventLogTab() {
       ))}
 
       <Group justify="space-between" mb={8}>
-        <Text size="xs" c="dimmed">{events.length} events</Text>
-        <Group gap={10}>
-          {deletedEvents.length > 0 && (
-            <Text size="xs" onClick={() => setShowDeleted((v) => !v)} style={{ cursor: 'pointer', color: '#0F2744', fontWeight: 600 }}>
-              {showDeleted ? 'Hide' : 'Show'} deleted ({deletedEvents.length})
-            </Text>
-          )}
-          <Button size="xs" leftSection={<IconPlus size={12} />} onClick={openInsertTransition} style={{ background: '#0F2744', border: 'none' }}>
-            Insert transition event
-          </Button>
-        </Group>
+        <Text size="xs" c="dimmed">
+          {sorted.length} events{equipmentName ? ` · ${equipmentName}` : ''}
+        </Text>
+        <Button size="xs" leftSection={<IconPlus size={12} />} onClick={openInsertNext} style={{ background: '#0F2744', border: 'none' }}>
+          Insert event
+        </Button>
       </Group>
 
       <Table withTableBorder verticalSpacing="xs" fz="sm">
         <Table.Thead>
           <Table.Tr>
+            <Table.Th>#</Table.Th>
             <Table.Th>From</Table.Th>
             <Table.Th>To</Table.Th>
+            <Table.Th>Dur</Table.Th>
             <Table.Th>Category</Table.Th>
             <Table.Th>Area</Table.Th>
             <Table.Th>Pass</Table.Th>
+            <Table.Th>TSCA</Table.Th>
             <Table.Th>Operator</Table.Th>
             <Table.Th>Notes</Table.Th>
             <Table.Th>Source</Table.Th>
@@ -145,18 +169,26 @@ export default function EventLogTab() {
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
-          {events.map((e) => (
-            <Table.Tr key={e.id} style={e.category === 'UNATTRIBUTED' ? { background: '#fbf1dd' } : undefined}>
-              <Table.Td>{e.from}</Table.Td>
-              <Table.Td>{e.to}</Table.Td>
-              <Table.Td>{e.category}</Table.Td>
-              <Table.Td>{e.area}</Table.Td>
-              <Table.Td>{e.pass}</Table.Td>
-              <Table.Td>{e.operator}</Table.Td>
-              <Table.Td>{e.notes || '—'}</Table.Td>
-              <Table.Td>
-                <Badge size="xs" variant="light" color={SOURCE_COLOR[e.source] ?? 'gray'}>{e.source}</Badge>
+          {sorted.length === 0 && (
+            <Table.Tr>
+              <Table.Td colSpan={12}>
+                <Text size="xs" c="dimmed" ta="center" py={12}>No events yet.</Text>
               </Table.Td>
+            </Table.Tr>
+          )}
+          {sorted.map((e, i) => (
+            <Table.Tr key={e.id}>
+              <Table.Td>{i + 1}</Table.Td>
+              <Table.Td>{hhmm(e.start_date_time)}</Table.Td>
+              <Table.Td>{hhmm(e.end_date_time)}</Table.Td>
+              <Table.Td>{fmtDuration(e.start_date_time, e.end_date_time)}</Table.Td>
+              <Table.Td c="dimmed">{SAMPLE}</Table.Td>
+              <Table.Td c="dimmed">{SAMPLE}</Table.Td>
+              <Table.Td c="dimmed">{SAMPLE}</Table.Td>
+              <Table.Td c="dimmed">{SAMPLE}</Table.Td>
+              <Table.Td>{operators.find((o) => o.id === e.operator_id)?.name ?? '—'}</Table.Td>
+              <Table.Td c="dimmed">{SAMPLE}</Table.Td>
+              <Table.Td c="dimmed">{SAMPLE}</Table.Td>
               <Table.Td>
                 <Group gap={6} wrap="nowrap">
                   <Box onClick={() => openEdit(e)} style={{ cursor: 'pointer', color: '#888', display: 'flex' }} title="Edit">
@@ -169,88 +201,62 @@ export default function EventLogTab() {
               </Table.Td>
             </Table.Tr>
           ))}
-          {showDeleted && deletedEvents.map((e) => (
-            <Table.Tr key={e.id} style={{ opacity: 0.5, textDecoration: 'line-through' }}>
-              <Table.Td>{e.from}</Table.Td>
-              <Table.Td>{e.to}</Table.Td>
-              <Table.Td>{e.category}</Table.Td>
-              <Table.Td>{e.area}</Table.Td>
-              <Table.Td>{e.pass}</Table.Td>
-              <Table.Td>{e.operator}</Table.Td>
-              <Table.Td colSpan={3}>
-                <Text size="10px" c="dimmed" style={{ textDecoration: 'none' }}>Deleted — {e.reason}</Text>
-              </Table.Td>
-            </Table.Tr>
-          ))}
         </Table.Tbody>
       </Table>
 
-      {/* Insert transition / gap-fill modal */}
-      <Modal opened={transitionOpen} onClose={() => setTransitionOpen(false)} title={<Text fw={700} size="sm">Insert Event</Text>} size="sm">
+      {/* Insert modal — From/To/Operator are real jfb_daily_activities fields.
+          Category/Area/Pass/TSCA/Notes aren't collected: there's no column to save them to. */}
+      <Modal key={insertKey} opened={insertOpen} onClose={() => setInsertOpen(false)} title={<Text fw={700} size="sm">Insert Event</Text>} size="sm">
         <Group grow mb={10}>
           <TextInput label="From" type="time" value={form.from} onChange={(e) => setField('from', e.currentTarget.value)} />
           <TextInput label="To" type="time" value={form.to} onChange={(e) => setField('to', e.currentTarget.value)} />
         </Group>
-        <Select label="Category" data={SAMPLE_EVENT_CATEGORIES.concat(['TRANSITION', 'UNATTRIBUTED'])} value={form.category} onChange={(v) => setField('category', v ?? '')} mb={10} />
-        <Select label="Area" data={SAMPLE_TRANSITION_AREAS} value={form.area} onChange={(v) => setField('area', v ?? '')} mb={10} />
-        <Select label="Pass" data={SAMPLE_PASS_OPTIONS} value={form.pass} onChange={(v) => setField('pass', v ?? '')} mb={10} />
-        <Radio.Group label="TSCA" value={form.tsca} onChange={(v) => setField('tsca', v)} mb={10}>
-          <Group gap={16} mt={4}>
-            <Radio value="No" label="No" />
-            <Radio value="Yes" label="Yes" />
-          </Group>
-        </Radio.Group>
-        <Textarea label="Note" value={form.notes} onChange={(e) => setField('notes', e.currentTarget.value)} mb={16} minRows={2} />
+        <Select
+          label="Operator"
+          data={operators.map((o) => ({ value: o.id, label: o.name }))}
+          value={form.operatorId}
+          onChange={(v) => setField('operatorId', v)}
+          mb={10}
+        />
+        <Text size="10px" c="dimmed" mb={16}>
+          Category, Area, Pass, TSCA, and Notes aren't in the jfb_daily_activities domain yet — those columns show placeholder data.
+        </Text>
         <Group justify="flex-end">
-          <Button variant="default" size="xs" onClick={() => setTransitionOpen(false)}>Cancel</Button>
-          <Button size="xs" onClick={handleInsert} disabled={!form.from || !form.to || !form.category} style={{ background: '#0F2744', border: 'none' }}>Insert</Button>
+          <Button variant="default" size="xs" onClick={() => setInsertOpen(false)}>Cancel</Button>
+          <Button size="xs" onClick={handleInsert} disabled={!form.from || !form.to} style={{ background: '#0F2744', border: 'none' }}>Insert</Button>
         </Group>
       </Modal>
 
-      {/* Edit event modal */}
+      {/* Edit modal — same real-field-only scope as Insert */}
       <Modal opened={!!editRow} onClose={() => setEditRow(null)} title={<Text fw={700} size="sm">Edit Event</Text>} size="sm">
         <Group grow mb={10}>
           <TextInput label="From" type="time" value={form.from} onChange={(e) => setField('from', e.currentTarget.value)} />
           <TextInput label="To" type="time" value={form.to} onChange={(e) => setField('to', e.currentTarget.value)} />
         </Group>
-        <Select label="Category" data={SAMPLE_EVENT_CATEGORIES.concat(['TRANSITION', 'UNATTRIBUTED'])} value={form.category} onChange={(v) => setField('category', v ?? '')} mb={10} />
-        <Select label="Area" data={SAMPLE_TRANSITION_AREAS.concat(['—'])} value={form.area} onChange={(v) => setField('area', v ?? '')} mb={10} />
-        <Select label="Pass" data={SAMPLE_PASS_OPTIONS.concat(['—'])} value={form.pass} onChange={(v) => setField('pass', v ?? '')} mb={10} />
-        <TextInput label="Operator" value={form.operator} onChange={(e) => setField('operator', e.currentTarget.value)} mb={10} />
-        <Textarea label="Notes" value={form.notes} onChange={(e) => setField('notes', e.currentTarget.value)} mb={16} minRows={2} />
+        <Select
+          label="Operator"
+          data={operators.map((o) => ({ value: o.id, label: o.name }))}
+          value={form.operatorId}
+          onChange={(v) => setField('operatorId', v)}
+          mb={16}
+        />
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => setEditRow(null)}>Cancel</Button>
           <Button size="xs" onClick={handleSaveEdit} style={{ background: '#0F2744', border: 'none' }}>Save</Button>
         </Group>
       </Modal>
 
-      {/* Delete event modal — requires a reason, matches the real app's soft-delete audit trail */}
-      <Modal opened={!!deleteRow} onClose={() => { setDeleteRow(null); setDeleteReason('') }} title={<Text fw={700} size="sm">Delete Event</Text>} size="sm">
-        <Text size="sm" mb={10}>
-          {deleteRow ? `${deleteRow.from}–${deleteRow.to} · ${deleteRow.category}` : ''}
+      {/* Delete — hard delete via the domain's remove(); no soft-delete/audit
+          table exists (jfb_event_deletions was reverted), so no reason field. */}
+      <Modal opened={!!deleteRow} onClose={() => setDeleteRow(null)} title={<Text fw={700} size="sm">Delete Event</Text>} size="sm">
+        <Text size="sm" mb={16}>
+          {deleteRow ? `Delete the ${hhmm(deleteRow.start_date_time)}–${hhmm(deleteRow.end_date_time)} event? This can't be undone.` : ''}
         </Text>
-        <Textarea
-          label="Reason (required)"
-          placeholder="Why is this event being removed?"
-          value={deleteReason}
-          onChange={(e) => setDeleteReason(e.currentTarget.value)}
-          minRows={2}
-          mb={16}
-        />
         <Group justify="flex-end">
-          <Button variant="default" size="xs" onClick={() => { setDeleteRow(null); setDeleteReason('') }}>Cancel</Button>
-          <Button size="xs" color="red" onClick={handleDelete} disabled={deleteReason.trim().length < 3}>Delete</Button>
+          <Button variant="default" size="xs" onClick={() => setDeleteRow(null)}>Cancel</Button>
+          <Button size="xs" color="red" onClick={handleDelete}>Delete</Button>
         </Group>
       </Modal>
     </Box>
-  )
-}
-
-function Stat({ label, value }) {
-  return (
-    <Group gap={2} style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
-      <Text size="10px" tt="uppercase" c="dimmed">{label}</Text>
-      <Text size="sm" fw={600}>{value}</Text>
-    </Group>
   )
 }

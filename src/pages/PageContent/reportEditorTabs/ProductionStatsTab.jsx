@@ -1,194 +1,212 @@
-import { Box, Table, TextInput, Text, SegmentedControl, Group, Button, NumberInput } from '@mantine/core'
-import { useState } from 'react'
-import { IconPlus, IconTrash } from '@tabler/icons-react'
-import {
-  SAMPLE_PRODUCTION_ROWS,
-  SAMPLE_PRODUCTION_TOTALS,
-  SAMPLE_CAPPING_ROWS,
-  SAMPLE_CAPPING_TOTALS,
-  SAMPLE_FLOW_STATS,
-  SAMPLE_PIPE_LENGTHS,
-} from '../../../data/reportEditorSampleData'
+import { useEffect, useRef, useState } from 'react'
+import { Box, Table, Text, TextInput } from '@mantine/core'
+import { IconTrash } from '@tabler/icons-react'
+import { useProductionStats } from '../../../hooks/useProductionStats'
+import { useProjectAreas } from '../../../hooks/useProjectAreas'
+import LoadingSpinner from '../../../components/LoadingSpinner'
+import SafeError from '../../../components/SafeError'
 
-export default function ProductionStatsTab() {
-  const [mode, setMode] = useState('dredging')
+// Mirrors the real web app's dredging ProductionStatsTable columns/layout.
+// AREA/SUB-AREA/SUB-SUB-AREA come from area_level_combinations (breadcrumb
+// split by depth). CY/SF/Notes map to the domain's real volume/area/notes
+// columns and are editable. Pass/TSCA are real columns too but nothing
+// collects them yet, so they render blank. GOH/NOH/Avg Face Ft have no
+// source at all in this app yet -- GOH/NOH would need jfb_daily_activities
+// to carry area+pass (it only has equipment_id/operator_id/times today),
+// and there's no face-measurement column on jfb_production_stats -- so
+// those three always render blank rather than faked.
+function comboAt(combo, depth) {
+  if (!Array.isArray(combo)) return '—'
+  return combo[depth]?.label ?? '—'
+}
+
+function num(v, digits) {
+  if (v === null || v === undefined || v === '') return null
+  const n = Number(v)
+  return Number.isFinite(n) ? Number(n.toFixed(digits)) : null
+}
+
+// Areas form a tree via parent_id (jfb_project_areas). A "leaf" area is one
+// nothing else points at as a parent -- the deepest, most specific place
+// production actually happens. Using every area (not just leaves) would
+// double-count: a parent area and its own sub-area would both become rows.
+function leafAreas(areas) {
+  const parentIds = new Set(areas.map((a) => a.parent_id).filter(Boolean))
+  return areas.filter((a) => a.is_active !== false && !parentIds.has(a.id))
+}
+
+// Resolves one leaf area's full root-to-leaf breadcrumb by walking parent_id,
+// in the same [{area_level_id, area_id, label}] shape AreaCombinationPicker
+// builds when a user manually cascades through the level selects.
+function areaCombo(area, areasById) {
+  const path = []
+  let cur = area
+  while (cur) {
+    path.unshift({ area_level_id: cur.area_level_id, area_id: cur.id, label: cur.name })
+    cur = cur.parent_id ? areasById.get(cur.parent_id) : null
+  }
+  return path
+}
+
+export default function ProductionStatsTab({ project, report, equipment = [], selectedEquipmentId }) {
+  const { stats, loading, error, update, remove, create } = useProductionStats(report?.id)
+  const { areas, loading: areasLoading } = useProjectAreas(project?.id)
+  const rows = stats.filter((s) => s.equipment_id === selectedEquipmentId)
+
+  // Local text state per row+field so typing doesn't fight the refetch that
+  // follows every save. Keyed by `${rowId}:${field}`; falls back to the
+  // fetched value whenever there's no in-progress edit for that cell.
+  const [edits, setEdits] = useState({})
+  function cellValue(row, field) {
+    const key = `${row.id}:${field}`
+    return key in edits ? edits[key] : (row[field] ?? '')
+  }
+  function setCellValue(row, field, value) {
+    setEdits((prev) => ({ ...prev, [`${row.id}:${field}`]: value }))
+  }
+  async function commitCell(row, field, digits) {
+    const key = `${row.id}:${field}`
+    if (!(key in edits)) return
+    const value = digits != null ? num(edits[key], digits) : (edits[key].trim() || null)
+    setEdits((prev) => {
+      const next = { ...prev }
+      delete next[key]
+      return next
+    })
+    if (value === (row[field] ?? null)) return
+    await update(row.id, { [field]: value })
+  }
+
+  // Auto-create one row per (equipment x leaf area) the first time this
+  // report has none yet -- there's no manual "Add row" here, matching the
+  // real web app where production_stats rows come from context, not a form.
+  // Guarded on the report's TOTAL stats (not just this tab's selected
+  // equipment) so it only ever seeds once per report.
+  const seeding = useRef(false)
+  useEffect(() => {
+    if (!report?.id || loading || areasLoading) return
+    if (stats.length > 0 || equipment.length === 0 || areas.length === 0) return
+    if (seeding.current) return
+    seeding.current = true
+    const areasById = new Map(areas.map((a) => [a.id, a]))
+    const leaves = leafAreas(areas)
+    ;(async () => {
+      for (const eq of equipment) {
+        for (const area of leaves) {
+          await create({
+            report_id: report.id,
+            equipment_id: eq.id,
+            area_level_combinations: areaCombo(area, areasById),
+          })
+        }
+      }
+    })().finally(() => {
+      seeding.current = false
+    })
+  }, [report?.id, loading, areasLoading, stats.length, equipment, areas, create])
+
+  async function handleDelete(row) {
+    if (!window.confirm('Delete this production stat row?')) return
+    await remove(row.id)
+  }
+
+  const totalVolume = rows.reduce((a, r) => a + (Number(r.volume) || 0), 0)
+  const totalArea = rows.reduce((a, r) => a + (Number(r.area) || 0), 0)
 
   return (
     <Box>
-      <SegmentedControl
-        value={mode}
-        onChange={setMode}
-        data={[{ label: 'Dredging', value: 'dredging' }, { label: 'Capping', value: 'capping' }]}
-        size="xs"
-        mb={16}
-      />
-      {mode === 'dredging' ? <DredgingTable /> : <CappingTable />}
-      {mode === 'dredging' && <FlowStatsPanel />}
-    </Box>
-  )
-}
+      {(loading || areasLoading) && <LoadingSpinner py={16} />}
+      {!loading && <SafeError message={error} />}
 
-function DredgingTable() {
-  const [rows, setRows] = useState(SAMPLE_PRODUCTION_ROWS)
-  const t = SAMPLE_PRODUCTION_TOTALS
-
-  function update(key, field, raw) {
-    setRows((prev) => prev.map((r) => (r.key === key ? { ...r, [field]: raw === '' ? null : Number(raw) } : r)))
-  }
-
-  return (
-    <Table withTableBorder verticalSpacing="xs" fz="sm">
-      <Table.Thead>
-        <Table.Tr>
-          <Table.Th>Area</Table.Th>
-          <Table.Th>Pass</Table.Th>
-          <Table.Th ta="right">GOH</Table.Th>
-          <Table.Th ta="right">NOH</Table.Th>
-          <Table.Th ta="right">CY</Table.Th>
-          <Table.Th ta="right">SF</Table.Th>
-          <Table.Th ta="right">Avg Face ft</Table.Th>
-          <Table.Th>Notes</Table.Th>
-        </Table.Tr>
-      </Table.Thead>
-      <Table.Tbody>
-        {rows.map((r) => (
-          <Table.Tr key={r.key}>
-            <Table.Td>{r.area}</Table.Td>
-            <Table.Td>{r.pass}</Table.Td>
-            <Table.Td ta="right">{r.goh.toFixed(2)}</Table.Td>
-            <Table.Td ta="right">{r.noh.toFixed(2)}</Table.Td>
-            <Table.Td>
-              <TextInput size="xs" ta="right" value={r.cy ?? ''} onChange={(e) => update(r.key, 'cy', e.currentTarget.value)} />
-            </Table.Td>
-            <Table.Td>
-              <TextInput size="xs" value={r.sf ?? ''} onChange={(e) => update(r.key, 'sf', e.currentTarget.value)} />
-            </Table.Td>
-            <Table.Td ta="right">
-              <Text size="sm" c="dimmed">{r.avgFace ?? '—'}</Text>
-            </Table.Td>
-            <Table.Td>
-              <TextInput size="xs" value={r.notes} onChange={(e) => update(r.key, 'notes', e.currentTarget.value)} />
-            </Table.Td>
-          </Table.Tr>
-        ))}
-      </Table.Tbody>
-      <Table.Tfoot>
-        <Table.Tr>
-          <Table.Th colSpan={2}>Totals</Table.Th>
-          <Table.Th ta="right">{t.goh.toFixed(2)}</Table.Th>
-          <Table.Th ta="right">{t.noh.toFixed(2)}</Table.Th>
-          <Table.Th ta="right">{t.cy}</Table.Th>
-          <Table.Th ta="right">{t.sf}</Table.Th>
-          <Table.Th ta="right">{t.avgFace}</Table.Th>
-          <Table.Th />
-        </Table.Tr>
-      </Table.Tfoot>
-    </Table>
-  )
-}
-
-function CappingTable() {
-  const [rows, setRows] = useState(SAMPLE_CAPPING_ROWS)
-  const t = SAMPLE_CAPPING_TOTALS
-
-  function update(key, field, raw) {
-    setRows((prev) => prev.map((r) => (r.key === key ? { ...r, [field]: raw === '' ? null : Number(raw) } : r)))
-  }
-
-  return (
-    <Table withTableBorder verticalSpacing="xs" fz="sm">
-      <Table.Thead>
-        <Table.Tr>
-          <Table.Th>Area</Table.Th>
-          <Table.Th>Layer</Table.Th>
-          <Table.Th ta="right">Tons placed</Table.Th>
-          <Table.Th ta="right">Dry tons</Table.Th>
-          <Table.Th ta="right">Acres</Table.Th>
-          <Table.Th>Material</Table.Th>
-        </Table.Tr>
-      </Table.Thead>
-      <Table.Tbody>
-        {rows.map((r) => (
-          <Table.Tr key={r.key}>
-            <Table.Td>{r.area}</Table.Td>
-            <Table.Td>{r.layer}</Table.Td>
-            <Table.Td>
-              <TextInput size="xs" ta="right" value={r.tonsPlaced ?? ''} onChange={(e) => update(r.key, 'tonsPlaced', e.currentTarget.value)} />
-            </Table.Td>
-            <Table.Td>
-              <TextInput size="xs" ta="right" value={r.dryTons ?? ''} onChange={(e) => update(r.key, 'dryTons', e.currentTarget.value)} />
-            </Table.Td>
-            <Table.Td>
-              <TextInput size="xs" ta="right" value={r.acres ?? ''} onChange={(e) => update(r.key, 'acres', e.currentTarget.value)} />
-            </Table.Td>
-            <Table.Td>{r.material}</Table.Td>
-          </Table.Tr>
-        ))}
-      </Table.Tbody>
-      <Table.Tfoot>
-        <Table.Tr>
-          <Table.Th colSpan={2}>Totals</Table.Th>
-          <Table.Th ta="right">{t.tonsPlaced}</Table.Th>
-          <Table.Th ta="right">{t.dryTons}</Table.Th>
-          <Table.Th ta="right">{t.acres}</Table.Th>
-          <Table.Th />
-        </Table.Tr>
-      </Table.Tfoot>
-    </Table>
-  )
-}
-
-function FlowStatsPanel() {
-  const [diameter, setDiameter] = useState(SAMPLE_FLOW_STATS.pipeDiameterIn)
-  const [velocity, setVelocity] = useState(SAMPLE_FLOW_STATS.avgVelocityFps)
-  const [segments, setSegments] = useState(SAMPLE_PIPE_LENGTHS)
-
-  // Q (GPM) = V x pi x (d/24)^2 x 448.831 — same formula the real app uses.
-  const flowRateGpm = diameter && velocity ? velocity * Math.PI * (diameter / 24) ** 2 * 448.831 : null
-  const dailyTotalGal = flowRateGpm ? flowRateGpm * SAMPLE_FLOW_STATS.noh * 60 : null
-  const totalPipeFt = segments.reduce((sum, s) => sum + (s.lengthFt || 0), 0)
-
-  function addSegment() {
-    setSegments((prev) => [...prev, { id: `pl-${Date.now()}`, name: '', lengthFt: 0 }])
-  }
-  function updateSegment(id, field, value) {
-    setSegments((prev) => prev.map((s) => (s.id === id ? { ...s, [field]: value } : s)))
-  }
-  function removeSegment(id) {
-    setSegments((prev) => prev.filter((s) => s.id !== id))
-  }
-
-  return (
-    <Box mt={20} p={16} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }}>
-      <Text fw={600} size="sm" mb={10}>Flow Stats</Text>
-      <Group grow mb={10} align="flex-end">
-        <NumberInput label="Pipe inside diameter (in)" hideControls value={diameter} onChange={setDiameter} />
-        <NumberInput label="Avg velocity (ft/s)" hideControls value={velocity} onChange={setVelocity} />
-        <Box>
-          <Text size="xs" c="dimmed" mb={4}>Avg flow rate (GPM)</Text>
-          <Text size="sm" fw={600}>{flowRateGpm ? flowRateGpm.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}</Text>
-        </Box>
-        <Box>
-          <Text size="xs" c="dimmed" mb={4}>Daily total (gal)</Text>
-          <Text size="sm" fw={600}>{dailyTotalGal ? dailyTotalGal.toLocaleString(undefined, { maximumFractionDigits: 0 }) : '—'}</Text>
-        </Box>
-      </Group>
-      <Text size="10px" c="dimmed" mb={16}>Enter pipe diameter + velocity; flow rate and daily total compute automatically.</Text>
-
-      <Group justify="space-between" mb={8}>
-        <Text fw={600} size="sm">Pipe Lengths</Text>
-        <Button size="xs" variant="default" leftSection={<IconPlus size={11} />} onClick={addSegment}>Add segment</Button>
-      </Group>
-      {segments.map((s) => (
-        <Group key={s.id} gap={8} mb={6} wrap="nowrap">
-          <TextInput size="xs" placeholder="Segment name" value={s.name} onChange={(e) => updateSegment(s.id, 'name', e.currentTarget.value)} style={{ flex: 1 }} />
-          <NumberInput size="xs" placeholder="Length (ft)" hideControls value={s.lengthFt} onChange={(v) => updateSegment(s.id, 'lengthFt', v)} w={120} />
-          <Box onClick={() => removeSegment(s.id)} style={{ cursor: 'pointer', color: '#ef4444', display: 'flex' }}>
-            <IconTrash size={13} />
-          </Box>
-        </Group>
-      ))}
-      <Text size="xs" c="dimmed" mt={4}>Total pipe: {totalPipeFt.toLocaleString()} ft</Text>
+      {!loading && !areasLoading && !error && (
+        <Table withTableBorder verticalSpacing="xs" fz="sm">
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Area</Table.Th>
+              <Table.Th>Sub-Area</Table.Th>
+              <Table.Th>Sub-Sub-Area</Table.Th>
+              <Table.Th>Pass</Table.Th>
+              <Table.Th>TSCA</Table.Th>
+              <Table.Th ta="right">GOH</Table.Th>
+              <Table.Th ta="right">NOH</Table.Th>
+              <Table.Th ta="right">CY</Table.Th>
+              <Table.Th ta="right">SF</Table.Th>
+              <Table.Th ta="right">Avg Face Ft *</Table.Th>
+              <Table.Th>Notes</Table.Th>
+              <Table.Th style={{ width: 40 }} />
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {rows.length === 0 && (
+              <Table.Tr>
+                <Table.Td colSpan={12}>
+                  <Text size="xs" c="dimmed" ta="center" py={12}>No production stats yet.</Text>
+                </Table.Td>
+              </Table.Tr>
+            )}
+            {rows.map((r) => (
+              <Table.Tr key={r.id}>
+                <Table.Td>{comboAt(r.area_level_combinations, 0)}</Table.Td>
+                <Table.Td>{comboAt(r.area_level_combinations, 1)}</Table.Td>
+                <Table.Td>{comboAt(r.area_level_combinations, 2)}</Table.Td>
+                <Table.Td c="dimmed">{r.pass_value || '—'}</Table.Td>
+                <Table.Td c="dimmed">{r.tsca ? 'Yes' : '—'}</Table.Td>
+                <Table.Td ta="right" c="dimmed">—</Table.Td>
+                <Table.Td ta="right" c="dimmed">—</Table.Td>
+                <Table.Td>
+                  <TextInput
+                    size="xs"
+                    ta="right"
+                    value={cellValue(r, 'volume')}
+                    onChange={(e) => setCellValue(r, 'volume', e.currentTarget.value)}
+                    onBlur={() => commitCell(r, 'volume', 1)}
+                  />
+                </Table.Td>
+                <Table.Td>
+                  <TextInput
+                    size="xs"
+                    ta="right"
+                    value={cellValue(r, 'area')}
+                    onChange={(e) => setCellValue(r, 'area', e.currentTarget.value)}
+                    onBlur={() => commitCell(r, 'area', 0)}
+                  />
+                </Table.Td>
+                <Table.Td ta="right" c="dimmed">—</Table.Td>
+                <Table.Td>
+                  <TextInput
+                    size="xs"
+                    value={cellValue(r, 'notes')}
+                    onChange={(e) => setCellValue(r, 'notes', e.currentTarget.value)}
+                    onBlur={() => commitCell(r, 'notes', null)}
+                  />
+                </Table.Td>
+                <Table.Td>
+                  <Box onClick={() => handleDelete(r)} style={{ cursor: 'pointer', color: '#ef4444', display: 'flex' }} title="Delete">
+                    <IconTrash size={13} />
+                  </Box>
+                </Table.Td>
+              </Table.Tr>
+            ))}
+          </Table.Tbody>
+          {rows.length > 0 && (
+            // Table.Td (not Table.Th) here on purpose: the theme's global `th`
+            // style is white text, meant for the navy thead -- reusing it in
+            // the footer would render invisible white-on-white text.
+            <Table.Tfoot>
+              <Table.Tr>
+                <Table.Td colSpan={5} fw={700}>Totals</Table.Td>
+                <Table.Td ta="right" fw={700}>—</Table.Td>
+                <Table.Td ta="right" fw={700}>—</Table.Td>
+                <Table.Td ta="right" fw={700}>{totalVolume.toFixed(1)}</Table.Td>
+                <Table.Td ta="right" fw={700}>{totalArea.toFixed(0)}</Table.Td>
+                <Table.Td ta="right" fw={700}>—</Table.Td>
+                <Table.Td />
+                <Table.Td />
+              </Table.Tr>
+            </Table.Tfoot>
+          )}
+        </Table>
+      )}
     </Box>
   )
 }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate, useLocation, Routes, Route } from "react-router-dom";
+import { useLocation, Routes, Route } from "react-router-dom";
 import { Box, Text, Loader, Center } from "@mantine/core";
 import AppHeader from "./components/AppHeader";
 import LaunchPage from "./pages/LaunchPage";
@@ -23,19 +23,12 @@ import { usePicklistCatalog } from "./hooks/usePicklistCatalog";
 import { REQUIRED_PICKLISTS } from "./config/requiredPicklists";
 import { SAMPLE_MODE } from "./config/sampleMode";
 
-const SAMPLE_MENU_ITEMS = [
-  { page_slug: "apg-jfbo-dashboard", label: "Dashboard", path: "/" },
-  { page_slug: "apg-jfbo-operator-hours", label: "Operator Hours", path: "/admin/operators" },
-  { page_slug: "apg-jfbo-capping-setup", label: "Capping Setup", path: "/admin/capping-setup" },
-];
-
 export default function App() {
-  const navigate = useNavigate();
   const { pathname } = useLocation();
   const { ready, error: configError } = useAppConfig();
   const { loading: picklistsLoading, missing: missingPicklists } = usePicklistCatalog(REQUIRED_PICKLISTS);
 
-  const { menuItems, defaultItem, loading: navLoading } = useNav();
+  const { menuItems, defaultItem } = useNav();
   const {
     pageData,
     loading: pageLoading,
@@ -55,7 +48,6 @@ export default function App() {
   }
 
   if (SAMPLE_MODE) {
-    const resolvedSlug = SAMPLE_MENU_ITEMS.find((n) => n.path === pathname)?.page_slug ?? null;
     return (
       <Box
         style={{
@@ -67,12 +59,7 @@ export default function App() {
           fontSize: 13,
         }}
       >
-        <AppHeader
-          menuItems={SAMPLE_MENU_ITEMS}
-          activeSlug={resolvedSlug}
-          onNav={(navItem) => navigate(navItem.path)}
-          navLoading={false}
-        />
+        <AppHeader />
         <Routes>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/projects/:projectId/reports" element={<ReportListPage />} />
@@ -170,11 +157,6 @@ export default function App() {
 
   const resolvedSlug = activeItem?.page_slug ?? null;
 
-  function handleNav(navItem) {
-    navigate(navItem.path);
-    loadPage(navItem.page_slug);
-  }
-
   function handleRetry() {
     if (resolvedSlug) loadPage(resolvedSlug);
   }
@@ -190,12 +172,7 @@ export default function App() {
         fontSize: 13,
       }}
     >
-      <AppHeader
-        menuItems={menuItems}
-        activeSlug={resolvedSlug}
-        onNav={handleNav}
-        navLoading={navLoading}
-      />
+      <AppHeader />
 
       {activeItem ? (
         <PageContent

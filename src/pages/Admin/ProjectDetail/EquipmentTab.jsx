@@ -6,13 +6,14 @@ import LoadingSpinner from "../../../components/LoadingSpinner";
 import SafeError from "../../../components/SafeError";
 
 export default function EquipmentTab({ project }) {
+  const hasProject = !!project?.id;
   const { records, loading, error, creating, updating, reload, create, update, remove } = useDomainData({
     domain: "jfb_equipments",
     system: "core",
+    projectId: project?.id,
   });
 
-  const hasProject = !!project?.id;
-  const equipment = hasProject ? records.filter((r) => r.project_id === project.id) : [];
+  const equipment = hasProject ? records : [];
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editRow, setEditRow] = useState(null);

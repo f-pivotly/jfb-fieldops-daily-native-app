@@ -1,8 +1,20 @@
 import { Link } from 'react-router-dom'
 import { Box, ScrollArea, Text, Group, Table } from '@mantine/core'
+import { useOperators } from '../../hooks/useOperators'
 import { SAMPLE_OPERATORS } from '../../data/operatorsSampleData'
 
 export default function OperatorHoursPage() {
+  const { operators } = useOperators()
+
+  // Real operator identity from jfb_operators; the metric columns have no
+  // aggregation pipeline yet, so they cycle through the same sample figures
+  // (deterministic by row index, not random) until that's built.
+  const rows = operators.map((op, i) => ({
+    person_id: op.id,
+    full_name: op.name,
+    ...SAMPLE_OPERATORS[i % SAMPLE_OPERATORS.length],
+  }))
+
   return (
     <ScrollArea flex={1} style={{ minHeight: 0 }}>
       <Box p={24} maw={900} mx="auto">
@@ -26,21 +38,28 @@ export default function OperatorHoursPage() {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {SAMPLE_OPERATORS.map((r) => (
+            {rows.length === 0 && (
+              <Table.Tr>
+                <Table.Td colSpan={6}>
+                  <Text size="xs" c="dimmed" ta="center" py={12}>No operators yet.</Text>
+                </Table.Td>
+              </Table.Tr>
+            )}
+            {rows.map((r) => (
               <Table.Tr key={r.person_id}>
                 <Table.Td fw={500}>{r.full_name}</Table.Td>
-                <Table.Td ta="right">{r.operating_hours.toFixed(1)}</Table.Td>
-                <Table.Td ta="right">{r.delay_hours.toFixed(1)}</Table.Td>
-                <Table.Td ta="right">{r.cy_moved.toLocaleString()}</Table.Td>
-                <Table.Td ta="right">{r.project_count}</Table.Td>
-                <Table.Td ta="right">{r.event_count}</Table.Td>
+                <Table.Td ta="right" c="dimmed">{r.operating_hours.toFixed(1)} (sampleData)</Table.Td>
+                <Table.Td ta="right" c="dimmed">{r.delay_hours.toFixed(1)} (sampleData)</Table.Td>
+                <Table.Td ta="right" c="dimmed">{r.cy_moved.toLocaleString()} (sampleData)</Table.Td>
+                <Table.Td ta="right" c="dimmed">{r.project_count} (sampleData)</Table.Td>
+                <Table.Td ta="right" c="dimmed">{r.event_count} (sampleData)</Table.Td>
               </Table.Tr>
             ))}
           </Table.Tbody>
         </Table>
 
         <Text size="xs" c="dimmed" mt={16}>
-          CY moved is estimated from each operator's share of operating hours on a machine each day.
+          Operator names are real (jfb_operators). Everything marked (sampleData) has no aggregation pipeline wired up yet.
         </Text>
       </Box>
     </ScrollArea>

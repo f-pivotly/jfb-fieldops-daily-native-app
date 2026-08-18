@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { Box, ScrollArea, Grid, Text, Badge, Checkbox, Stack, Button, Tabs } from '@mantine/core'
 import { REPORT_STATUS_LABEL, REPORT_STATUS_COLOR } from '../../data/dashboardSampleData'
-import { SAMPLE_EQUIPMENT, SAMPLE_CHECKLIST } from '../../data/reportEditorSampleData'
+import { SAMPLE_CHECKLIST } from '../../data/reportEditorSampleData'
 import { useProject } from '../../hooks/useProject'
 import { useReports } from '../../hooks/useReports'
-import { calWeekOf, projectWeekOf } from '../../helpers/reportWeeks'
+import { useEquipment } from '../../hooks/useEquipment'
 import PMReviewPanel from '../../components/PMReviewPanel'
 import EventLogTab from './reportEditorTabs/EventLogTab'
 import ProductionStatsTab from './reportEditorTabs/ProductionStatsTab'
@@ -13,10 +13,6 @@ import PhotosTab from './reportEditorTabs/PhotosTab'
 import NarrativesTab from './reportEditorTabs/NarrativesTab'
 import MetricsTab from './reportEditorTabs/MetricsTab'
 import SafetyTab from './reportEditorTabs/SafetyTab'
-import DredgeProgressTab from './reportEditorTabs/DredgeProgressTab'
-import PlacementProgressTab from './reportEditorTabs/PlacementProgressTab'
-import WaterQualityTab from './reportEditorTabs/WaterQualityTab'
-import AirQualityTab from './reportEditorTabs/AirQualityTab'
 
 const CONTENT_TABS = [
   { key: 'event_log', label: 'Event Log', Comp: EventLogTab },
@@ -25,10 +21,6 @@ const CONTENT_TABS = [
   { key: 'narratives', label: 'Narratives', Comp: NarrativesTab },
   { key: 'metrics', label: 'Metrics', Comp: MetricsTab },
   { key: 'safety', label: 'Safety', Comp: SafetyTab },
-  { key: 'dredge_progress', label: 'Dredge Progress', Comp: DredgeProgressTab },
-  { key: 'placement_progress', label: 'Placement Progress', Comp: PlacementProgressTab },
-  { key: 'water_quality', label: 'Water Quality', Comp: WaterQualityTab },
-  { key: 'air_quality', label: 'Air Quality', Comp: AirQualityTab },
 ]
 
 const CHECKLIST_LABELS = {
@@ -43,24 +35,27 @@ const CHECKLIST_LABELS = {
 export default function ReportEditorPage() {
   const { projectId, date } = useParams()
   const { project } = useProject(projectId)
-  const { reports, create } = useReports(projectId)
+  const { reports, loading: reportsLoading, ensureReport } = useReports(projectId)
   const report = reports.find((r) => r.report_date === date)
   const status = report?.status ?? 'draft'
 
   useEffect(() => {
-    if (!project || report) return
-    create({
+    // Wait for the real fetch to finish before deciding a report is missing --
+    // otherwise an empty-but-still-loading `reports` array reads as "no report
+    // exists yet" and creates a duplicate of one that's already there.
+    if (!project || reportsLoading || report) return
+    ensureReport({
       project_id: project.id,
       report_date: date,
       status: 'draft',
-      cal_week: calWeekOf(date),
-      project_week: projectWeekOf(date, project.start_date),
     })
-  }, [project, report, date, create])
+  }, [project, reportsLoading, report, date, ensureReport])
 
+  const { equipment } = useEquipment(projectId)
   const [mobDay, setMobDay] = useState(false)
-  const [selectedEquipment, setSelectedEquipment] = useState(SAMPLE_EQUIPMENT[0].id)
+  const [selectedEquipment, setSelectedEquipment] = useState(null)
   const [tab, setTab] = useState('event_log')
+  const effectiveEquipmentId = selectedEquipment ?? equipment[0]?.id ?? null
 
   return (
     <ScrollArea flex={1} style={{ minHeight: 0 }}>
@@ -99,11 +94,11 @@ export default function ReportEditorPage() {
               <Box>
                 <Text size="xs" fw={700} tt="uppercase" c="dimmed" mb={6}>Equipment</Text>
                 <Stack gap={4}>
-                  {SAMPLE_EQUIPMENT.map((eq) => (
+                  {equipment.map((eq) => (
                     <Button
                       key={eq.id}
                       size="xs"
-                      variant={selectedEquipment === eq.id ? 'filled' : 'default'}
+                      variant={effectiveEquipmentId === eq.id ? 'filled' : 'default'}
                       justify="flex-start"
                       onClick={() => setSelectedEquipment(eq.id)}
                     >
@@ -126,7 +121,7 @@ export default function ReportEditorPage() {
               </Tabs.List>
               {CONTENT_TABS.map((t) => (
                 <Tabs.Panel key={t.key} value={t.key}>
-                  <t.Comp />
+                  <t.Comp project={project} report={report} equipment={equipment} selectedEquipmentId={effectiveEquipmentId} />
                 </Tabs.Panel>
               ))}
             </Tabs>

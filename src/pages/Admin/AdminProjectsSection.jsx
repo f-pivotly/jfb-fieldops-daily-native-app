@@ -91,8 +91,10 @@ export default function AdminProjectsSection({ onConfigure }) {
     create: createAreaLevel,
     update: updateAreaLevel,
   } = useDomainData({ domain: "jfb_project_area_levels", system: "core" });
-  const { values: workTypeOptions } = usePicklist("pkl-jfb-work-type");
-  const { values: primaryMeasureOptions } = usePicklist("pkl-jfb-primary-measure");
+  const { values: workTypeOptions, labels: workTypeLabels } = usePicklist("pkl-jfb-work-type");
+  const { values: primaryMeasureOptions, labels: primaryMeasureLabels } = usePicklist("pkl-jfb-primary-measure");
+  const workTypeData = workTypeOptions.map((v) => ({ value: v, label: workTypeLabels[v] ?? v }));
+  const primaryMeasureData = primaryMeasureOptions.map((v) => ({ value: v, label: primaryMeasureLabels[v] ?? v }));
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editRow, setEditRow] = useState(null);
@@ -254,11 +256,11 @@ export default function AdminProjectsSection({ onConfigure }) {
           <TextInput label="Project Name" required placeholder="e.g. Fountain Lake Phase 3" value={form.name} onChange={(e) => setField("name", e.currentTarget.value)} />
           <NumberInput label="Project Code" required placeholder="e.g. 182601" hideControls value={form.project_code} onChange={(v) => setField("project_code", v)} />
           <TextInput label="Client" placeholder="Client name" value={form.client_name} onChange={(e) => setField("client_name", e.currentTarget.value)} />
-          <Select label="Work Type" data={workTypeOptions} value={form.work_type} onChange={(v) => setField("work_type", v ?? FALLBACK_WORK_TYPE)} />
+          <Select label="Work Type" data={workTypeData} value={form.work_type} onChange={(v) => setField("work_type", v ?? FALLBACK_WORK_TYPE)} />
           <TextInput label="Start Date" type="date" value={form.start_date} onChange={(e) => setField("start_date", e.currentTarget.value)} />
           <TextInput label="Target End Date" type="date" value={form.end_date} onChange={(e) => setField("end_date", e.currentTarget.value)} />
           <NumberInput label="Volume Goal (CY)" placeholder="e.g. 85000" hideControls value={form.volume_goal} onChange={(v) => setField("volume_goal", v)} />
-          <Select label="Primary Measure" data={primaryMeasureOptions} value={form.primary_measure} onChange={(v) => setField("primary_measure", v ?? FALLBACK_PRIMARY_MEASURE)} />
+          <Select label="Primary Measure" data={primaryMeasureData} value={form.primary_measure} onChange={(v) => setField("primary_measure", v ?? FALLBACK_PRIMARY_MEASURE)} />
           <TextInput label="Site City" placeholder="e.g. Crofton" value={form.site_city} onChange={(e) => setField("site_city", e.currentTarget.value)} />
           <TextInput label="Site State" placeholder="e.g. NE" maxLength={2} value={form.site_state} onChange={(e) => setField("site_state", e.currentTarget.value.toUpperCase())} />
         </SimpleGrid>
