@@ -12,6 +12,11 @@ export function decodeJwtUser(token) {
       .slice(0, 2)
       .map(w => w[0].toUpperCase())
       .join('') || '?'
+    // No `id` here: sub/oid are opaque external-identity-provider subject
+    // identifiers, not the platform's internal user UUID (confirmed via a
+    // live "invalid input syntax for type uuid" failure) -- the resolved
+    // UUID only comes from GET /me (see fetchCurrentUser in ../data),
+    // populated separately by PivotlyAppConfigContext.
     return { name, initials, email: payload.email || '' }
   } catch {
     return { name: '', initials: '?', email: '' }

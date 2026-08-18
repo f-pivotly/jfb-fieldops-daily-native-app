@@ -4,11 +4,24 @@ import {
   useCallback,
   useMemo,
 } from "react";
-import { api, applyAuthToken, applyAppSlug } from "../data";
+import { api, applyAuthToken, applyAppSlug, fetchCurrentUser } from "../data";
 import { onTokenUpdated, requestNewToken } from "../helpers/PivotlyHelpers";
 import { AppConfigContext, decodeJwtUser, MSG } from "./appConfigContext";
 
 const CONFIG_HANDSHAKE_TIMEOUT_MS = 3000;
+
+// Backfills the platform's internal user UUID once GET /me resolves --
+// decodeJwtUser can't provide it (see appConfigContext.js). Non-fatal on
+// failure: uploaded_by-type fields are nullable, so callers just don't get
+// attribution rather than breaking.
+function resolveCurrentUserId(setConfig) {
+  fetchCurrentUser()
+    .then((me) => {
+      if (!me?.id) return;
+      setConfig((prev) => ({ ...prev, user: { ...prev.user, id: me.id } }));
+    })
+    .catch(() => {});
+}
 
 export function PivotlyAppConfigProvider({ children }) {
   const [config, setConfig] = useState({
@@ -39,6 +52,7 @@ export function PivotlyAppConfigProvider({ children }) {
       applyAuthToken(authToken);
       applyAppSlug(appSlug);
       setConfig({ authToken, appSlug, user: decodeJwtUser(authToken) });
+      resolveCurrentUserId(setConfig);
       setReady(true);
       setError(null);
     }
@@ -61,6 +75,7 @@ export function PivotlyAppConfigProvider({ children }) {
   useEffect(() => {
     return onTokenUpdated((token) => {
       setConfig((prev) => ({ ...prev, authToken: token, user: decodeJwtUser(token) }));
+      resolveCurrentUserId(setConfig);
     });
   }, []);
 

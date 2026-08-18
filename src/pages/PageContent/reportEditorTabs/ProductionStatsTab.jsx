@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Box, Table, Text, TextInput } from '@mantine/core'
+import { Box, Table, Text, TextInput, SimpleGrid } from '@mantine/core'
 import { IconTrash } from '@tabler/icons-react'
 import { useProductionStats } from '../../../hooks/useProductionStats'
 import { useProjectAreas } from '../../../hooks/useProjectAreas'
+import { FlowStatsPanel, PipeConfigPanel } from '../../../components/FlowStatsPanel'
 import LoadingSpinner from '../../../components/LoadingSpinner'
 import SafeError from '../../../components/SafeError'
 
@@ -113,6 +114,14 @@ export default function ProductionStatsTab({ project, report, equipment = [], se
   const totalVolume = rows.reduce((a, r) => a + (Number(r.volume) || 0), 0)
   const totalArea = rows.reduce((a, r) => a + (Number(r.area) || 0), 0)
 
+  // Flow Stats + Pipe Configuration only apply to hydraulic projects with
+  // pipe tracking on -- same gate as the real web app's
+  // ProductionStatsTab.tsx (showFlowAndPipe), minus the phase-split lookup:
+  // jfb_projects has no placement_start_date/prior_work_type, so work_type
+  // is read directly.
+  const isHydraulic = (project?.work_type || '').toLowerCase().includes('hydraulic')
+  const showFlowAndPipe = !!project?.is_pipe_tracking && isHydraulic
+
   return (
     <Box>
       {(loading || areasLoading) && <LoadingSpinner py={16} />}
@@ -206,6 +215,21 @@ export default function ProductionStatsTab({ project, report, equipment = [], se
             </Table.Tfoot>
           )}
         </Table>
+      )}
+
+      {showFlowAndPipe && report?.report_date && (
+        <SimpleGrid cols={{ base: 1, md: 2 }} mt={16}>
+          {/* key forces a remount (clearing in-progress edits) whenever the
+              equipment tab or report date changes, instead of syncing local
+              state back to the fetched row via an effect. */}
+          <FlowStatsPanel
+            key={`${selectedEquipmentId}:${report.report_date}`}
+            projectId={project.id}
+            equipmentId={selectedEquipmentId}
+            reportDateISO={report.report_date}
+          />
+          <PipeConfigPanel key={report.report_date} projectId={project.id} reportDateISO={report.report_date} />
+        </SimpleGrid>
       )}
     </Box>
   )

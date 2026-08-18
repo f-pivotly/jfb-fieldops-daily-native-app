@@ -131,6 +131,54 @@
         "code": "lww"
       },
       "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "report_id",
+      "slug": "report_id",
+      "type": "uuid",
+      "label": "Report Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": true,
+        "target_attr": "id",
+        "target_domain": "jfb_reports",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "report_id",
+      "description": "The specific report this photo belongs to (one of its 2 photo slots).",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "pm_comment",
+      "slug": "pm_comment",
+      "type": "text",
+      "label": "PM Comment",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "pm_comment",
+      "description": "PM's rejection reason for this photo. Non-null means the PM has rejected it and the PE needs to replace it; cleared automatically on replacement.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
     }
   ],
   "archive": true,
@@ -153,8 +201,8 @@
     "max_record_versions": 10000
   },
   "track_versions": true,
-  "domain_table_name": "jfb_repoert_photos",
-  "slug": "jfb_repoert_photos",
+  "domain_table_name": "jfb_report_photos",
+  "slug": "jfb_report_photos",
   "domain_name_singular": "jfb_repoert_photo",
   "default_conflict_resolution": {
     "code": "lww",
