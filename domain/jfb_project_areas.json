@@ -1,0 +1,238 @@
+{
+  "schema": [
+    {
+      "pii": false,
+      "name": "project_id",
+      "slug": "project_id",
+      "type": "uuid",
+      "label": "Project Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": true,
+        "target_attr": "id",
+        "target_domain": "jfb_projects",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "project_id",
+      "description": "The project this area belongs to.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "parent_id",
+      "slug": "parent_id",
+      "type": "uuid",
+      "label": "Parent Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": false,
+        "target_attr": "id",
+        "target_domain": "jfb_project_areas",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "parent_id",
+      "description": "Self-reference. Null for the top-level (depth 1) areas; otherwise the area one depth up in the tree.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "area_level_id",
+      "slug": "area_level_id",
+      "type": "uuid",
+      "label": "Area Level Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": true,
+        "target_attr": "id",
+        "target_domain": "jfb_project_area_levels",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "area_level_id",
+      "description": "Which of the project's defined levels (depth + label) this area belongs to. Replaces a bare level-number column -- the depth and display label both come from the referenced jfb_project_area_levels row.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "name",
+      "slug": "name",
+      "type": "text",
+      "label": "Name",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "text",
+      "column_name": "name",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "sort_order",
+      "slug": "sort_order",
+      "type": "integer",
+      "label": "Sort Order",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "integer",
+      "column_name": "sort_order",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "is_active",
+      "slug": "is_active",
+      "type": "boolean",
+      "label": "Is Active",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "boolean",
+      "column_name": "is_active",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "volume_goal_cy",
+      "slug": "volume_goal_cy",
+      "type": "numeric",
+      "label": "Volume Goal Cy",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "volume_goal_cy",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "area_goal_sf",
+      "slug": "volume_goal_sf",
+      "type": "numeric",
+      "label": "Volume Goal Sf",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "area_goal_sf",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "notes",
+      "slug": "notes",
+      "type": "text",
+      "label": "Notes",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "notes",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    }
+  ],
+  "archive": true,
+  "contact": {
+    "owner": null,
+    "steward": null,
+    "support": null
+  },
+  "xref_enabled": false,
+  "access_control": {
+    "model": "all_systems",
+    "read_access": true,
+    "delete_access": true,
+    "insert_access": true,
+    "update_access": true,
+    "hard_delete_allowed": true,
+    "direct_write_enabled": true
+  },
+  "archive_policy": {
+    "enabled": true,
+    "retention_days": 0,
+    "max_record_versions": 25
+  },
+  "track_versions": true,
+  "domain_table_name": "jfb_project_areas",
+  "domain_name_singular": "Project Area",
+  "default_conflict_resolution": {
+    "code": "lww"
+  }
+}

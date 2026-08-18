@@ -1,0 +1,121 @@
+{
+  "schema": [
+    {
+      "pii": false,
+      "name": "project_id",
+      "slug": "project_id",
+      "type": "uuid",
+      "label": "Project Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": true,
+        "target_attr": "id",
+        "target_domain": "jfb_projects",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "project_id",
+      "description": "The project this level definition belongs to.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "depth",
+      "slug": "depth",
+      "type": "integer",
+      "label": "Depth",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "integer",
+      "column_name": "depth",
+      "description": "1-based nesting depth this level represents within the project's area tree (1 = top level). Unbounded -- a project may define as many depths as it needs.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "label",
+      "slug": "label",
+      "type": "text",
+      "label": "Label",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "text",
+      "column_name": "label",
+      "description": "What this depth is called for this project, e.g. \"Main Area\", \"Group\", \"CSC\", \"Sub-Area\".",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "sort_order",
+      "slug": "sort_order",
+      "type": "integer",
+      "label": "Sort Order",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "integer",
+      "column_name": "sort_order",
+      "description": "Rendering order among this project's levels. Usually equal to depth.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    }
+  ],
+  "archive": true,
+  "contact": {
+    "owner": null,
+    "steward": null,
+    "support": null
+  },
+  "xref_enabled": false,
+  "access_control": {
+    "model": "all_systems",
+    "read_access": true,
+    "delete_access": true,
+    "insert_access": true,
+    "update_access": true,
+    "hard_delete_allowed": true,
+    "direct_write_enabled": true
+  },
+  "archive_policy": {
+    "enabled": true,
+    "retention_days": 0,
+    "max_record_versions": 25
+  },
+  "track_versions": true,
+  "domain_table_name": "jfb_project_area_levels",
+  "domain_name_singular": "Project Area Level",
+  "default_conflict_resolution": {
+    "code": "lww"
+  }
+}

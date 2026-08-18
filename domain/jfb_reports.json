@@ -1,0 +1,100 @@
+{
+  "schema": [
+    {
+      "pii": false,
+      "name": "project_id",
+      "slug": "project_id",
+      "type": "uuid",
+      "label": "Project Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": true,
+        "target_attr": "id",
+        "target_domain": "jfb_projects",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "project_id",
+      "description": "The project this report belongs to. Combined with report_date, should be unique -- one report per project per day.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "report_date",
+      "slug": "report_date",
+      "type": "date",
+      "label": "Report Date",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "date",
+      "column_name": "report_date",
+      "description": "The calendar day this report covers.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "status",
+      "slug": "status",
+      "type": "text",
+      "label": "Status",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "status",
+      "description": "draft, cqc_review, approved, or released.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    }
+  ],
+  "archive": true,
+  "contact": {
+    "name": "System Administrator"
+  },
+  "multi_tenant": false,
+  "xref_enabled": true,
+  "access_control": {
+    "model": "all_systems",
+    "read_access": true,
+    "delete_access": true,
+    "insert_access": true,
+    "update_access": true,
+    "hard_delete_allowed": true,
+    "direct_write_enabled": true
+  },
+  "archive_policy": {
+    "retention_days": 365,
+    "max_record_versions": 10000
+  },
+  "track_versions": true,
+  "domain_table_name": "jfb_reports",
+  "slug": "jfb_reports",
+  "domain_name_singular": "jfb_report",
+  "default_conflict_resolution": {
+    "code": "lww",
+    "human_readable": "Last Write Wins"
+  }
+}

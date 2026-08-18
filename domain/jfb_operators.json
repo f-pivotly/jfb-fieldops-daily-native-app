@@ -1,0 +1,121 @@
+{
+  "schema": [
+    {
+      "pii": false,
+      "name": "email",
+      "slug": "email",
+      "type": "text",
+      "label": "Email",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "email",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "name",
+      "slug": "name",
+      "type": "text",
+      "label": "Name",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "name",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "favourite_activity_ids",
+      "slug": "favourite_activity_ids",
+      "type": "text",
+      "label": "Favourite Activity Ids",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "favourite_activity_ids",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "project_id",
+      "slug": "project_id",
+      "type": "uuid",
+      "label": "Project Id",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": false,
+        "target_attr": "id",
+        "target_domain": "jfb_projects",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "project_id",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    }
+  ],
+  "archive": true,
+  "contact": {
+    "owner": null,
+    "steward": null,
+    "support": null
+  },
+  "xref_enabled": false,
+  "access_control": {
+    "model": "all_systems",
+    "read_access": true,
+    "delete_access": true,
+    "insert_access": true,
+    "update_access": true,
+    "hard_delete_allowed": true,
+    "direct_write_enabled": true
+  },
+  "archive_policy": {
+    "enabled": true,
+    "retention_days": 0,
+    "max_record_versions": 25
+  },
+  "track_versions": true,
+  "domain_table_name": "jfb_operators",
+  "domain_name_singular": "Operator",
+  "default_conflict_resolution": {
+    "code": "lww"
+  }
+}

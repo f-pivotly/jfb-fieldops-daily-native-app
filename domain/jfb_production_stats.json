@@ -1,0 +1,211 @@
+{
+  "schema": [
+    {
+      "pii": false,
+      "name": "report_id",
+      "slug": "report_id",
+      "type": "uuid",
+      "label": "Report Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": true,
+        "target_attr": "id",
+        "target_domain": "jfb_reports",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "report_id",
+      "description": "The report this production stat belongs to. Project scope is inherited through the report.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "equipment_id",
+      "slug": "equipment_id",
+      "type": "uuid",
+      "label": "Equipment Id",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": false,
+        "target_attr": "id",
+        "target_domain": "jfb_equipments",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "equipment_id",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "area_level_combinations",
+      "slug": "area_level_combinations",
+      "type": "jsonb",
+      "label": "Area Level Combinations",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "jsonb",
+      "column_name": "area_level_combinations",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "pass_value",
+      "slug": "pass_value",
+      "type": "text",
+      "label": "Pass Value",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "pass_value",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "tsca",
+      "slug": "tsca",
+      "type": "boolean",
+      "label": "Tsca",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "boolean",
+      "column_name": "tsca",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "volume",
+      "slug": "volume",
+      "type": "numeric",
+      "label": "Volume",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "volume",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "area",
+      "slug": "area",
+      "type": "numeric",
+      "label": "Area",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "area",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "notes",
+      "slug": "notes",
+      "type": "text",
+      "label": "Notes",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "notes",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    }
+  ],
+  "archive": true,
+  "contact": {
+    "name": "System Administrator"
+  },
+  "multi_tenant": false,
+  "xref_enabled": true,
+  "access_control": {
+    "model": "all_systems",
+    "read_access": true,
+    "delete_access": true,
+    "insert_access": true,
+    "update_access": true,
+    "hard_delete_allowed": true,
+    "direct_write_enabled": true
+  },
+  "archive_policy": {
+    "retention_days": 365,
+    "max_record_versions": 10000
+  },
+  "track_versions": true,
+  "domain_table_name": "jfb_production_stats",
+  "slug": "jfb_production_stats",
+  "domain_name_singular": "jfb_production_stat",
+  "default_conflict_resolution": {
+    "code": "lww",
+    "human_readable": "Last Write Wins"
+  }
+}

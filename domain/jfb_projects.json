@@ -1,0 +1,325 @@
+{
+  "schema": [
+    {
+      "pii": false,
+      "name": "name",
+      "slug": "name",
+      "type": "text",
+      "label": "Name",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "name",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "is_active",
+      "slug": "is_active",
+      "type": "boolean",
+      "label": "Is Active",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "boolean",
+      "column_name": "is_active",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "client_name",
+      "slug": "client_name",
+      "type": "text",
+      "label": "Client Name",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "client_name",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "project_code",
+      "slug": "project_code",
+      "type": "integer",
+      "label": "Project Code",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "integer",
+      "column_name": "project_code",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "work_type",
+      "slug": "work_type",
+      "type": "text",
+      "label": "Work Type",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "work_type",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "start_date",
+      "slug": "start_date",
+      "type": "timestamp with time zone",
+      "label": "Start Date",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "timestamp with time zone",
+      "column_name": "start_date",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "end_date",
+      "slug": "end_date",
+      "type": "date",
+      "label": "End Date",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "date",
+      "column_name": "end_date",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "volume_goal",
+      "slug": "volume_goal",
+      "type": "numeric",
+      "label": "Volume Goal",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "volume_goal",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "primary_measure",
+      "slug": "primary_measure",
+      "type": "text",
+      "label": "Primary Measure",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "primary_measure",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "site_city",
+      "slug": "site_city",
+      "type": "text",
+      "label": "Site City",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "site_city",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "site_state",
+      "slug": "site_state",
+      "type": "text",
+      "label": "Site State",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "site_state",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "is_tsca_zone_tracking",
+      "slug": "is_tsca_zone_tracking",
+      "type": "boolean",
+      "label": "Is Tsca Zone Tracking",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "boolean",
+      "column_name": "is_tsca_zone_tracking",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "is_soil_type",
+      "slug": "is_soil_type",
+      "type": "boolean",
+      "label": "Is Soil Type",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "boolean",
+      "column_name": "is_soil_type",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "is_pipe_tracking",
+      "slug": "is_pipe_tracking",
+      "type": "boolean",
+      "label": "Is Pipe Tracking",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "boolean",
+      "column_name": "is_pipe_tracking",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    }
+  ],
+  "archive": true,
+  "contact": {
+    "owner": null,
+    "steward": null,
+    "support": null
+  },
+  "xref_enabled": false,
+  "access_control": {
+    "model": "all_systems",
+    "read_access": true,
+    "delete_access": true,
+    "insert_access": true,
+    "update_access": true,
+    "hard_delete_allowed": true,
+    "direct_write_enabled": true
+  },
+  "archive_policy": {
+    "enabled": true,
+    "retention_days": 0,
+    "max_record_versions": 25
+  },
+  "track_versions": true,
+  "domain_table_name": "jfb_projects",
+  "domain_name_singular": "Project",
+  "default_conflict_resolution": {
+    "code": "lww"
+  }
+}

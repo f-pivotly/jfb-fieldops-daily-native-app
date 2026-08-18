@@ -1,0 +1,23 @@
+{
+  "source": {
+    "type": "static",
+    "values": [
+      {
+        "label": "CY",
+        "value": "cy"
+      },
+      {
+        "label": "Tons",
+        "value": "tons"
+      },
+      {
+        "label": "SF",
+        "value": "sf"
+      },
+      {
+        "label": "Linear FT",
+        "value": "linear_ft"
+      }
+    ]
+  }
+}

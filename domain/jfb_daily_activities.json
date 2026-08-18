@@ -1,0 +1,196 @@
+{
+  "schema": [
+    {
+      "pii": false,
+      "name": "project_id",
+      "slug": "project_id",
+      "type": "uuid",
+      "label": "Project Id",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": false,
+        "target_attr": "id",
+        "target_domain": "jfb_projects",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "project_id",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "equipment_id",
+      "slug": "equipment_id",
+      "type": "uuid",
+      "label": "Equipment Id",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": false,
+        "target_attr": "id",
+        "target_domain": "jfb_equipments",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "equipment_id",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "operator_id",
+      "slug": "operator_id",
+      "type": "uuid",
+      "label": "Operator Id",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": false,
+        "target_attr": "id",
+        "target_domain": "jfb_operators",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "operator_id",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "start_date_time",
+      "slug": "start_date_time",
+      "type": "timestamp with time zone",
+      "label": "Start Date Time",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "timestamp with time zone",
+      "column_name": "start_date_time",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "end_date_time",
+      "slug": "end_date_time",
+      "type": "timestamp with time zone",
+      "label": "End Date Time",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "timestamp with time zone",
+      "column_name": "end_date_time",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "timezone",
+      "slug": "timezone",
+      "type": "text",
+      "label": "Timezone",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "timezone",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "session_id",
+      "slug": "session_id",
+      "type": "text",
+      "label": "Session Id",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "session_id",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    }
+  ],
+  "archive": true,
+  "contact": {
+    "owner": null,
+    "steward": null,
+    "support": null
+  },
+  "xref_enabled": false,
+  "access_control": {
+    "model": "all_systems",
+    "read_access": true,
+    "delete_access": true,
+    "insert_access": true,
+    "update_access": true,
+    "hard_delete_allowed": true,
+    "direct_write_enabled": true
+  },
+  "archive_policy": {
+    "enabled": true,
+    "retention_days": 0,
+    "max_record_versions": 25
+  },
+  "track_versions": true,
+  "domain_table_name": "jfb_daily_activities",
+  "domain_name_singular": "Daily Activitie",
+  "default_conflict_resolution": {
+    "code": "lww"
+  }
+}
