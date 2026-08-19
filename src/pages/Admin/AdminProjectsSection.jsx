@@ -18,14 +18,13 @@ import { usePicklist } from "../../hooks/usePicklist";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import SafeError from "../../components/SafeError";
 
-const FALLBACK_WORK_TYPE = "Hydraulic Dredging";
 const FALLBACK_PRIMARY_MEASURE = "CY";
 
 const EMPTY_FORM = {
   name: "",
   project_code: "",
   client_name: "",
-  work_type: FALLBACK_WORK_TYPE,
+  work_type: "",
   start_date: "",
   end_date: "",
   volume_goal: "",
@@ -47,7 +46,7 @@ function toFormValues(row, areaLevels = []) {
     name: row.name ?? "",
     project_code: row.project_code ?? "",
     client_name: row.client_name ?? "",
-    work_type: row.work_type ?? FALLBACK_WORK_TYPE,
+    work_type: row.work_type ?? "",
     start_date: row.start_date ? String(row.start_date).slice(0, 10) : "",
     end_date: row.end_date ? String(row.end_date).slice(0, 10) : "",
     volume_goal: row.volume_goal ?? "",
@@ -68,7 +67,7 @@ function toPayload(form) {
     name: form.name.trim(),
     project_code: form.project_code === "" ? null : Number(form.project_code),
     client_name: form.client_name.trim() || null,
-    work_type: form.work_type,
+    work_type: form.work_type || null,
     start_date: form.start_date || null,
     end_date: form.end_date || null,
     volume_goal: form.volume_goal === "" ? null : Number(form.volume_goal),
@@ -91,9 +90,9 @@ export default function AdminProjectsSection({ onConfigure }) {
     create: createAreaLevel,
     update: updateAreaLevel,
   } = useDomainData({ domain: "jfb_project_area_levels", system: "core" });
-  const { values: workTypeOptions, labels: workTypeLabels } = usePicklist("pkl-jfb-work-type");
+  const { records: workTypeRecords } = useDomainData({ domain: "jfb_work_types", system: "core" });
   const { values: primaryMeasureOptions, labels: primaryMeasureLabels } = usePicklist("pkl-jfb-primary-measure");
-  const workTypeData = workTypeOptions.map((v) => ({ value: v, label: workTypeLabels[v] ?? v }));
+  const workTypeData = workTypeRecords.map((r) => ({ value: r.name, label: r.name }));
   const primaryMeasureData = primaryMeasureOptions.map((v) => ({ value: v, label: primaryMeasureLabels[v] ?? v }));
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -104,7 +103,7 @@ export default function AdminProjectsSection({ onConfigure }) {
     setEditRow(null);
     setForm({
       ...EMPTY_FORM,
-      work_type: workTypeOptions[0] ?? FALLBACK_WORK_TYPE,
+      work_type: workTypeRecords[0]?.name ?? "",
       primary_measure: primaryMeasureOptions[0] ?? FALLBACK_PRIMARY_MEASURE,
     });
     setModalOpen(true);
@@ -256,7 +255,7 @@ export default function AdminProjectsSection({ onConfigure }) {
           <TextInput label="Project Name" required placeholder="e.g. Fountain Lake Phase 3" value={form.name} onChange={(e) => setField("name", e.currentTarget.value)} />
           <NumberInput label="Project Code" required placeholder="e.g. 182601" hideControls value={form.project_code} onChange={(v) => setField("project_code", v)} />
           <TextInput label="Client" placeholder="Client name" value={form.client_name} onChange={(e) => setField("client_name", e.currentTarget.value)} />
-          <Select label="Work Type" data={workTypeData} value={form.work_type} onChange={(v) => setField("work_type", v ?? FALLBACK_WORK_TYPE)} />
+          <Select label="Work Type" data={workTypeData} value={form.work_type} onChange={(v) => setField("work_type", v ?? "")} />
           <TextInput label="Start Date" type="date" value={form.start_date} onChange={(e) => setField("start_date", e.currentTarget.value)} />
           <TextInput label="Target End Date" type="date" value={form.end_date} onChange={(e) => setField("end_date", e.currentTarget.value)} />
           <NumberInput label="Volume Goal (CY)" placeholder="e.g. 85000" hideControls value={form.volume_goal} onChange={(v) => setField("volume_goal", v)} />

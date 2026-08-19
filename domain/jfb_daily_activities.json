@@ -164,6 +164,102 @@
         "code": "lww"
       },
       "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "pass_type_id",
+      "slug": "pass_type_id",
+      "type": "uuid",
+      "label": "Pass Type Id",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": false,
+        "target_attr": "id",
+        "target_domain": "jfb_pass_types",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "pass_type_id",
+      "description": "The pass type selected for this activity in the field app (jfb-dot-to-dot).",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "area",
+      "slug": "area",
+      "type": "jsonb",
+      "label": "Area",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "jsonb",
+      "column_name": "area",
+      "description": "The area/subarea/sub-subarea selected for this activity via the field app's area cascade. Stored as jsonb rather than a single FK because a project's area hierarchy (jfb_project_area_levels) can be 1-3 levels deep -- e.g. {\"area_id\": \"...\", \"sub_area_id\": \"...\", \"sub_sub_area_id\": \"...\"}, omitting keys the project doesn't use.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "notes",
+      "slug": "notes",
+      "type": "text",
+      "label": "Notes",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "notes",
+      "description": "",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "delay_code_id",
+      "slug": "delay_code_id",
+      "type": "uuid",
+      "label": "Delay Code Id",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": false,
+        "target_attr": "id",
+        "target_domain": "jfb_project_delay_codes",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "delay_code_id",
+      "description": "The project delay code tapped for this activity in the field app. References the project's own activated jfb_project_delay_codes row, which may in turn point at the master jfb_delay_codes library or be a project-specific custom code with no master match.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
     }
   ],
   "archive": true,

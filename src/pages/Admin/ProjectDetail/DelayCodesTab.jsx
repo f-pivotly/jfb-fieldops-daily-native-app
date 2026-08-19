@@ -1,12 +1,24 @@
 import { useState } from "react";
 import { Box, Text, Group, Button, Modal, TextInput, Select, Switch } from "@mantine/core";
-import { IconPlus, IconList } from "@tabler/icons-react";
-import {
-  SAMPLE_PROJECT_DELAY_CODES,
-  SAMPLE_DELAY_CODE_MASTER,
-  DELAY_CODE_WORK_TYPES,
-  DELAY_CODE_CATEGORY_ORDER,
-} from "../../../data/adminProjectDetailSampleData";
+import { IconPlus, IconList, IconRefresh } from "@tabler/icons-react";
+import { useDomainData } from "../../../hooks/useDomainData";
+import { useAppConfig } from "../../../contexts/appConfigContext";
+import { createDomainRecord } from "../../../data";
+import LoadingSpinner from "../../../components/LoadingSpinner";
+import SafeError from "../../../components/SafeError";
+
+const CATEGORY_ORDER = [
+  "General",
+  "Mechanical",
+  "Movement",
+  "Survey/Sample",
+  "Booster/Land Plant",
+  "Land Plant/Processing",
+  "Barge/Material Transport",
+  "Project Specific",
+  "Operational Change",
+  "Misc",
+];
 
 function groupByCategory(list) {
   const groups = new Map();
@@ -14,11 +26,15 @@ function groupByCategory(list) {
     if (!groups.has(item.category)) groups.set(item.category, []);
     groups.get(item.category).push(item);
   }
-  const known = DELAY_CODE_CATEGORY_ORDER.filter((c) => groups.has(c));
-  const unknown = [...groups.keys()].filter((c) => !DELAY_CODE_CATEGORY_ORDER.includes(c)).sort();
+  const known = CATEGORY_ORDER.filter((c) => groups.has(c));
+  const unknown = [...groups.keys()].filter((c) => !CATEGORY_ORDER.includes(c)).sort();
   return [...known, ...unknown].map((c) => [c, groups.get(c)]);
 }
 
+// Synthetic code_num range for custom codes added from this tab. Resets each
+// page load -- matches the range the admin app has always used (9900+) but
+// isn't guaranteed unique across sessions; a real allocator would need a
+// server-side sequence against jfb_delay_codes.code_num.
 let syntheticCodeNum = 9900;
 function nextCodeNum() {
   syntheticCodeNum += 1;
@@ -26,14 +42,58 @@ function nextCodeNum() {
 }
 
 export default function DelayCodesTab({ project }) {
-  const [codes, setCodes] = useState(SAMPLE_PROJECT_DELAY_CODES);
-  const [masterCodes, setMasterCodes] = useState(SAMPLE_DELAY_CODE_MASTER);
+  const hasProject = !!project?.id;
+  const { config } = useAppConfig();
+
+  const { records: workTypeRecords } = useDomainData({ domain: "jfb_work_types", system: "core" });
+  const {
+    records: masterCodes,
+    create: createMasterCode,
+    remove: removeMasterCode,
+  } = useDomainData({ domain: "jfb_delay_codes", system: "core" });
+  const {
+    records: projectCodeRecords,
+    loading,
+    error,
+    creating,
+    updating,
+    reload,
+    create,
+    update,
+  } = useDomainData({ domain: "jfb_project_delay_codes", system: "core", projectId: project?.id });
+
   const [phaseFilter, setPhaseFilter] = useState(null);
   const [masterOpen, setMasterOpen] = useState(false);
   const [masterFilter, setMasterFilter] = useState("all");
   const [customOpen, setCustomOpen] = useState(false);
   const [customTarget, setCustomTarget] = useState("project");
-  const [customForm, setCustomForm] = useState({ category: "", newCategory: "", code: "", work_type: DELAY_CODE_WORK_TYPES[0] });
+  const [customForm, setCustomForm] = useState({ category: "", newCategory: "", code: "", work_type: "" });
+  const [loadingMaster, setLoadingMaster] = useState(false);
+
+  const workTypeNameById = Object.fromEntries(workTypeRecords.map((w) => [w.id, w.name]));
+  const workTypeIdByName = Object.fromEntries(workTypeRecords.map((w) => [w.name, w.id]));
+  const workTypeNames = workTypeRecords.map((w) => w.name);
+  const masterById = Object.fromEntries(masterCodes.map((m) => [m.id, m]));
+
+  // A project_delay_codes row either points at a master code (delay_code_id
+  // set -- category/code/code_num/work_type come from jfb_delay_codes) or is
+  // a project-specific custom code with no master match (delay_code_id null
+  // -- those fields live on the row itself). See jfb_project_delay_codes.json.
+  const codes = hasProject
+    ? projectCodeRecords.map((row) => {
+        const master = row.delay_code_id ? masterById[row.delay_code_id] : null;
+        const workTypeId = master ? master.work_type_id : row.work_type_id;
+        return {
+          id: row.id,
+          delay_code_id: row.delay_code_id,
+          work_type: workTypeId ? workTypeNameById[workTypeId] ?? null : null,
+          category: master ? master.category : row.category,
+          code: master ? master.code : row.code,
+          code_num: master ? master.code_num : row.code_num,
+          active: !!row.active,
+        };
+      })
+    : [];
 
   const distinctWorkTypes = [...new Set(codes.map((c) => c.work_type).filter(Boolean))];
   const showPhaseBar = distinctWorkTypes.length > 1;
@@ -45,13 +105,12 @@ export default function DelayCodesTab({ project }) {
 
   const activeCount = visibleCodes.filter((c) => c.active).length;
 
-  function bulkToggle(nextActive) {
-    const ids = new Set(visibleCodes.map((c) => c.id));
-    setCodes((prev) => prev.map((c) => (ids.has(c.id) ? { ...c, active: nextActive } : c)));
+  async function bulkToggle(nextActive) {
+    await Promise.all(visibleCodes.map((c) => update(c.id, { active: nextActive })));
   }
 
-  function toggleOne(row) {
-    setCodes((prev) => prev.map((c) => (c.id === row.id ? { ...c, active: !c.active } : c)));
+  async function toggleOne(row) {
+    await update(row.id, { active: !row.active });
   }
 
   function openCustom(target) {
@@ -60,34 +119,85 @@ export default function DelayCodesTab({ project }) {
       category: "",
       newCategory: "",
       code: "",
-      work_type: (target === "master" && masterFilter !== "all" ? masterFilter : DELAY_CODE_WORK_TYPES[0]),
+      work_type: target === "master" && masterFilter !== "all" ? masterFilter : workTypeNames[0] ?? "",
     });
     setCustomOpen(true);
   }
 
-  function saveCustom() {
-    const category = customForm.newCategory.trim() || customForm.category;
+  async function saveCustom() {
+    const category = effectiveCategory;
     if (!category || !customForm.code.trim()) return;
     if (customTarget === "project") {
-      setCodes((prev) => [...prev, { id: `p-${Date.now()}`, work_type: null, category, code: customForm.code.trim(), code_num: nextCodeNum(), active: true }]);
+      if (!hasProject) return;
+      await create({
+        project_id: project.id,
+        delay_code_id: null,
+        work_type_id: null,
+        category,
+        code: customForm.code.trim(),
+        code_num: nextCodeNum(),
+        active: true,
+      });
     } else {
-      setMasterCodes((prev) => [...prev, { id: `m-${Date.now()}`, work_type: customForm.work_type, category, code: customForm.code.trim(), code_num: nextCodeNum() }]);
+      await createMasterCode({
+        work_type_id: workTypeIdByName[customForm.work_type] ?? null,
+        category,
+        code: customForm.code.trim(),
+        code_num: nextCodeNum(),
+        active: true,
+      });
     }
     setCustomOpen(false);
   }
 
-  function deleteMasterCode(row) {
+  async function deleteMasterCode(row) {
     if (!confirm(`Remove "${row.code}" from the master list? This will not affect existing project codes.`)) return;
-    setMasterCodes((prev) => prev.filter((m) => m.id !== row.id));
+    await removeMasterCode(row.id);
+  }
+
+  // Bulk-creates bypass the useDomainData hook's create() (which reloads the
+  // whole list after every single call) and call createDomainRecord directly,
+  // reloading once at the end -- a project's work-type block is 40-50 rows.
+  async function loadFromMaster() {
+    if (!hasProject || !currentPhase) return;
+    setLoadingMaster(true);
+    try {
+      const toLoad = masterCodes.filter(
+        (m) => workTypeNameById[m.work_type_id] === currentPhase && m.active !== false
+      );
+      for (const m of toLoad) {
+        await createDomainRecord({
+          domain: "jfb_project_delay_codes",
+          system: "core",
+          appSlug: config.appSlug,
+          recordData: { project_id: project.id, delay_code_id: m.id, active: true, sort_order: m.sort_order },
+        });
+      }
+      await reload();
+    } finally {
+      setLoadingMaster(false);
+    }
   }
 
   const projectCategories = [...new Set(codes.map((c) => c.category))];
-  const masterCategoriesForWorkType = [...new Set(masterCodes.filter((m) => m.work_type === customForm.work_type).map((m) => m.category))];
+  const masterCategoriesForWorkType = [
+    ...new Set(
+      masterCodes
+        .filter((m) => workTypeNameById[m.work_type_id] === customForm.work_type)
+        .map((m) => m.category)
+    ),
+  ];
   const categoryOptions = customTarget === "project" ? projectCategories : masterCategoriesForWorkType;
+  // "Or new category" wins when typed; otherwise fall back to the dropdown
+  // pick. Each input only ever writes its own field now -- they used to
+  // clear one another on change, which could wipe out an already-made
+  // dropdown selection from an incidental event on the other field.
+  const effectiveCategory = customForm.newCategory.trim() || customForm.category;
 
-  const masterFiltered = masterFilter === "all" ? masterCodes : masterCodes.filter((m) => m.work_type === masterFilter);
-  const masterByWorkType = DELAY_CODE_WORK_TYPES
-    .map((wt) => [wt, masterFiltered.filter((m) => m.work_type === wt)])
+  const masterFiltered =
+    masterFilter === "all" ? masterCodes : masterCodes.filter((m) => workTypeNameById[m.work_type_id] === masterFilter);
+  const masterByWorkType = workTypeNames
+    .map((wt) => [wt, masterFiltered.filter((m) => workTypeNameById[m.work_type_id] === wt)])
     .filter(([, items]) => items.length > 0);
 
   return (
@@ -95,21 +205,48 @@ export default function DelayCodesTab({ project }) {
       <Group justify="space-between" mb={12}>
         <Text fw={700} size="sm">Delay Codes</Text>
         <Group gap={8}>
+          <Box onClick={reload} style={{ cursor: "pointer", color: "#aaa", display: "flex", alignItems: "center" }} title="Refresh">
+            <IconRefresh size={14} />
+          </Box>
           <Button size="xs" variant="default" leftSection={<IconList size={12} />} onClick={() => setMasterOpen(true)}>View Master List</Button>
-          <Button size="xs" leftSection={<IconPlus size={12} />} onClick={() => openCustom("project")} style={{ background: "#0F2744", border: "none" }}>Add Custom Code</Button>
+          <Button
+            size="xs"
+            leftSection={<IconPlus size={12} />}
+            onClick={() => openCustom("project")}
+            disabled={!hasProject}
+            title={hasProject ? undefined : "Select a project to manage its delay codes"}
+            style={{ background: "#0F2744", border: "none" }}
+          >
+            Add Custom Code
+          </Button>
         </Group>
       </Group>
 
-      {codes.length === 0 && (
+      {loading && <LoadingSpinner py={24} />}
+      {!loading && <SafeError message={error} />}
+
+      {!loading && !error && !hasProject && (
+        <Text size="xs" c="dimmed" ta="center" py={24}>
+          Select a project to manage its delay codes.
+        </Text>
+      )}
+
+      {!loading && !error && hasProject && codes.length === 0 && (
         <Box style={{ background: "#fff", border: "1px solid #ebebeb", borderRadius: 6, padding: 20, textAlign: "center" }}>
           <Text size="xs" c="dimmed" mb={10}>No delay codes yet</Text>
-          <Button size="xs" onClick={() => setCodes(SAMPLE_DELAY_CODE_MASTER.map((m) => ({ ...m, id: `p-${m.id}`, active: true })))} style={{ background: "#0F2744", border: "none" }}>
-            Load Codes from Master List
+          <Button
+            size="xs"
+            loading={loadingMaster}
+            disabled={!currentPhase}
+            onClick={loadFromMaster}
+            style={{ background: "#0F2744", border: "none" }}
+          >
+            Load {currentPhase ?? ""} Codes from Master List
           </Button>
         </Box>
       )}
 
-      {codes.length > 0 && (
+      {!loading && !error && hasProject && codes.length > 0 && (
         <>
           {showPhaseBar && (
             <Group gap={6} mb={10}>
@@ -131,8 +268,8 @@ export default function DelayCodesTab({ project }) {
               <strong>{activeCount}</strong> of {visibleCodes.length} codes active{phaseFilter ? ` for ${phaseFilter}` : ""}
             </Text>
             <Group gap={8}>
-              <Button size="xs" variant="default" onClick={() => bulkToggle(true)}>Activate {phaseFilter ? "Shown" : "All"}</Button>
-              <Button size="xs" variant="default" onClick={() => bulkToggle(false)}>Deactivate {phaseFilter ? "Shown" : "All"}</Button>
+              <Button size="xs" variant="default" loading={updating} onClick={() => bulkToggle(true)}>Activate {phaseFilter ? "Shown" : "All"}</Button>
+              <Button size="xs" variant="default" loading={updating} onClick={() => bulkToggle(false)}>Deactivate {phaseFilter ? "Shown" : "All"}</Button>
             </Group>
           </Group>
 
@@ -158,7 +295,7 @@ export default function DelayCodesTab({ project }) {
         <Group justify="space-between" mb={12}>
           <Select
             label="Filter by Work Type"
-            data={[{ value: "all", label: "All" }, ...DELAY_CODE_WORK_TYPES.map((wt) => ({ value: wt, label: wt }))]}
+            data={[{ value: "all", label: "All" }, ...workTypeNames.map((wt) => ({ value: wt, label: wt }))]}
             value={masterFilter}
             onChange={(v) => setMasterFilter(v ?? "all")}
             w={240}
@@ -193,14 +330,14 @@ export default function DelayCodesTab({ project }) {
           placeholder="Choose existing category"
           data={categoryOptions}
           value={customForm.category}
-          onChange={(v) => setCustomForm((f) => ({ ...f, category: v ?? "", newCategory: "" }))}
+          onChange={(v) => setCustomForm((f) => ({ ...f, category: v ?? "" }))}
           mb={8}
           clearable
         />
         <TextInput
           label="Or new category"
           value={customForm.newCategory}
-          onChange={(e) => setCustomForm((f) => ({ ...f, newCategory: e.currentTarget.value, category: "" }))}
+          onChange={(e) => setCustomForm((f) => ({ ...f, newCategory: e.currentTarget.value }))}
           mb={10}
         />
         <TextInput
@@ -215,9 +352,9 @@ export default function DelayCodesTab({ project }) {
           <Select
             label="Work Type"
             required
-            data={DELAY_CODE_WORK_TYPES}
+            data={workTypeNames}
             value={customForm.work_type}
-            onChange={(v) => setCustomForm((f) => ({ ...f, work_type: v ?? DELAY_CODE_WORK_TYPES[0] }))}
+            onChange={(v) => setCustomForm((f) => ({ ...f, work_type: v ?? workTypeNames[0] ?? "" }))}
             mb={10}
           />
         )}
@@ -225,8 +362,9 @@ export default function DelayCodesTab({ project }) {
           <Button variant="default" size="xs" onClick={() => setCustomOpen(false)}>Cancel</Button>
           <Button
             size="xs"
+            loading={customTarget === "project" ? creating : false}
             onClick={saveCustom}
-            disabled={!(customForm.category || customForm.newCategory.trim()) || !customForm.code.trim()}
+            disabled={!effectiveCategory || !customForm.code.trim()}
             style={{ background: "#0F2744", border: "none" }}
           >
             Save

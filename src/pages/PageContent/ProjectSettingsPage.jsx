@@ -3,10 +3,10 @@ import { useParams, Link } from 'react-router-dom'
 import { Box, ScrollArea, Text, Group, Tabs, Table, TextInput, Button, SimpleGrid, Stack, Select, NumberInput, Slider, FileButton } from '@mantine/core'
 import { IconUpload, IconTrash, IconPlus, IconChartAreaLine } from '@tabler/icons-react'
 import { useProject } from '../../hooks/useProject'
+import { useDomainData } from '../../hooks/useDomainData'
 import {
   SAMPLE_PRODUCTION_PLAN,
   SAMPLE_SCHEDULED_OFF_DAYS,
-  SAMPLE_NARRATIVE_SECTION_CONFIG,
   SAMPLE_METRICS_CONFIG,
   SAMPLE_SITE_EQUIPMENT,
   SAMPLE_ATTACHMENTS,
@@ -18,6 +18,8 @@ import {
 export default function ProjectSettingsPage() {
   const { projectId } = useParams()
   const { project } = useProject(projectId)
+  const { records: narrativeRows } = useDomainData({ domain: 'jfb_project_report_narratives', system: 'core', projectId })
+  const sortedNarrativeRows = [...narrativeRows].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
   const plan = SAMPLE_PRODUCTION_PLAN
 
   return (
@@ -64,8 +66,8 @@ export default function ProjectSettingsPage() {
 
           <Tabs.Panel value="narratives">
             <ConfigTable
-              rows={SAMPLE_NARRATIVE_SECTION_CONFIG}
-              columns={[['label', 'Section'], ['sortOrder', 'Order']]}
+              rows={sortedNarrativeRows}
+              columns={[['narrative_label', 'Section'], ['sort_order', 'Order']]}
             />
           </Tabs.Panel>
           <Tabs.Panel value="metrics">

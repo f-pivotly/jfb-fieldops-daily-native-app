@@ -3,10 +3,41 @@ import { Box, Text, Table, Group, Button, Modal, TextInput, Select } from '@mant
 import { IconPlus, IconPencil, IconTrash, IconAlertTriangle } from '@tabler/icons-react'
 import { useEvents } from '../../../hooks/useEvents'
 import { useOperators } from '../../../hooks/useOperators'
+import { useProjectAreas } from '../../../hooks/useProjectAreas'
+import { usePassTypes } from '../../../hooks/usePassTypes'
+import { useDelayCodes } from '../../../hooks/useDelayCodes'
+import { useProjectDelayCodes } from '../../../hooks/useProjectDelayCodes'
 
-// jfb_daily_activities has no category/area/pass/tsca/notes fields, so these
-// columns have nothing real to show yet — flagged rather than faked.
+// jfb_daily_activities still has no tsca/source fields, so those two columns
+// have nothing real to show yet — flagged rather than faked. Category/Area/
+// Pass/Notes are real now (delay_code_id, area jsonb, pass_type_id, notes).
 const SAMPLE = '(sampleData)'
+
+// A jfb_project_delay_codes row either points at a master code (category/code
+// come from jfb_delay_codes) or is a project-specific custom code with no
+// master match (those fields live on the row itself) -- same resolution as
+// DelayCodesTab.jsx.
+function resolveDelayCode(delayCodeId, projectDelayCodeById, masterDelayCodeById) {
+  if (!delayCodeId) return null
+  const row = projectDelayCodeById.get(delayCodeId)
+  if (!row) return null
+  const master = row.delay_code_id ? masterDelayCodeById.get(row.delay_code_id) : null
+  return {
+    category: master ? master.category : row.category,
+    code: master ? master.code : row.code,
+  }
+}
+
+// area is a jsonb breadcrumb ({area_id, sub_area_id, sub_sub_area_id}) since a
+// project's area hierarchy (jfb_project_area_levels) can be 1-3 levels deep.
+function resolveArea(area, areaNameById) {
+  if (!area) return '—'
+  const parts = [area.area_id, area.sub_area_id, area.sub_sub_area_id]
+    .filter(Boolean)
+    .map((id) => areaNameById.get(id))
+    .filter(Boolean)
+  return parts.length ? parts.join(' / ') : '—'
+}
 
 const EMPTY_FORM = { from: '', to: '', operatorId: null }
 
@@ -56,6 +87,15 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
   const eventDate = report?.report_date
   const { events, create, update, remove } = useEvents(project?.id, eventDate)
   const { operators } = useOperators(project?.id)
+  const { areas } = useProjectAreas(project?.id)
+  const { passTypes } = usePassTypes()
+  const { delayCodes: masterDelayCodes } = useDelayCodes()
+  const { projectDelayCodes } = useProjectDelayCodes(project?.id)
+
+  const areaNameById = new Map(areas.map((a) => [a.id, a.name]))
+  const passTypeNameById = new Map(passTypes.map((p) => [p.id, p.name]))
+  const masterDelayCodeById = new Map(masterDelayCodes.map((m) => [m.id, m]))
+  const projectDelayCodeById = new Map(projectDelayCodes.map((r) => [r.id, r]))
 
   const sorted = events
     .filter((e) => e.equipment_id === selectedEquipmentId)
@@ -176,18 +216,20 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
               </Table.Td>
             </Table.Tr>
           )}
-          {sorted.map((e, i) => (
+          {sorted.map((e, i) => {
+            const delayCode = resolveDelayCode(e.delay_code_id, projectDelayCodeById, masterDelayCodeById)
+            return (
             <Table.Tr key={e.id}>
               <Table.Td>{i + 1}</Table.Td>
               <Table.Td>{hhmm(e.start_date_time)}</Table.Td>
               <Table.Td>{hhmm(e.end_date_time)}</Table.Td>
               <Table.Td>{fmtDuration(e.start_date_time, e.end_date_time)}</Table.Td>
-              <Table.Td c="dimmed">{SAMPLE}</Table.Td>
-              <Table.Td c="dimmed">{SAMPLE}</Table.Td>
-              <Table.Td c="dimmed">{SAMPLE}</Table.Td>
+              <Table.Td>{delayCode?.code ?? '—'}</Table.Td>
+              <Table.Td>{resolveArea(e.area, areaNameById)}</Table.Td>
+              <Table.Td>{e.pass_type_id ? (passTypeNameById.get(e.pass_type_id) ?? '—') : '—'}</Table.Td>
               <Table.Td c="dimmed">{SAMPLE}</Table.Td>
               <Table.Td>{operators.find((o) => o.id === e.operator_id)?.name ?? '—'}</Table.Td>
-              <Table.Td c="dimmed">{SAMPLE}</Table.Td>
+              <Table.Td>{e.notes || '—'}</Table.Td>
               <Table.Td c="dimmed">{SAMPLE}</Table.Td>
               <Table.Td>
                 <Group gap={6} wrap="nowrap">
@@ -200,12 +242,17 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
                 </Group>
               </Table.Td>
             </Table.Tr>
-          ))}
+            )
+          })}
         </Table.Tbody>
       </Table>
 
-      {/* Insert modal — From/To/Operator are real jfb_daily_activities fields.
-          Category/Area/Pass/TSCA/Notes aren't collected: there's no column to save them to. */}
+      {/* Insert modal — From/To/Operator are the only fields collected here.
+          Category/Area/Pass/Notes now have real columns (populated from the
+          field app's own tap/selection), but this admin form doesn't offer
+          setting them manually -- it's for correcting time ranges, not
+          authoring a delay/production event from scratch. TSCA still has no
+          column at all. */}
       <Modal key={insertKey} opened={insertOpen} onClose={() => setInsertOpen(false)} title={<Text fw={700} size="sm">Insert Event</Text>} size="sm">
         <Group grow mb={10}>
           <TextInput label="From" type="time" value={form.from} onChange={(e) => setField('from', e.currentTarget.value)} />
@@ -219,7 +266,7 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
           mb={10}
         />
         <Text size="10px" c="dimmed" mb={16}>
-          Category, Area, Pass, TSCA, and Notes aren't in the jfb_daily_activities domain yet — those columns show placeholder data.
+          Category, Area, Pass, and Notes come from the field app's own selection — this form only edits the time range and operator.
         </Text>
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => setInsertOpen(false)}>Cancel</Button>

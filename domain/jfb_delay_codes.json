@@ -1,0 +1,205 @@
+{
+  "schema": [
+    {
+      "pii": false,
+      "name": "work_type_id",
+      "slug": "work_type_id",
+      "type": "uuid",
+      "label": "Work Type Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": true,
+        "target_attr": "id",
+        "target_domain": "jfb_work_types",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "work_type_id",
+      "description": "Which of the four work-type groups this code belongs to: Hydraulic Dredging, Hydraulic Capping, Mechanical Dredging, or Mechanical Capping.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "category",
+      "slug": "category",
+      "type": "text",
+      "label": "Category",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "text",
+      "column_name": "category",
+      "description": "Category within the work-type group, e.g. General, Mechanical, Movement, Survey/Sample, Booster/Land Plant, Barge/Material Transport, Misc, Operational Change, Project Specific.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "category_num",
+      "slug": "category_num",
+      "type": "integer",
+      "label": "Category Num",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "integer",
+      "column_name": "category_num",
+      "description": "The category's block number in the numbering scheme (e.g. 1, 20, 30, 40, 50, 90). Null for Operational Change and Project Specific rows, which don't carry a category-level number.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "code",
+      "slug": "code",
+      "type": "text",
+      "label": "Code",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "text",
+      "column_name": "code",
+      "description": "The delay code's display name, e.g. \"ShutDown\" or \"Wash Pipeline\".",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "code_num",
+      "slug": "code_num",
+      "type": "integer",
+      "label": "Code Num",
+      "unique": true,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "integer",
+      "column_name": "code_num",
+      "description": "The number the field app matches on. Globally unique across all four work-type groups -- never reused between groups.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "sort_order",
+      "slug": "sort_order",
+      "type": "integer",
+      "label": "Sort Order",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "integer",
+      "column_name": "sort_order",
+      "description": "Display order within the work-type group.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "active",
+      "slug": "active",
+      "type": "boolean",
+      "label": "Active",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "boolean",
+      "column_name": "active",
+      "description": "Whether this code is currently part of the live company library. False retires a code without deleting its history.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "notes",
+      "slug": "notes",
+      "type": "text",
+      "label": "Notes",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "notes",
+      "description": "Free-text annotation, e.g. flagging a proposed or adjusted code_num that needs PM confirmation.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    }
+  ],
+  "archive": true,
+  "contact": {
+    "name": "System Administrator"
+  },
+  "multi_tenant": false,
+  "xref_enabled": true,
+  "access_control": {
+    "model": "all_systems",
+    "read_access": true,
+    "delete_access": true,
+    "insert_access": true,
+    "update_access": true,
+    "hard_delete_allowed": true,
+    "direct_write_enabled": true
+  },
+  "archive_policy": {
+    "retention_days": 365,
+    "max_record_versions": 10000
+  },
+  "track_versions": true,
+  "domain_table_name": "jfb_delay_codes",
+  "slug": "jfb_delay_codes",
+  "domain_name_singular": "jfb_delay_code",
+  "default_conflict_resolution": {
+    "code": "lww",
+    "human_readable": "Last Write Wins"
+  }
+}

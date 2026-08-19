@@ -12,13 +12,6 @@ export const SAMPLE_SCHEDULED_OFF_DAYS = [
   { date: '2026-09-07', reason: 'Labor Day' },
 ];
 
-export const SAMPLE_NARRATIVE_SECTION_CONFIG = [
-  { key: 'production', label: 'Production Summary', sortOrder: 1, hidden: false },
-  { key: 'safety', label: 'Safety Summary', sortOrder: 2, hidden: false },
-  { key: 'delays', label: 'Delays / Issues', sortOrder: 3, hidden: false },
-  { key: 'planned', label: 'Plan for Tomorrow', sortOrder: 4, hidden: false },
-];
-
 export const SAMPLE_METRICS_CONFIG = [
   { key: 'cy', label: 'CY Dredged', source: 'Auto', unit: 'CY', sortOrder: 1 },
   { key: 'sf', label: 'SF Covered', source: 'Auto', unit: 'SF', sortOrder: 2 },

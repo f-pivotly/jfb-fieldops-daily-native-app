@@ -4,7 +4,6 @@ import { Box, ScrollArea, Text, Group, Button, Stack, Textarea, SimpleGrid, Swit
 import { IconPhoto } from '@tabler/icons-react'
 import {
   SAMPLE_WEEK_RANGE,
-  SAMPLE_WEEKLY_NARRATIVE_SECTIONS,
   SAMPLE_WEEKLY_PHOTOS,
   SAMPLE_WEEKLY_PRODUCTION,
   SAMPLE_WEEKLY_DELAYS,
@@ -13,9 +12,7 @@ import {
 export default function WeeklySummaryPage() {
   const { projectId } = useParams()
   const [aiOn, setAiOn] = useState(false)
-  const [sections, setSections] = useState(
-    SAMPLE_WEEKLY_NARRATIVE_SECTIONS.map((s) => ({ ...s, value: s.draft })),
-  )
+  const [sections, setSections] = useState([])
   const w = SAMPLE_WEEK_RANGE
   const p = SAMPLE_WEEKLY_PRODUCTION
 

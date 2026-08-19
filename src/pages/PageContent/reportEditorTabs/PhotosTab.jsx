@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Box, Group, Text } from '@mantine/core'
+import { Box, Group, Text, Modal, Button } from '@mantine/core'
 import PhotoSlot from '../../../components/PhotoSlot'
 import ReasonDialog from '../../../components/ReasonDialog'
 import LoadingSpinner from '../../../components/LoadingSpinner'
@@ -15,12 +15,27 @@ import { uploadAttachment, deleteAttachment, readWrittenRecordId } from '../../.
 const DOMAIN = 'jfb_report_photos'
 const SLOTS = [1, 2]
 
+// Pivotly's file table enforces a unique constraint on
+// (folder_id, logical_name, storage_location). Our uploads always land in
+// the same default folder + storage location, so the original filename is
+// the only thing that can collide -- two different photos picked with the
+// same generic original name (e.g. "images.jpg") otherwise fail with
+// "A file with this name already exists in this location". Renaming to the
+// record's own id + a timestamp guarantees a unique logical_name every time,
+// without needing any change on the Pivotly side.
+function withUniqueName(file, uniqueId) {
+  const dot = file.name.lastIndexOf('.')
+  const ext = dot >= 0 ? file.name.slice(dot) : ''
+  return new File([file], `${uniqueId}-${Date.now()}${ext}`, { type: file.type })
+}
+
 export default function PhotosTab({ project, report }) {
   const { config } = useAppConfig()
   const { photos, loading, error, create, update, remove } = useReportPhotos(report?.id)
   const [uploading, setUploading] = useState({ 1: false, 2: false })
   const [slotErrors, setSlotErrors] = useState({ 1: null, 2: null })
   const [rejectingPhoto, setRejectingPhoto] = useState(null)
+  const [removingSlot, setRemovingSlot] = useState(null)
 
   const photoFor = (n) => photos.find((p) => p.photo_number === n) ?? null
 
@@ -62,7 +77,11 @@ export default function PhotosTab({ project, report }) {
       }
       if (!recordId) throw new Error('Could not resolve the saved photo record.')
 
-      const uploadRes = await uploadAttachment({ coreRecordId: recordId, domain: DOMAIN, file })
+      const uploadRes = await uploadAttachment({
+        coreRecordId: recordId,
+        domain: DOMAIN,
+        file: withUniqueName(file, recordId),
+      })
       await update(recordId, { photo_file_path: uploadRes.fileId })
 
       if (previousFileId && previousFileId !== uploadRes.fileId) {
@@ -85,15 +104,34 @@ export default function PhotosTab({ project, report }) {
     }
   }
 
-  async function handleRemove(slot) {
+  // window.confirm is silently blocked in this app's hosting iframe (its
+  // sandbox attribute has no allow-modals -- Portal_Independent_Frontend's
+  // src/app/applications/[app_slug]/index.js) -- it just returns false with
+  // no dialog and no error, which made Remove look like a dead button. Use
+  // an in-app modal instead of depending on a browser dialog API at all.
+  function handleRemove(slot) {
+    if (!photoFor(slot)) return
+    setRemovingSlot(slot)
+  }
+
+  async function confirmRemove() {
+    const slot = removingSlot
+    setRemovingSlot(null)
     const target = photoFor(slot)
     if (!target) return
-    if (!window.confirm(`Remove photo ${slot}? The file will be deleted from storage.`)) return
     setUploading((u) => ({ ...u, [slot]: true }))
     setSlotErrors((er) => ({ ...er, [slot]: null }))
     try {
-      // Deleting the domain record auto-soft-deletes its linked attachment
-      // (Portal_Independent_Backend's core-data-write delete path).
+      // Delete the attachment ourselves rather than relying on the backend's
+      // automatic cascade-on-domain-record-delete: that cascade lives in an
+      // unguarded block in crd-tx-write.routes.ts -- if it throws, the whole
+      // delete request fails before the domain record delete even runs.
+      // Explicit, in order, is deterministic: file first, then the record,
+      // so a failure leaves an orphaned record (visible, fixable) rather
+      // than an orphaned file (invisible, easy to miss).
+      if (target.photo_file_path) {
+        await deleteAttachment({ fileId: target.photo_file_path, domain: DOMAIN, coreRecordId: target.id })
+      }
       await remove(target.id)
     } catch (e) {
       setSlotErrors((er) => ({ ...er, [slot]: e?.message || 'Delete failed.' }))
@@ -170,6 +208,23 @@ export default function PhotosTab({ project, report }) {
         confirmColor="red"
         onConfirm={handleRejectConfirm}
       />
+
+      <Modal
+        opened={removingSlot != null}
+        onClose={() => setRemovingSlot(null)}
+        title={<Text fw={700} size="sm">{`Remove photo ${removingSlot ?? ''}?`}</Text>}
+        size="sm"
+      >
+        <Text size="sm" mb={16}>The file will be deleted from storage.</Text>
+        <Group justify="flex-end">
+          <Button variant="default" size="xs" onClick={() => setRemovingSlot(null)}>
+            Cancel
+          </Button>
+          <Button size="xs" color="red" onClick={confirmRemove}>
+            Remove
+          </Button>
+        </Group>
+      </Modal>
     </Box>
   )
 }

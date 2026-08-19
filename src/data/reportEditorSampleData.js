@@ -69,41 +69,6 @@ export const SAMPLE_PHOTOS = [
   { slot: 2, label: '', uploaded: false, rejected: false },
 ];
 
-export const SAMPLE_NARRATIVE_SECTIONS = [
-  {
-    key: 'production',
-    label: 'Production Summary',
-    content: 'Dredge 1 worked Cell 4 all shift after a barge-swap delay midday. Production on pace for the week.',
-    hidden: false,
-    priorDayContent: 'Dredge 1 worked Cell 3 all shift, no delays. Ahead of pace for the week.',
-    lockedByOther: null,
-  },
-  {
-    key: 'safety',
-    label: 'Safety Summary',
-    content: 'No incidents. Toolbox talk covered barge mooring lines.',
-    hidden: false,
-    priorDayContent: 'No incidents. Toolbox talk covered fall protection near the spud barge.',
-    lockedByOther: null,
-  },
-  {
-    key: 'delays',
-    label: 'Delays / Issues',
-    content: '',
-    hidden: false,
-    priorDayContent: 'Weather delay 0700-0830 (fog).',
-    lockedByOther: { name: 'M. Sunday', minutesAgo: 4 },
-  },
-  {
-    key: 'planned',
-    label: 'Plan for Tomorrow',
-    content: 'Continue Cell 4, begin Cell 5 pass if weather holds.',
-    hidden: false,
-    priorDayContent: 'Continue Cell 3, mobilize booster pump to Cell 4.',
-    lockedByOther: null,
-  },
-];
-
 export const SAMPLE_METRICS = [
   { key: 'cy', label: 'CY Dredged', source: 'Auto', autoKind: 'volume_cy', unit: 'CY', day: 1240, week: 6820, total: 48210, hidden: false },
   { key: 'sf', label: 'SF Covered', source: 'Auto', autoKind: 'area_sf', unit: 'SF', day: 18500, week: 102300, total: 712400, hidden: false },

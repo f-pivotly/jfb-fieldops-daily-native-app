@@ -1,0 +1,217 @@
+{
+  "schema": [
+    {
+      "pii": false,
+      "name": "project_id",
+      "slug": "project_id",
+      "type": "uuid",
+      "label": "Project Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": true,
+        "target_attr": "id",
+        "target_domain": "jfb_projects",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "project_id",
+      "description": "The project this delay code is turned on for.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "delay_code_id",
+      "slug": "delay_code_id",
+      "type": "uuid",
+      "label": "Delay Code Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": false,
+        "target_attr": "id",
+        "target_domain": "jfb_delay_codes",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "delay_code_id",
+      "description": "The company-library delay code this project has turned on. Null for a project-specific custom code that has no master-list equivalent -- in that case work_type/category/code/code_num below carry the data instead.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "work_type_id",
+      "slug": "work_type_id",
+      "type": "uuid",
+      "label": "Work Type Id",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": false,
+        "target_attr": "id",
+        "target_domain": "jfb_work_types",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "work_type_id",
+      "description": "Work-type group for a project-specific custom code (mirrors jfb_delay_codes.work_type_id). Null when delay_code_id is set -- the group comes from the referenced master code instead. Also left null on a custom code meant to apply across all of the project's phases.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "category",
+      "slug": "category",
+      "type": "text",
+      "label": "Category",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "category",
+      "description": "Category label for a project-specific custom code. Null when delay_code_id is set -- the category comes from the referenced master code instead.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "code",
+      "slug": "code",
+      "type": "text",
+      "label": "Code",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "code",
+      "description": "Display name for a project-specific custom code. Null when delay_code_id is set -- the name comes from the referenced master code instead.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "code_num",
+      "slug": "code_num",
+      "type": "integer",
+      "label": "Code Num",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "integer",
+      "column_name": "code_num",
+      "description": "Number for a project-specific custom code, assigned by the admin app from a high, non-colliding range (e.g. 9900+). Null when delay_code_id is set -- the number comes from the referenced master code instead.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "active",
+      "slug": "active",
+      "type": "boolean",
+      "label": "Active",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "boolean",
+      "column_name": "active",
+      "description": "Whether the PM has this code turned on for the project. False hides it from the field app without removing the row.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "sort_order",
+      "slug": "sort_order",
+      "type": "integer",
+      "label": "Sort Order",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "integer",
+      "column_name": "sort_order",
+      "description": "Optional per-project display-order override. Falls back to the referenced jfb_delay_codes.sort_order when null.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    }
+  ],
+  "archive": true,
+  "contact": {
+    "name": "System Administrator"
+  },
+  "multi_tenant": false,
+  "xref_enabled": true,
+  "access_control": {
+    "model": "all_systems",
+    "read_access": true,
+    "delete_access": true,
+    "insert_access": true,
+    "update_access": true,
+    "hard_delete_allowed": true,
+    "direct_write_enabled": true
+  },
+  "archive_policy": {
+    "retention_days": 365,
+    "max_record_versions": 10000
+  },
+  "track_versions": true,
+  "domain_table_name": "jfb_project_delay_codes",
+  "slug": "jfb_project_delay_codes",
+  "domain_name_singular": "jfb_project_delay_code",
+  "default_conflict_resolution": {
+    "code": "lww",
+    "human_readable": "Last Write Wins"
+  }
+}

@@ -69,6 +69,14 @@ api.interceptors.response.use(
         return Promise.reject(refreshError)
       }
     }
+    // Every catch block in this app reads e.message. Left alone, a failed
+    // request surfaces axios's generic "Request failed with status code
+    // 500" instead of the backend's actual reason -- unwrap it here once,
+    // for every call, rather than in each function.
+    const backendMessage = error.response?.data?.message
+    if (backendMessage) {
+      error.message = backendMessage
+    }
     return Promise.reject(error)
   }
 )
