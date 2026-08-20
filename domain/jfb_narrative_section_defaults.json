@@ -2,20 +2,20 @@
   "schema": [
     {
       "pii": false,
-      "name": "email",
-      "slug": "email",
+      "name": "label",
+      "slug": "label",
       "type": "text",
-      "label": "Email",
+      "label": "Label",
       "unique": false,
       "indexed": false,
       "masking": {
         "masked": false
       },
-      "nullable": true,
-      "required": false,
+      "nullable": false,
+      "required": true,
       "data_type": "text",
-      "column_name": "email",
-      "description": "",
+      "column_name": "label",
+      "description": "Display name for this default narrative section, e.g. \"Dredging Operations\".",
       "conflict_resolution": {
         "code": "lww"
       },
@@ -23,10 +23,10 @@
     },
     {
       "pii": false,
-      "name": "name",
-      "slug": "name",
-      "type": "text",
-      "label": "Name",
+      "name": "sort_order",
+      "slug": "sort_order",
+      "type": "integer",
+      "label": "Sort Order",
       "unique": false,
       "indexed": false,
       "masking": {
@@ -34,9 +34,9 @@
       },
       "nullable": true,
       "required": false,
-      "data_type": "text",
-      "column_name": "name",
-      "description": "",
+      "data_type": "integer",
+      "column_name": "sort_order",
+      "description": "Display order when seeding a project's narrative sections from this template.",
       "conflict_resolution": {
         "code": "lww"
       },
@@ -44,10 +44,10 @@
     },
     {
       "pii": false,
-      "name": "favourite_activity_ids",
-      "slug": "favourite_activity_ids",
-      "type": "text",
-      "label": "Favourite Activity Ids",
+      "name": "is_active",
+      "slug": "is_active",
+      "type": "boolean",
+      "label": "Is Active",
       "unique": false,
       "indexed": false,
       "masking": {
@@ -55,9 +55,9 @@
       },
       "nullable": true,
       "required": false,
-      "data_type": "text",
-      "column_name": "favourite_activity_ids",
-      "description": "",
+      "data_type": "boolean",
+      "column_name": "is_active",
+      "description": "Whether this template entry is currently offered by \"Seed from defaults\". False retires it without deleting history.",
       "conflict_resolution": {
         "code": "lww"
       },
@@ -66,11 +66,10 @@
   ],
   "archive": true,
   "contact": {
-    "owner": null,
-    "steward": null,
-    "support": null
+    "name": "System Administrator"
   },
-  "xref_enabled": false,
+  "multi_tenant": false,
+  "xref_enabled": true,
   "access_control": {
     "model": "all_systems",
     "read_access": true,
@@ -81,14 +80,15 @@
     "direct_write_enabled": true
   },
   "archive_policy": {
-    "enabled": true,
-    "retention_days": 0,
-    "max_record_versions": 25
+    "retention_days": 365,
+    "max_record_versions": 10000
   },
   "track_versions": true,
-  "domain_table_name": "jfb_operators",
-  "domain_name_singular": "Operator",
+  "domain_table_name": "jfb_narrative_section_defaults",
+  "slug": "jfb_narrative_section_defaults",
+  "domain_name_singular": "jfb_narrative_section_default",
   "default_conflict_resolution": {
-    "code": "lww"
+    "code": "lww",
+    "human_readable": "Last Write Wins"
   }
 }

@@ -1,32 +1,37 @@
 import { Box, Text, Textarea, Stack, Group, Button, Modal, TextInput, Switch } from '@mantine/core'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { IconSettings, IconTrash } from '@tabler/icons-react'
 import { useDomainData } from '../../../hooks/useDomainData'
 import LoadingSpinner from '../../../components/LoadingSpinner'
 import SafeError from '../../../components/SafeError'
 
-// The section LIST (label/order/active) is real -- jfb_project_report_narratives.
-// The actual narrative TEXT below is local-only scratch state: that domain has
-// no content field, so nothing typed here is persisted yet. The previous
-// mock's "locked by another user" / "use previous day's text" affordances were
-// removed rather than kept as fake theater now that the section list is real.
-export default function NarrativesTab({ project }) {
+const DEBOUNCE_MS = 1500
+
+// The section LIST (label/order/active) is jfb_project_report_narratives --
+// one row per section, per project. The TEXT below is jfb_report_narratives --
+// one row per (report, section), joined to its section by narrative_label
+// (not a real FK -- there's no stable section_key in this app, so renaming a
+// section in "Manage sections" orphans any content already written under the
+// old label). No locking/collaboration here, unlike the non-native app --
+// just a debounced autosave.
+export default function NarrativesTab({ project, report }) {
   const hasProject = !!project?.id
+  const hasReport = !!report?.id
   const { records, loading, error, create, update, remove } = useDomainData({
     domain: 'jfb_project_report_narratives',
     system: 'core',
     projectId: project?.id,
   })
-  const [contentByRow, setContentByRow] = useState({})
+  const { records: contentRecords, create: createContent, update: updateContent } = useDomainData({
+    domain: 'jfb_report_narratives',
+    system: 'core',
+    projectId: project?.id,
+  })
   const [managerOpen, setManagerOpen] = useState(false)
 
   const sections = hasProject
     ? [...records].filter((r) => r.is_active !== false).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
     : []
-
-  function setContent(id, content) {
-    setContentByRow((prev) => ({ ...prev, [id]: content }))
-  }
 
   return (
     <Box>
@@ -52,18 +57,24 @@ export default function NarrativesTab({ project }) {
       )}
 
       <Stack gap="md">
-        {sections.map((s) => (
-          <Box key={s.id} p={16} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8, background: '#fff' }}>
-            <Text size="sm" fw={600} mb={8}>{s.narrative_label}</Text>
-            <Textarea
-              autosize
-              minRows={2}
-              value={contentByRow[s.id] ?? ''}
-              onChange={(e) => setContent(s.id, e.currentTarget.value)}
-              placeholder="Write the narrative for this section…"
+        {sections.map((s) => {
+          const contentRow = hasReport
+            ? contentRecords.find((c) => c.report_id === report.id && c.narrative_label === s.narrative_label)
+            : null
+          return (
+            <NarrativeSectionCard
+              key={s.id}
+              label={s.narrative_label}
+              contentRow={contentRow}
+              disabled={!hasReport}
+              onSave={(text) =>
+                contentRow
+                  ? updateContent(contentRow.id, { content: text })
+                  : createContent({ project_id: project.id, report_id: report.id, narrative_label: s.narrative_label, content: text })
+              }
             />
-          </Box>
-        ))}
+          )
+        })}
       </Stack>
 
       <SectionsManagerDialog
@@ -77,6 +88,73 @@ export default function NarrativesTab({ project }) {
       />
     </Box>
   )
+}
+
+function NarrativeSectionCard({ label, contentRow, disabled, onSave }) {
+  const [draft, setDraft] = useState(contentRow?.content ?? '')
+  const [saveState, setSaveState] = useState('idle')
+  const [syncedRowId, setSyncedRowId] = useState(contentRow?.id)
+  const timerRef = useRef(null)
+
+  // Re-sync from the domain when the underlying row changes (e.g. after a
+  // reload brings back the row we just created) -- but not while a save is
+  // pending/in-flight, so we don't clobber what's still being typed. Adjusting
+  // state during render (React's documented pattern for this) instead of an
+  // effect, since this is deriving state from a prop change, not reaching
+  // into an external system.
+  if (contentRow?.id !== syncedRowId && saveState !== 'pending' && saveState !== 'saving') {
+    setSyncedRowId(contentRow?.id)
+    setDraft(contentRow?.content ?? '')
+  }
+
+  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current) }, [])
+
+  function handleChange(next) {
+    setDraft(next)
+    setSaveState('pending')
+    if (timerRef.current) clearTimeout(timerRef.current)
+    timerRef.current = setTimeout(async () => {
+      setSaveState('saving')
+      try {
+        await onSave(next)
+        setSaveState('saved')
+      } catch {
+        setSaveState('error')
+      }
+    }, DEBOUNCE_MS)
+  }
+
+  return (
+    <Box p={16} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8, background: '#fff' }}>
+      <Group justify="space-between" mb={8}>
+        <Text size="sm" fw={600}>{label}</Text>
+        <SaveIndicator state={saveState} />
+      </Group>
+      <Textarea
+        autosize
+        minRows={2}
+        value={draft}
+        disabled={disabled}
+        onChange={(e) => handleChange(e.currentTarget.value)}
+        placeholder={disabled ? 'Select a report date to write a narrative…' : 'Write the narrative for this section…'}
+      />
+    </Box>
+  )
+}
+
+function SaveIndicator({ state }) {
+  switch (state) {
+    case 'pending':
+      return <Text size="10px" c="dimmed">…</Text>
+    case 'saving':
+      return <Text size="10px" c="blue">Saving</Text>
+    case 'saved':
+      return <Text size="10px" c="teal" fw={600}>✓ Saved</Text>
+    case 'error':
+      return <Text size="10px" c="red" fw={600}>⚠ Save failed</Text>
+    default:
+      return null
+  }
 }
 
 function SectionsManagerDialog({ opened, onClose, project, records, create, update, remove }) {

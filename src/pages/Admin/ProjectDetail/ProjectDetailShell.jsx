@@ -6,7 +6,6 @@ import EquipmentTab from "./EquipmentTab";
 import DelayCodesTab from "./DelayCodesTab";
 import OperatorsTab from "./OperatorsTab";
 import CappingSetupTab from "./CappingSetupTab";
-import NarrativesTab from "./NarrativesTab";
 
 export default function ProjectDetailShell({ project, onBack }) {
   const [tab, setTab] = useState("areas");
@@ -27,7 +26,7 @@ export default function ProjectDetailShell({ project, onBack }) {
         {[project?.project_code, project?.client_name, project?.work_type].filter(Boolean).join(" · ") || "—"}
       </Text>
       <Text size="10px" c="dimmed" mb={16}>
-        Operators below show sample data for now — Areas, Equipment, Delay Codes, and Narratives are live.
+        Areas, Equipment, Delay Codes, and Operators are live.
       </Text>
 
       <Tabs value={tab} onChange={setTab}>
@@ -35,7 +34,6 @@ export default function ProjectDetailShell({ project, onBack }) {
           <Tabs.Tab value="areas">Areas</Tabs.Tab>
           <Tabs.Tab value="equipment">Equipment</Tabs.Tab>
           <Tabs.Tab value="delaycodes">Delay Codes</Tabs.Tab>
-          <Tabs.Tab value="narratives">Narratives</Tabs.Tab>
           <Tabs.Tab value="operators">Operators</Tabs.Tab>
           {isCapping && <Tabs.Tab value="capping">Capping Setup</Tabs.Tab>}
         </Tabs.List>
@@ -43,8 +41,7 @@ export default function ProjectDetailShell({ project, onBack }) {
         <Tabs.Panel value="areas"><AreasTab project={project} /></Tabs.Panel>
         <Tabs.Panel value="equipment"><EquipmentTab project={project} /></Tabs.Panel>
         <Tabs.Panel value="delaycodes"><DelayCodesTab project={project} /></Tabs.Panel>
-        <Tabs.Panel value="narratives"><NarrativesTab project={project} /></Tabs.Panel>
-        <Tabs.Panel value="operators"><OperatorsTab /></Tabs.Panel>
+        <Tabs.Panel value="operators"><OperatorsTab project={project} /></Tabs.Panel>
         {isCapping && <Tabs.Panel value="capping"><CappingSetupTab /></Tabs.Panel>}
       </Tabs>
     </Box>

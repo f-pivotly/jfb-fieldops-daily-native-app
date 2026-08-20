@@ -59,12 +59,6 @@ export const SAMPLE_PROJECT_DELAY_CODES = [
   { id: "p-10", work_type: null, category: "Project Specific", code: "Client Site Walk", code_num: 9901, active: true },
 ];
 
-export const SAMPLE_PROJECT_OPERATORS = [
-  { id: "op-1", full_name: "Adam Trofka", active: true },
-  { id: "op-2", full_name: "Ean Marker", active: true },
-  { id: "op-3", full_name: "Sample Operator 3", active: false },
-];
-
 export const SAMPLE_LAYER_TYPE_REF = [
   { id: "lt-1", name: "Sand Cap" },
   { id: "lt-2", name: "Armor Stone" },

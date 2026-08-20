@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Box, Text, Group, Button, Table, Modal, TextInput, NumberInput, Checkbox } from "@mantine/core";
 import { IconPlus, IconRefresh } from "@tabler/icons-react";
 import { useDomainData } from "../../../hooks/useDomainData";
+import { useAppConfig } from "../../../contexts/appConfigContext";
+import { createDomainRecord } from "../../../data";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import SafeError from "../../../components/SafeError";
 
@@ -13,17 +15,44 @@ function toDateInputValue(iso) {
 
 export default function NarrativesTab({ project }) {
   const hasProject = !!project?.id;
+  const { config } = useAppConfig();
   const { records, loading, error, creating, updating, reload, create, update, remove } = useDomainData({
     domain: "jfb_project_report_narratives",
     system: "core",
     projectId: project?.id,
   });
+  const { records: defaultSections } = useDomainData({ domain: "jfb_narrative_section_defaults", system: "core" });
 
   const rows = hasProject ? [...records].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)) : [];
 
   const [addOpen, setAddOpen] = useState(false);
   const [editRow, setEditRow] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [seeding, setSeeding] = useState(false);
+
+  // Bypasses the useDomainData hook's create() (which reloads the whole list
+  // after every single call) and calls createDomainRecord directly, reloading
+  // once at the end -- same pattern as DelayCodesTab's "Load from Master List".
+  async function handleSeedDefaults() {
+    if (!hasProject) return;
+    setSeeding(true);
+    try {
+      const toSeed = [...defaultSections]
+        .filter((d) => d.is_active !== false)
+        .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+      for (const d of toSeed) {
+        await createDomainRecord({
+          domain: "jfb_project_report_narratives",
+          system: "core",
+          appSlug: config.appSlug,
+          recordData: { project_id: project.id, narrative_label: d.label, sort_order: d.sort_order, is_active: true },
+        });
+      }
+      await reload();
+    } finally {
+      setSeeding(false);
+    }
+  }
 
   function setField(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
@@ -107,7 +136,12 @@ export default function NarrativesTab({ project }) {
           </Text>
         )}
         {!loading && !error && hasProject && rows.length === 0 && (
-          <Text size="xs" c="dimmed" ta="center" py={16}>No narrative sections configured yet.</Text>
+          <Box ta="center" py={16}>
+            <Text size="xs" c="dimmed" mb={10}>No narrative sections configured yet. Click + Add Section to start.</Text>
+            <Button size="xs" variant="default" loading={seeding} onClick={handleSeedDefaults}>
+              Seed from defaults
+            </Button>
+          </Box>
         )}
         {!loading && !error && hasProject && rows.length > 0 && (
           <Table withTableBorder verticalSpacing="xs" fz="sm">
