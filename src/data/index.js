@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { requestNewToken, setAuthToken } from '../helpers/PivotlyHelpers'
 
-const IS_LOCAL = false
+const IS_LOCAL = true
 
 function resolveApiBase() {
   const runtimeConfig = window.__PIVOTLY_RUNTIME_CONFIG__;
@@ -157,7 +157,7 @@ export async function createDomainRecord({ domain, system, appSlug, recordData }
   return data
 }
 
-export async function updateDomainRecord({ domain, system, appSlug, recordId, recordData }) {
+export async function updateDomainRecord({ domain, system, appSlug, recordId, recordData, extraParameters }) {
   const { data } = await api.post('/core-data-write', {
     parameters: {
       domain,
@@ -166,6 +166,7 @@ export async function updateDomainRecord({ domain, system, appSlug, recordId, re
       latency: 'synchronous',
       app_slug: appSlug,
       core_record_id: recordId,
+      ...extraParameters,
     },
     data: recordData,
   })

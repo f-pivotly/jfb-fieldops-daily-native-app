@@ -63,10 +63,10 @@ export function useDomainData({ domain, system, projectId }) {
     }
   }, [domain, system, config.appSlug, load])
 
-  const update = useCallback(async (recordId, recordData) => {
+  const update = useCallback(async (recordId, recordData, extraParameters) => {
     setUpdating(true)
     try {
-      const res = await updateDomainRecord({ domain, system, appSlug: config.appSlug, recordId, recordData })
+      const res = await updateDomainRecord({ domain, system, appSlug: config.appSlug, recordId, recordData, extraParameters })
       await load()
       return res
     } finally {
