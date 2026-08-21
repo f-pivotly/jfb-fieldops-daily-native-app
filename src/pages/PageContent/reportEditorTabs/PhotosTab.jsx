@@ -59,6 +59,7 @@ export default function PhotosTab({ project, report }) {
         recordId = existing.id
         await update(recordId, {
           label,
+          original_file_name: file.name,
           uploaded_by: config?.user?.id ?? null,
           uploaded_date_time: new Date().toISOString(),
           // Replacing a rejected photo clears the rejection so PM re-reviews.
@@ -70,6 +71,7 @@ export default function PhotosTab({ project, report }) {
           report_id: report.id,
           photo_number: slot,
           label,
+          original_file_name: file.name,
           uploaded_by: config?.user?.id ?? null,
           uploaded_date_time: new Date().toISOString(),
         })

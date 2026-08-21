@@ -1,0 +1,15 @@
+{
+  "source": {
+    "type": "static",
+    "values": [
+      {
+        "label": "1st Pass",
+        "value": "1st_pass"
+      },
+      {
+        "label": "2nd Pass",
+        "value": "2nd_pass"
+      }
+    ]
+  }
+}

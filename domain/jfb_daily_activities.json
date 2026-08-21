@@ -167,10 +167,10 @@
     },
     {
       "pii": false,
-      "name": "pass_type_id",
-      "slug": "pass_type_id",
-      "type": "uuid",
-      "label": "Pass Type Id",
+      "name": "pass_type",
+      "slug": "pass_type",
+      "type": "text",
+      "label": "Pass Type",
       "unique": false,
       "indexed": false,
       "masking": {
@@ -178,15 +178,9 @@
       },
       "nullable": true,
       "required": false,
-      "data_type": "uuid",
-      "fk_config": {
-        "required": false,
-        "target_attr": "id",
-        "target_domain": "jfb_pass_types",
-        "resolution_policy": "lookup_only"
-      },
-      "column_name": "pass_type_id",
-      "description": "The pass type selected for this activity in the field app (jfb-dot-to-dot).",
+      "data_type": "text",
+      "column_name": "pass_type",
+      "description": "The pass type selected for this activity in the field app (jfb-dot-to-dot). Value from the pkl-jfb-pass-type picklist, not a domain FK.",
       "conflict_resolution": {
         "code": "lww"
       },

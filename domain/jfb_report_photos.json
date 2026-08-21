@@ -44,6 +44,27 @@
     },
     {
       "pii": false,
+      "name": "original_file_name",
+      "slug": "original_file_name",
+      "type": "text",
+      "label": "Original File Name",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "original_file_name",
+      "description": "The file's name as picked by the uploader, before it's renamed to a unique storage name to avoid Pivotly's (folder_id, logical_name, storage_location) collision constraint. See withUniqueName() in PhotosTab.jsx.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
       "name": "label",
       "slug": "label",
       "type": "text",

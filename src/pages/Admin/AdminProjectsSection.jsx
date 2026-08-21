@@ -258,7 +258,7 @@ export default function AdminProjectsSection({ onConfigure }) {
           <Select label="Work Type" data={workTypeData} value={form.work_type} onChange={(v) => setField("work_type", v ?? "")} />
           <TextInput label="Start Date" type="date" value={form.start_date} onChange={(e) => setField("start_date", e.currentTarget.value)} />
           <TextInput label="Target End Date" type="date" value={form.end_date} onChange={(e) => setField("end_date", e.currentTarget.value)} />
-          <NumberInput label="Volume Goal (CY)" placeholder="e.g. 85000" hideControls value={form.volume_goal} onChange={(v) => setField("volume_goal", v)} />
+          <NumberInput label={`Volume Goal (${form.primary_measure || FALLBACK_PRIMARY_MEASURE})`} placeholder="e.g. 85000" hideControls value={form.volume_goal} onChange={(v) => setField("volume_goal", v)} />
           <Select label="Primary Measure" data={primaryMeasureData} value={form.primary_measure} onChange={(v) => setField("primary_measure", v ?? FALLBACK_PRIMARY_MEASURE)} />
           <TextInput label="Site City" placeholder="e.g. Crofton" value={form.site_city} onChange={(e) => setField("site_city", e.currentTarget.value)} />
           <TextInput label="Site State" placeholder="e.g. NE" maxLength={2} value={form.site_state} onChange={(e) => setField("site_state", e.currentTarget.value.toUpperCase())} />

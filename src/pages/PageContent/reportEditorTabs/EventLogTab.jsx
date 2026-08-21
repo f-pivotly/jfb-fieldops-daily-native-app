@@ -4,13 +4,13 @@ import { IconPlus, IconPencil, IconTrash, IconAlertTriangle } from '@tabler/icon
 import { useEvents } from '../../../hooks/useEvents'
 import { useOperators } from '../../../hooks/useOperators'
 import { useProjectAreas } from '../../../hooks/useProjectAreas'
-import { usePassTypes } from '../../../hooks/usePassTypes'
+import { usePicklist } from '../../../hooks/usePicklist'
 import { useDelayCodes } from '../../../hooks/useDelayCodes'
 import { useProjectDelayCodes } from '../../../hooks/useProjectDelayCodes'
 
 // jfb_daily_activities still has no tsca/source fields, so those two columns
 // have nothing real to show yet — flagged rather than faked. Category/Area/
-// Pass/Notes are real now (delay_code_id, area jsonb, pass_type_id, notes).
+// Pass/Notes are real now (delay_code_id, area jsonb, pass_type, notes).
 const SAMPLE = '(sampleData)'
 
 // A jfb_project_delay_codes row either points at a master code (category/code
@@ -88,12 +88,11 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
   const { events, create, update, remove } = useEvents(project?.id, eventDate)
   const { operators } = useOperators(project?.id)
   const { areas } = useProjectAreas(project?.id)
-  const { passTypes } = usePassTypes()
+  const { labels: passTypeLabels } = usePicklist('pkl-jfb-pass-type')
   const { delayCodes: masterDelayCodes } = useDelayCodes()
   const { projectDelayCodes } = useProjectDelayCodes(project?.id)
 
   const areaNameById = new Map(areas.map((a) => [a.id, a.name]))
-  const passTypeNameById = new Map(passTypes.map((p) => [p.id, p.name]))
   const masterDelayCodeById = new Map(masterDelayCodes.map((m) => [m.id, m]))
   const projectDelayCodeById = new Map(projectDelayCodes.map((r) => [r.id, r]))
 
@@ -226,7 +225,7 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
               <Table.Td>{fmtDuration(e.start_date_time, e.end_date_time)}</Table.Td>
               <Table.Td>{delayCode?.code ?? '—'}</Table.Td>
               <Table.Td>{resolveArea(e.area, areaNameById)}</Table.Td>
-              <Table.Td>{e.pass_type_id ? (passTypeNameById.get(e.pass_type_id) ?? '—') : '—'}</Table.Td>
+              <Table.Td>{e.pass_type ? (passTypeLabels[e.pass_type] ?? e.pass_type) : '—'}</Table.Td>
               <Table.Td c="dimmed">{SAMPLE}</Table.Td>
               <Table.Td>{operators.find((o) => o.id === e.operator_id)?.name ?? '—'}</Table.Td>
               <Table.Td>{e.notes || '—'}</Table.Td>
