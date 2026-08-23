@@ -26,15 +26,6 @@ const ink = [
   "#24272B",
 ];
 
-const status = {
-  pass: { fg: "#1E7A3D", bg: "#E6F4EC", border: "#B7DDC4" },
-  warn: { fg: "#B5740A", bg: "#FBF1DD", border: "#E6CB87" },
-  fail: { fg: "#D32129", bg: "#FBE6E7", border: "#EDB8BB" },
-  review: { fg: "#1F4FA3", bg: "#E5EDFA", border: "#B7C8E6" },
-  na: { fg: "#6B7177", bg: "#EEF0F2", border: "#E5E7EA" },
-};
-
-
 export const theme = createTheme({
   primaryColor: "brennanNavy",
   primaryShade: { light: 6, dark: 6 },
@@ -62,10 +53,6 @@ export const theme = createTheme({
     sm: "0 1px 2px rgba(15,17,21,.06), 0 0 0 1px rgba(15,17,21,.04)",
     md: "0 4px 12px rgba(15,17,21,.08), 0 0 0 1px rgba(15,17,21,.04)",
     lg: "0 18px 40px rgba(15,17,21,.16)",
-  },
-
-  other: {
-    status,
   },
 
   components: {

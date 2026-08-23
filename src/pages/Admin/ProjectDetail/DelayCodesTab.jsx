@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Box, Text, Group, Button, Modal, TextInput, Select, Switch } from "@mantine/core";
 import { IconPlus, IconList, IconRefresh } from "@tabler/icons-react";
 import { useDomainData } from "../../../hooks/useDomainData";
+import { useDelayCodes } from "../../../hooks/useDelayCodes";
+import { useProjectDelayCodes } from "../../../hooks/useProjectDelayCodes";
 import { useAppConfig } from "../../../contexts/appConfigContext";
 import { createDomainRecord } from "../../../data";
 import LoadingSpinner from "../../../components/LoadingSpinner";
@@ -47,12 +49,12 @@ export default function DelayCodesTab({ project }) {
 
   const { records: workTypeRecords } = useDomainData({ domain: "jfb_work_types", system: "core" });
   const {
-    records: masterCodes,
+    delayCodes: masterCodes,
     create: createMasterCode,
     remove: removeMasterCode,
-  } = useDomainData({ domain: "jfb_delay_codes", system: "core" });
+  } = useDelayCodes();
   const {
-    records: projectCodeRecords,
+    projectDelayCodes: projectCodeRecords,
     loading,
     error,
     creating,
@@ -60,7 +62,7 @@ export default function DelayCodesTab({ project }) {
     reload,
     create,
     update,
-  } = useDomainData({ domain: "jfb_project_delay_codes", system: "core", projectId: project?.id });
+  } = useProjectDelayCodes(project?.id);
 
   const [phaseFilter, setPhaseFilter] = useState(null);
   const [masterOpen, setMasterOpen] = useState(false);

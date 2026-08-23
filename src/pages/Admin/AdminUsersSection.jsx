@@ -1,13 +1,16 @@
 import { useState } from "react";
 import { Box, Text, Group, Button, Table, Badge, Modal, TextInput, Select, PasswordInput } from "@mantine/core";
 import { IconPlus } from "@tabler/icons-react";
-import { SAMPLE_ADMIN_USERS, SAMPLE_LIVE_PROJECTS, USER_ROLE_COLOR, USER_ROLES } from "../../data/adminSampleData";
+import { USER_ROLES } from "../../data/adminSampleData";
+
+// Not yet backed by a real domain -- render empty until one is established.
+const LIVE_PROJECTS_PLACEHOLDER = [];
 
 const CROSS_PROJECT_ROLES = new Set(["admin", "director"]);
-const EMPTY_FORM = { full_name: "", email: "", role: "operator", project_name: SAMPLE_LIVE_PROJECTS[0], password: "" };
+const EMPTY_FORM = { full_name: "", email: "", role: "operator", project_name: LIVE_PROJECTS_PLACEHOLDER[0], password: "" };
 
 export default function AdminUsersSection() {
-  const [users, setUsers] = useState(SAMPLE_ADMIN_USERS);
+  const [users, setUsers] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
 
@@ -49,7 +52,7 @@ export default function AdminUsersSection() {
       <Group justify="space-between" mb={16}>
         <Box>
           <Text fw={700} size="lg">Users</Text>
-          <Text size="xs" c="dimmed">Sample data for now — not wired to a real domain yet</Text>
+          <Text size="xs" c="dimmed">Not wired to a real domain yet</Text>
         </Box>
         <Button size="xs" leftSection={<IconPlus size={13} />} onClick={openAdd} style={{ background: "#0F2744", border: "none" }}>Add User</Button>
       </Group>
@@ -73,7 +76,7 @@ export default function AdminUsersSection() {
                   <Table.Td style={{ fontWeight: 600 }}>{u.full_name}</Table.Td>
                   <Table.Td>{u.email}</Table.Td>
                   <Table.Td>
-                    <Badge size="xs" color={USER_ROLE_COLOR[u.role] ?? "gray"}>{u.role.toUpperCase()}</Badge>
+                    <Badge size="xs" color="gray">{u.role.toUpperCase()}</Badge>
                   </Table.Td>
                   <Table.Td>{u.project_name ?? "—"}</Table.Td>
                   <Table.Td>
@@ -96,7 +99,7 @@ export default function AdminUsersSection() {
         <TextInput label="Email" required type="email" value={form.email} onChange={(e) => setField("email", e.currentTarget.value)} mb={10} />
         <Select label="Role" required data={USER_ROLES} value={form.role} onChange={(v) => setField("role", v ?? "operator")} mb={10} />
         {!CROSS_PROJECT_ROLES.has(form.role) && (
-          <Select label="Assigned Project" required data={SAMPLE_LIVE_PROJECTS} value={form.project_name} onChange={(v) => setField("project_name", v)} mb={10} />
+          <Select label="Assigned Project" required data={LIVE_PROJECTS_PLACEHOLDER} value={form.project_name} onChange={(v) => setField("project_name", v)} mb={10} />
         )}
         <PasswordInput
           label="Temporary Password"

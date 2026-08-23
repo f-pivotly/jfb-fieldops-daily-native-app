@@ -4,15 +4,13 @@ import { Box, Text, Loader, Center } from "@mantine/core";
 import AppHeader from "./components/AppHeader";
 import LaunchPage from "./pages/LaunchPage";
 import AdminApp from "./pages/Admin/AdminApp";
-import PageContent from "./pages/PageContent";
-import DashboardPage from "./pages/PageContent/DashboardPage";
-import ReportListPage from "./pages/PageContent/ReportListPage";
-import ReportEditorPage from "./pages/PageContent/ReportEditorPage";
-import RealizedToDatePage from "./pages/PageContent/RealizedToDatePage";
-import WeeklySummaryPage from "./pages/PageContent/WeeklySummaryPage";
-import ProjectSettingsPage from "./pages/PageContent/ProjectSettingsPage";
-import OperatorHoursPage from "./pages/PageContent/OperatorHoursPage";
-import CappingSetupPage from "./pages/PageContent/CappingSetupPage";
+import PageContent from "./pages/FieldOps/ContentRouter";
+import DashboardPage from "./pages/FieldOps/DashboardPage";
+import ReportListPage from "./pages/FieldOps/ReportListPage";
+import ReportEditorPage from "./pages/FieldOps/ReportEditorPage";
+import RealizedToDatePage from "./pages/FieldOps/RealizedToDatePage";
+import WeeklySummaryPage from "./pages/FieldOps/WeeklySummaryPage";
+import ProjectSettingsPage from "./pages/FieldOps/ProjectSettingsPage";
 import Forbidden from "./pages/Forbidden";
 import NotFound from "./pages/NotFound";
 
@@ -21,7 +19,6 @@ import { usePageDetails } from "./hooks/usePageDetails";
 import { useAppConfig } from "./contexts/appConfigContext";
 import { usePicklistCatalog } from "./hooks/usePicklistCatalog";
 import { REQUIRED_PICKLISTS } from "./config/requiredPicklists";
-import { SAMPLE_MODE } from "./config/sampleMode";
 
 export default function App() {
   const { pathname } = useLocation();
@@ -47,7 +44,7 @@ export default function App() {
     return <AdminApp onExit={() => setMode(null)} />;
   }
 
-  if (SAMPLE_MODE) {
+  if (mode === "fieldops") {
     return (
       <Box
         style={{
@@ -67,8 +64,6 @@ export default function App() {
           <Route path="/projects/:projectId/realized" element={<RealizedToDatePage />} />
           <Route path="/projects/:projectId/weekly" element={<WeeklySummaryPage />} />
           <Route path="/projects/:projectId/settings" element={<ProjectSettingsPage />} />
-          <Route path="/admin/operators" element={<OperatorHoursPage />} />
-          <Route path="/admin/capping-setup" element={<CappingSetupPage />} />
           <Route path="/forbidden" element={<Forbidden />} />
           <Route path="*" element={<NotFound />} />
         </Routes>

@@ -1,7 +1,11 @@
 import { useState } from "react";
 import { Box, Text, Group, Select, TextInput, Table, Badge } from "@mantine/core";
 import { IconRefresh } from "@tabler/icons-react";
-import { SAMPLE_LIVE_EVENTS, SAMPLE_LIVE_PROJECTS, NON_OPERATIONAL_CATEGORIES } from "../../data/adminSampleData";
+import { NON_OPERATIONAL_CATEGORIES } from "../../data/adminSampleData";
+
+// Not yet backed by a real domain -- render empty until one is established.
+const LIVE_EVENTS_PLACEHOLDER = [];
+const LIVE_PROJECTS_PLACEHOLDER = [];
 
 function formatTime12h(hhmm) {
   if (!hhmm) return "—";
@@ -16,7 +20,7 @@ export default function AdminLiveDataSection() {
   const [dateFilter, setDateFilter] = useState("");
   const [refreshTick, setRefreshTick] = useState(0);
 
-  const events = SAMPLE_LIVE_EVENTS.filter((e) => {
+  const events = LIVE_EVENTS_PLACEHOLDER.filter((e) => {
     if (!dateFilter) return false;
     if (e.report_date !== dateFilter) return false;
     if (projectFilter !== "all" && e.project !== projectFilter) return false;
@@ -27,13 +31,13 @@ export default function AdminLiveDataSection() {
     <Box>
       <Text fw={700} size="lg" mb={4}>Live Data</Text>
       <Text size="xs" c="dimmed" mb={16}>
-        Read-only feed of operator daily events. Sample data for now — not wired to a real domain yet.
+        Read-only feed of operator daily events. Not wired to a real domain yet.
       </Text>
 
       <Group mb={16} align="flex-end">
         <Select
           label="Project"
-          data={[{ value: "all", label: "All Projects" }, ...SAMPLE_LIVE_PROJECTS.map((p) => ({ value: p, label: p }))]}
+          data={[{ value: "all", label: "All Projects" }, ...LIVE_PROJECTS_PLACEHOLDER.map((p) => ({ value: p, label: p }))]}
           value={projectFilter}
           onChange={(v) => setProjectFilter(v ?? "all")}
           w={220}

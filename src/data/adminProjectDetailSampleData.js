@@ -8,57 +8,6 @@ export const SAMPLE_AREAS = [
   { id: "area-2", name: "South Basin", level: 1, parent_id: null, sort_order: 2, volume_goal_cy: 15000, area_goal_sf: null, active: true },
 ];
 
-export const DELAY_CODE_WORK_TYPES = [
-  "Hydraulic Dredging",
-  "Hydraulic Capping",
-  "Mechanical Dredging",
-  "Mechanical Capping",
-  "Sediment Processing",
-  "Water Treatment",
-];
-
-export const DELAY_CODE_CATEGORY_ORDER = [
-  "General",
-  "Mechanical",
-  "Movement",
-  "Survey/Sample",
-  "Booster/Land Plant",
-  "Land Plant/Processing",
-  "Barge/Material Transport",
-  "Project Specific",
-  "Operational Change",
-  "Misc",
-];
-
-export const SAMPLE_DELAY_CODE_MASTER = [
-  { id: "m-1", work_type: "Hydraulic Dredging", category: "General", code: "Weather Delay", code_num: 100 },
-  { id: "m-2", work_type: "Hydraulic Dredging", category: "General", code: "Safety Meeting", code_num: 101 },
-  { id: "m-3", work_type: "Hydraulic Dredging", category: "Mechanical", code: "Pump Repair", code_num: 200 },
-  { id: "m-4", work_type: "Hydraulic Dredging", category: "Mechanical", code: "Cutterhead Change", code_num: 201 },
-  { id: "m-5", work_type: "Hydraulic Dredging", category: "Movement", code: "Move Dredge", code_num: 300 },
-  { id: "m-6", work_type: "Hydraulic Dredging", category: "Survey/Sample", code: "Bathymetric Survey", code_num: 400 },
-  { id: "m-7", work_type: "Hydraulic Dredging", category: "Booster/Land Plant", code: "Booster Pump Maintenance", code_num: 500 },
-  { id: "m-8", work_type: "Hydraulic Dredging", category: "Operational Change", code: "Change Discharge Area", code_num: 600 },
-  { id: "m-9", work_type: "Hydraulic Capping", category: "General", code: "Weather Delay", code_num: 100 },
-  { id: "m-10", work_type: "Hydraulic Capping", category: "General", code: "Safety Meeting", code_num: 101 },
-  { id: "m-11", work_type: "Hydraulic Capping", category: "Mechanical", code: "Placement Barge Repair", code_num: 210 },
-  { id: "m-12", work_type: "Hydraulic Capping", category: "Movement", code: "Move Placement Barge", code_num: 310 },
-  { id: "m-13", work_type: "Hydraulic Capping", category: "Project Specific", code: "Cap Material Delay", code_num: 700 },
-];
-
-export const SAMPLE_PROJECT_DELAY_CODES = [
-  { id: "p-1", work_type: "Hydraulic Dredging", category: "General", code: "Weather Delay", code_num: 100, active: true },
-  { id: "p-2", work_type: "Hydraulic Dredging", category: "General", code: "Safety Meeting", code_num: 101, active: true },
-  { id: "p-3", work_type: "Hydraulic Dredging", category: "Mechanical", code: "Pump Repair", code_num: 200, active: false },
-  { id: "p-4", work_type: "Hydraulic Dredging", category: "Mechanical", code: "Cutterhead Change", code_num: 201, active: true },
-  { id: "p-5", work_type: "Hydraulic Dredging", category: "Movement", code: "Move Dredge", code_num: 300, active: true },
-  { id: "p-6", work_type: "Hydraulic Capping", category: "General", code: "Weather Delay", code_num: 100, active: true },
-  { id: "p-7", work_type: "Hydraulic Capping", category: "Mechanical", code: "Placement Barge Repair", code_num: 210, active: true },
-  { id: "p-8", work_type: "Hydraulic Capping", category: "Movement", code: "Move Placement Barge", code_num: 310, active: true },
-  { id: "p-9", work_type: "Hydraulic Capping", category: "Project Specific", code: "Cap Material Delay", code_num: 700, active: false },
-  { id: "p-10", work_type: null, category: "Project Specific", code: "Client Site Walk", code_num: 9901, active: true },
-];
-
 export const SAMPLE_LAYER_TYPE_REF = [
   { id: "lt-1", name: "Sand Cap" },
   { id: "lt-2", name: "Armor Stone" },

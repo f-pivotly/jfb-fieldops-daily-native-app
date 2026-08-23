@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { requestNewToken, setAuthToken } from '../helpers/PivotlyHelpers'
+import { requestNewToken, setAuthToken } from '../helpers/pivotlyHelpers'
 
 const IS_LOCAL = true
 

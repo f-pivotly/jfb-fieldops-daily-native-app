@@ -1,19 +1,15 @@
 import { useState } from "react";
 import { Box, Text, Group, Button, Modal, TextInput } from "@mantine/core";
 import { IconPlus, IconAnchor, IconRefresh } from "@tabler/icons-react";
-import { useDomainData } from "../../../hooks/useDomainData";
+import { useEquipment } from "../../../hooks/useEquipment";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import SafeError from "../../../components/SafeError";
 
 export default function EquipmentTab({ project }) {
   const hasProject = !!project?.id;
-  const { records, loading, error, creating, updating, reload, create, update, remove } = useDomainData({
-    domain: "jfb_equipments",
-    system: "core",
-    projectId: project?.id,
-  });
+  const { equipment: equipmentRecords, loading, error, creating, updating, reload, create, update, remove } = useEquipment(project?.id);
 
-  const equipment = hasProject ? records : [];
+  const equipment = hasProject ? equipmentRecords : [];
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editRow, setEditRow] = useState(null);

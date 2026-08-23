@@ -5,7 +5,7 @@ import {
   useMemo,
 } from "react";
 import { api, applyAuthToken, applyAppSlug, fetchCurrentUser } from "../data";
-import { onTokenUpdated, requestNewToken } from "../helpers/PivotlyHelpers";
+import { onTokenUpdated, requestNewToken } from "../helpers/pivotlyHelpers";
 import { AppConfigContext, decodeJwtUser, MSG } from "./appConfigContext";
 
 const CONFIG_HANDSHAKE_TIMEOUT_MS = 3000;

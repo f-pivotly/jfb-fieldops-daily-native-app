@@ -2,7 +2,6 @@ import { Box, Text, SimpleGrid, Table } from "@mantine/core";
 import { useDomainData } from "../../hooks/useDomainData";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import SafeError from "../../components/SafeError";
-import { SAMPLE_ADMIN_KPIS } from "../../data/adminSampleData";
 
 export default function AdminDashboardSection() {
   const { records, loading, error } = useDomainData({ domain: "jfb_projects", system: "core" });
@@ -16,9 +15,9 @@ export default function AdminDashboardSection() {
 
       <SimpleGrid cols={{ base: 2, sm: 4 }} mb={20}>
         <Kpi label="Active Projects" value={loading ? "…" : activeProjects.length} />
-        <Kpi label="Total Operators" value={SAMPLE_ADMIN_KPIS.operators} />
-        <Kpi label="Equipment Units" value={SAMPLE_ADMIN_KPIS.equipment} />
-        <Kpi label="Events Today" value={SAMPLE_ADMIN_KPIS.eventsToday} />
+        <Kpi label="Total Operators" value="—" />
+        <Kpi label="Equipment Units" value="—" />
+        <Kpi label="Events Today" value="—" />
       </SimpleGrid>
 
       <Box style={{ background: "#fff", border: "1px solid #ebebeb", borderRadius: 6, overflow: "hidden" }}>
