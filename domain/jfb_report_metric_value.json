@@ -1,0 +1,106 @@
+{
+  "schema": [
+    {
+      "pii": false,
+      "name": "report_id",
+      "slug": "report_id",
+      "type": "uuid",
+      "label": "Report Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": true,
+        "target_attr": "id",
+        "target_domain": "jfb_reports",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "report_id",
+      "description": "Which day's report this value was entered on. Project scope is inherited through the report.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "metric_id",
+      "slug": "metric_id",
+      "type": "uuid",
+      "label": "Metric Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": true,
+        "target_attr": "id",
+        "target_domain": "jfb_metrics",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "metric_id",
+      "description": "Which jfb_metrics row this value belongs to. One row per (report_id, metric_id) -- app code looks up the existing row for that pair before deciding whether to create or update.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "value",
+      "slug": "value",
+      "type": "numeric",
+      "label": "Value",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "value",
+      "description": "The number a PE typed for this metric on this report's day. Week/Total are computed at read time by summing this column across a project's reports in range -- not stored duplicates (METRICS_MIGRATION_PLAN.md §4 open question 3).",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    }
+  ],
+  "archive": true,
+  "contact": {
+    "name": "System Administrator"
+  },
+  "multi_tenant": false,
+  "xref_enabled": true,
+  "access_control": {
+    "model": "all_systems",
+    "read_access": true,
+    "delete_access": true,
+    "insert_access": true,
+    "update_access": true,
+    "hard_delete_allowed": true,
+    "direct_write_enabled": true
+  },
+  "archive_policy": {
+    "retention_days": 365,
+    "max_record_versions": 10000
+  },
+  "track_versions": true,
+  "domain_table_name": "jfb_report_metric_value",
+  "slug": "jfb_report_metric_value",
+  "domain_name_singular": "jfb_report_metric_value",
+  "default_conflict_resolution": {
+    "code": "lww",
+    "human_readable": "Last Write Wins"
+  }
+}

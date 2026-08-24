@@ -1,0 +1,41 @@
+{
+  "slug": "dvw-jfb-metric-sf",
+  "description": "Sums jfb_production_stats.area (SF) for a project across an inclusive report_date range, optionally scoped to one equipment unit. Backs the 'Total Area Covered' auto metric on the cover-page Metrics tab. Auto metrics are never persisted (see METRICS_MIGRATION_PLAN.md §1) -- app code calls this once per Day/Week/Total column with a different date range rather than storing a result.",
+  "authoring_mode": "direct_sql",
+  "implementation": "function",
+  "direct_sql": "SELECT COALESCE(SUM(ps.area), 0) AS total_area FROM usdf.jfb_production_stats ps JOIN usdf.jfb_reports r ON r.id = ps.report_id WHERE r.project_id = p_project_id AND r.report_date BETWEEN p_start_date AND p_end_date AND (p_equipment_id IS NULL OR ps.equipment_id = p_equipment_id)",
+  "parameters": [
+    {
+      "name": "p_project_id",
+      "type": "uuid",
+      "required": true,
+      "description": "Project to scope the sum to."
+    },
+    {
+      "name": "p_start_date",
+      "type": "date",
+      "required": true,
+      "description": "Inclusive start of the report_date range -- today's date for Day, the week's start for Week, the project's start date (or a very early date) for Total."
+    },
+    {
+      "name": "p_end_date",
+      "type": "date",
+      "required": true,
+      "description": "Inclusive end of the report_date range -- typically the report date being viewed."
+    },
+    {
+      "name": "p_equipment_id",
+      "type": "uuid",
+      "required": false,
+      "default": null,
+      "description": "Optional equipment filter, matching the old app's equipment_filter column. Null (the default) includes all equipment."
+    }
+  ],
+  "columns": [
+    {
+      "name": "total_area",
+      "type": "numeric",
+      "description": "Summed area (SF) across matched production_stats rows; 0 when none match."
+    }
+  ]
+}

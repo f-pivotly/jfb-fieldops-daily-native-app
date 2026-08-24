@@ -97,6 +97,14 @@ export async function fetchPicklistValues(slug) {
   return data?.data ?? data ?? []
 }
 
+// Runs a published data view (usdf.dvw_<slug>) server-side and returns its
+// result rows. Parameter keys must match the data view's declared p_* names
+// exactly (see dataview/*.json).
+export async function executeDataView(slug, parameters) {
+  const { data } = await api.post(`/data-views/${slug}/execute`, { parameters })
+  return data?.data ?? []
+}
+
 // The platform's internal user UUID is NOT any claim on the JWT itself --
 // the backend resolves it server-side (oid/sub/email -> IAM user lookup,
 // see Portal_Independent_Backend's user-context.plugin.ts) and hands it

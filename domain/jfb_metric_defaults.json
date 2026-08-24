@@ -1,0 +1,136 @@
+{
+  "schema": [
+    {
+      "pii": false,
+      "name": "metric_key",
+      "slug": "metric_key",
+      "type": "text",
+      "label": "Metric Key",
+      "unique": true,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "text",
+      "column_name": "metric_key",
+      "description": "Stable machine identifier copied onto a project's jfb_metrics row when a default is applied, e.g. 'total_cy', 'hours_op'. Matches the old app's DEFAULT_METRICS metric_key values (src/types/db.ts). Not the same field as jfb_metric_sources.value -- this identifies the metric row itself, not which computation source it uses.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "label",
+      "slug": "label",
+      "type": "text",
+      "label": "Label",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "text",
+      "column_name": "label",
+      "description": "Default display label, e.g. \"Total Volume Removed\".",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "source",
+      "slug": "source",
+      "type": "text",
+      "label": "Source",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "text",
+      "column_name": "source",
+      "description": "Which jfb_metric_sources.value this default uses, copied onto the project's jfb_metrics row when applied. No picklist binding -- pkl-jfb-metric-source is disabled (GET /picklists/:slug/values doesn't resolve domain_query sources yet; MetricsTab.jsx reads jfb_metric_sources directly instead, see METRICS_MIGRATION_PLAN.md).",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "unit",
+      "slug": "unit",
+      "type": "text",
+      "label": "Unit",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "unit",
+      "description": "Default unit, e.g. 'CY', 'hrs', '%'.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "sort_order",
+      "slug": "sort_order",
+      "type": "integer",
+      "label": "Sort Order",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "integer",
+      "column_name": "sort_order",
+      "description": "Display order when this default set is applied to a project's Metrics tab.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    }
+  ],
+  "archive": true,
+  "contact": {
+    "name": "System Administrator"
+  },
+  "multi_tenant": false,
+  "xref_enabled": true,
+  "access_control": {
+    "model": "all_systems",
+    "read_access": true,
+    "delete_access": true,
+    "insert_access": true,
+    "update_access": true,
+    "hard_delete_allowed": true,
+    "direct_write_enabled": true
+  },
+  "archive_policy": {
+    "retention_days": 365,
+    "max_record_versions": 10000
+  },
+  "track_versions": true,
+  "domain_table_name": "jfb_metric_defaults",
+  "slug": "jfb_metric_defaults",
+  "domain_name_singular": "jfb_metric_default",
+  "default_conflict_resolution": {
+    "code": "lww",
+    "human_readable": "Last Write Wins"
+  }
+}

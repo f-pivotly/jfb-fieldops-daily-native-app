@@ -1,0 +1,211 @@
+{
+  "schema": [
+    {
+      "pii": false,
+      "name": "project_id",
+      "slug": "project_id",
+      "type": "uuid",
+      "label": "Project Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": true,
+        "target_attr": "id",
+        "target_domain": "jfb_projects",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "project_id",
+      "description": "The project this cover-page metric belongs to.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "metric_key",
+      "slug": "metric_key",
+      "type": "text",
+      "label": "Metric Key",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "text",
+      "column_name": "metric_key",
+      "description": "Stable machine identifier for this metric row within its project (e.g. 'total_cy', 'hours_op'). Matches the old app's metric_key values. Copied from jfb_metric_defaults.metric_key when a default is applied, or typed/slugified from the label for a project-specific metric. Not unique across the whole domain (only within one project) since every project can have its own 'total_cy' row.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "label",
+      "slug": "label",
+      "type": "text",
+      "label": "Label",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "text",
+      "column_name": "label",
+      "description": "Display label on the Metrics tab, e.g. \"Total Volume Removed\".",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "source",
+      "slug": "source",
+      "type": "text",
+      "label": "Source",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "text",
+      "column_name": "source",
+      "description": "Which jfb_metric_sources.value this row uses -- 'manual' for a PE-typed value, or a data-view slug (e.g. 'dvw-jfb-metric-cy') for a live-computed one. No picklist binding -- pkl-jfb-metric-source is disabled (GET /picklists/:slug/values doesn't resolve domain_query sources yet; MetricsTab.jsx reads jfb_metric_sources directly instead, see METRICS_MIGRATION_PLAN.md).",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "equipment_id",
+      "slug": "equipment_id",
+      "type": "uuid",
+      "label": "Equipment Id",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": false,
+        "target_attr": "id",
+        "target_domain": "jfb_equipments",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "equipment_id",
+      "description": "Optional per-metric equipment scope for an Auto source (matches the old app's text-based equipment_filter, now a real FK). Null means the metric sums every equipment unit on the project.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "unit",
+      "slug": "unit",
+      "type": "text",
+      "label": "Unit",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "unit",
+      "description": "Display unit (CY, SF, hrs, %). Auto-populated from jfb_metric_sources.unit when source is chosen; editable for a manual metric with no source-driven default.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "sort_order",
+      "slug": "sort_order",
+      "type": "integer",
+      "label": "Sort Order",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "integer",
+      "column_name": "sort_order",
+      "description": "Display order on the Metrics tab.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "active",
+      "slug": "active",
+      "type": "boolean",
+      "label": "Active",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "boolean",
+      "column_name": "active",
+      "description": "Whether this metric row is currently shown on the Metrics tab. False hides it without deleting any historical report_metric_value rows tied to it.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    }
+  ],
+  "archive": true,
+  "contact": {
+    "name": "System Administrator"
+  },
+  "multi_tenant": false,
+  "xref_enabled": true,
+  "access_control": {
+    "model": "all_systems",
+    "read_access": true,
+    "delete_access": true,
+    "insert_access": true,
+    "update_access": true,
+    "hard_delete_allowed": true,
+    "direct_write_enabled": true
+  },
+  "archive_policy": {
+    "retention_days": 365,
+    "max_record_versions": 10000
+  },
+  "track_versions": true,
+  "domain_table_name": "jfb_metrics",
+  "slug": "jfb_metrics",
+  "domain_name_singular": "jfb_metric",
+  "default_conflict_resolution": {
+    "code": "lww",
+    "human_readable": "Last Write Wins"
+  }
+}

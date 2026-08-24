@@ -19,12 +19,27 @@ export function useDomainData({ domain, system, projectId }) {
   const [creating, setCreating] = useState(false)
   const [updating, setUpdating] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const cancelledRef = useRef(false)
-  
+  // Per-request generation counter, not a shared cancelled boolean. A plain
+  // boolean reset to false on every effect re-run can't tell an old in-flight
+  // request apart from a new one -- if projectId starts undefined (project
+  // still loading) then becomes real, the first (unfiltered, all-projects)
+  // fetch can resolve AFTER the second (filtered) one and overwrite its
+  // correct state with the stale unfiltered result, since the boolean got
+  // reset to false again by the newer effect run before the old fetch
+  // resolved. A monotonic generation number closes that window regardless of
+  // resolution order: a response only applies if it's still the latest.
+  const generationRef = useRef(0)
+  const mountedRef = useRef(true)
+  useEffect(() => () => { mountedRef.current = false }, [])
+
   const load = useCallback(() => {
     if (!domain || !system) return Promise.resolve()
-    if (!cancelledRef.current) setLoading(true)
-    if (!cancelledRef.current) setError(null)
+    const generation = ++generationRef.current
+    const isCurrent = () => mountedRef.current && generationRef.current === generation
+    if (isCurrent()) {
+      setLoading(true)
+      setError(null)
+    }
     // fetchDomainRecords defaults to limit: 25 (built for paginated admin
     // tables). Every consumer here expects the FULL (post-filter) set to
     // group/derive client-side, so without an explicit limit, any domain past
@@ -36,20 +51,18 @@ export function useDomainData({ domain, system, projectId }) {
     const filters = projectId ? { project_id: projectId } : undefined
     return fetchDomainRecords({ domain, system, appSlug: config.appSlug, filters, limit: 1000 })
       .then((res) => {
-        if (!cancelledRef.current) setRecords(Array.isArray(res) ? res : (res?.data ?? []))
+        if (isCurrent()) setRecords(Array.isArray(res) ? res : (res?.data ?? []))
       })
       .catch((err) => {
-        if (!cancelledRef.current) setError(err.message)
+        if (isCurrent()) setError(err.message)
       })
       .finally(() => {
-        if (!cancelledRef.current) setLoading(false)
+        if (isCurrent()) setLoading(false)
       })
   }, [domain, system, config.appSlug, projectId])
 
   useEffect(() => {
-    cancelledRef.current = false
     load()
-    return () => { cancelledRef.current = true }
   }, [load])
 
   const create = useCallback(async (recordData) => {

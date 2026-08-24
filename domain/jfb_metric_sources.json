@@ -1,0 +1,178 @@
+{
+  "schema": [
+    {
+      "pii": false,
+      "name": "value",
+      "slug": "value",
+      "type": "text",
+      "label": "Value",
+      "unique": true,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "text",
+      "column_name": "value",
+      "description": "Stored verbatim on jfb_metrics.source when this option is picked. For auto sources this is the data view slug itself (e.g. 'dvw-jfb-metric-cy'), so app code can dispatch straight to usdf.<value> with no separate mapping table. The sentinel row for manual entry uses the literal value 'manual'.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "label",
+      "slug": "label",
+      "type": "text",
+      "label": "Label",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "text",
+      "column_name": "label",
+      "description": "Dropdown display text, e.g. \"Auto · CY from production stats\".",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "unit",
+      "slug": "unit",
+      "type": "text",
+      "label": "Unit",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "unit",
+      "description": "This source's canonical unit (CY, SF, hrs, %). Null for the manual sentinel. Lets app code auto-populate a metric row's unit from its chosen source instead of the PE typing it -- see METRICS_MIGRATION_PLAN.md §4 open question 2.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "sort_order",
+      "slug": "sort_order",
+      "type": "integer",
+      "label": "Sort Order",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "integer",
+      "column_name": "sort_order",
+      "description": "Display order in the source dropdown.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "result_column",
+      "slug": "result_column",
+      "type": "text",
+      "label": "Result Column",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "result_column",
+      "description": "For a data-view-backed source, the column name that data view's function returns (e.g. 'total_volume' for dvw-jfb-metric-cy). Lets app code read the right field off the data view's response without a hardcoded slug-to-column map. Null for the manual sentinel and any source with no data view yet.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "active",
+      "slug": "active",
+      "type": "boolean",
+      "label": "Active",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "boolean",
+      "column_name": "active",
+      "description": "Whether this source is currently selectable. False retires a source (e.g. its data view was unpublished) without deleting history on jfb_metrics rows that already reference it. pkl-jfb-metric-source filters on this being true.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "description",
+      "slug": "description",
+      "type": "text",
+      "label": "Description",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "description",
+      "description": "Optional note surfaced in the dropdown, e.g. a \"pending DB\" caveat for a source with no real data yet.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    }
+  ],
+  "archive": true,
+  "contact": {
+    "name": "System Administrator"
+  },
+  "multi_tenant": false,
+  "xref_enabled": true,
+  "access_control": {
+    "model": "all_systems",
+    "read_access": true,
+    "delete_access": true,
+    "insert_access": true,
+    "update_access": true,
+    "hard_delete_allowed": true,
+    "direct_write_enabled": true
+  },
+  "archive_policy": {
+    "retention_days": 365,
+    "max_record_versions": 10000
+  },
+  "track_versions": true,
+  "domain_table_name": "jfb_metric_sources",
+  "slug": "jfb_metric_sources",
+  "domain_name_singular": "jfb_metric_source",
+  "default_conflict_resolution": {
+    "code": "lww",
+    "human_readable": "Last Write Wins"
+  }
+}

@@ -16,9 +16,15 @@ export default function ReportListPage() {
   const { projectId } = useParams()
   const navigate = useNavigate()
   const { project } = useProject(projectId)
-  const { reports: reportRecords } = useReports(project?.id)
+  // Filter reports by the URL's own projectId, not project?.id -- project?.id
+  // depends on the separate useProject fetch resolving first, which briefly
+  // leaves it undefined on load and fires an unnecessary unfiltered fetch of
+  // every project's reports. projectId is already the right value the whole
+  // time (it's literally in the URL), so there's nothing to wait for.
+  const { reports: reportRecords } = useReports(projectId)
   const reports = reportRecords
     .map((r) => ({
+      id: r.id,
       date: r.report_date,
       day: dayOf(r.report_date),
       status: r.status,
@@ -96,7 +102,7 @@ export default function ReportListPage() {
             </Table.Thead>
             <Table.Tbody>
               {reports.map((r) => (
-                <Table.Tr key={r.date} style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${projectId}/reports/${r.date}`)}>
+                <Table.Tr key={r.id} style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${projectId}/reports/${r.date}`)}>
                   <Table.Td>
                     <Text component={Link} to={`/projects/${projectId}/reports/${r.date}`} fw={500} size="sm">
                       {r.date}

@@ -1,0 +1,41 @@
+{
+  "slug": "dvw-jfb-metric-cy",
+  "description": "Sums jfb_production_stats.volume (CY) for a project across an inclusive report_date range, optionally scoped to one equipment unit. Backs the 'Total Volume Removed' auto metric on the cover-page Metrics tab. Auto metrics are never persisted (see METRICS_MIGRATION_PLAN.md §1) -- app code calls this once per Day/Week/Total column with a different date range rather than storing a result.",
+  "authoring_mode": "direct_sql",
+  "implementation": "function",
+  "direct_sql": "SELECT COALESCE(SUM(ps.volume), 0) AS total_volume FROM usdf.jfb_production_stats ps JOIN usdf.jfb_reports r ON r.id = ps.report_id WHERE r.project_id = p_project_id AND r.report_date BETWEEN p_start_date AND p_end_date AND (p_equipment_id IS NULL OR ps.equipment_id = p_equipment_id)",
+  "parameters": [
+    {
+      "name": "p_project_id",
+      "type": "uuid",
+      "required": true,
+      "description": "Project to scope the sum to."
+    },
+    {
+      "name": "p_start_date",
+      "type": "date",
+      "required": true,
+      "description": "Inclusive start of the report_date range -- today's date for Day, the week's start for Week, the project's start date (or a very early date) for Total."
+    },
+    {
+      "name": "p_end_date",
+      "type": "date",
+      "required": true,
+      "description": "Inclusive end of the report_date range -- typically the report date being viewed."
+    },
+    {
+      "name": "p_equipment_id",
+      "type": "uuid",
+      "required": false,
+      "default": null,
+      "description": "Optional equipment filter, matching the old app's equipment_filter column. Null (the default) includes all equipment."
+    }
+  ],
+  "columns": [
+    {
+      "name": "total_volume",
+      "type": "numeric",
+      "description": "Summed volume (CY) across matched production_stats rows; 0 when none match."
+    }
+  ]
+}
