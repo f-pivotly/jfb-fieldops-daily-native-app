@@ -2,11 +2,13 @@ import { useState } from "react";
 import { Box, Text, Group, Button, Modal, TextInput } from "@mantine/core";
 import { IconPlus, IconAnchor, IconRefresh } from "@tabler/icons-react";
 import { useEquipment } from "../../../hooks/useEquipment";
+import { useConfirmDialog } from "../../../hooks/useConfirmDialog";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import SafeError from "../../../components/SafeError";
 
 export default function EquipmentTab({ project }) {
   const hasProject = !!project?.id;
+  const { confirm, modal: confirmModal } = useConfirmDialog();
   const { equipment: equipmentRecords, loading, error, creating, updating, reload, create, update, remove } = useEquipment(project?.id);
 
   const equipment = hasProject ? equipmentRecords : [];
@@ -39,7 +41,7 @@ export default function EquipmentTab({ project }) {
   }
 
   async function handleRemove(row) {
-    if (!confirm(`Delete "${row.name}"?`)) return;
+    if (!(await confirm(`Delete "${row.name}"?`))) return;
     await remove(row.id);
   }
 
@@ -107,6 +109,8 @@ export default function EquipmentTab({ project }) {
           </Button>
         </Group>
       </Modal>
+
+      {confirmModal}
     </Box>
   );
 }

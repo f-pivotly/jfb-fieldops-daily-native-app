@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Box, Text, Group, Button, Modal, TextInput, NumberInput, Textarea, Checkbox, Stack } from "@mantine/core";
 import { IconPlus, IconFolder, IconRefresh } from "@tabler/icons-react";
+import { useConfirmDialog } from "../../../hooks/useConfirmDialog";
 import { useProjectAreas } from "../../../hooks/useProjectAreas";
 import { useAreaLevels } from "../../../hooks/useAreaLevels";
 import LoadingSpinner from "../../../components/LoadingSpinner";
@@ -10,6 +11,7 @@ const EMPTY_FORM = { name: "", volume_goal_cy: "", area_goal_sf: "", notes: "", 
 
 export default function AreasTab({ project }) {
   const hasProject = !!project?.id;
+  const { confirm, modal: confirmModal } = useConfirmDialog();
   const { areaLevels, loading: levelsLoading, error: levelsError } = useAreaLevels(project?.id);
   const {
     areas, loading: areasLoading, error: areasError,
@@ -85,7 +87,7 @@ export default function AreasTab({ project }) {
   }
 
   async function removeArea(row) {
-    if (!confirm(`Delete "${row.name}"? This also removes its children.`)) return;
+    if (!(await confirm(`Delete "${row.name}"? This also removes its children.`))) return;
     // area_level_id/parent_id have no DB-level cascade -- walk the tree client-side.
     const idsToRemove = new Set([row.id]);
     let changed = true;
@@ -203,6 +205,8 @@ export default function AreasTab({ project }) {
           <Button size="xs" loading={editRow ? updating : creating} onClick={handleSave} disabled={!form.name.trim()} style={{ background: "#0F2744", border: "none" }}>Save</Button>
         </Group>
       </Modal>
+
+      {confirmModal}
     </Box>
   );
 }

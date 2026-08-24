@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Box, Text, Group, Button, Table, Tabs, Modal, TextInput, Select, NumberInput } from "@mantine/core";
 import { IconPlus } from "@tabler/icons-react";
+import { useConfirmDialog } from "../../../hooks/useConfirmDialog";
 import {
   SAMPLE_AREAS,
   SAMPLE_LAYER_TYPE_REF,
@@ -95,6 +96,7 @@ export default function CappingSetupTab() {
 }
 
 function NamedTypeTable({ rows, setRows, typeRef, nameField, typeField, reportNameField, entityLabel }) {
+  const { confirm, modal: confirmModal } = useConfirmDialog();
   const [modalOpen, setModalOpen] = useState(false);
   const [editRow, setEditRow] = useState(null);
   const [form, setForm] = useState({ name: "", type: typeRef[0]?.id ?? "", reportName: "", sortOrder: rows.length + 1 });
@@ -122,8 +124,8 @@ function NamedTypeTable({ rows, setRows, typeRef, nameField, typeField, reportNa
     setModalOpen(false);
   }
 
-  function remove(row) {
-    if (!confirm(`Delete "${row[nameField]}"? Any mappings that use it will also be removed.`)) return;
+  async function remove(row) {
+    if (!(await confirm(`Delete "${row[nameField]}"? Any mappings that use it will also be removed.`))) return;
     setRows((prev) => prev.filter((r) => r.id !== row.id));
   }
 
@@ -166,11 +168,14 @@ function NamedTypeTable({ rows, setRows, typeRef, nameField, typeField, reportNa
           <Button size="xs" onClick={handleSave} disabled={!form.name.trim()} style={{ background: "#0F2744", border: "none" }}>Save</Button>
         </Group>
       </Modal>
+
+      {confirmModal}
     </Box>
   );
 }
 
 function ComponentsTable({ rows, setRows, typeRef }) {
+  const { confirm, modal: confirmModal } = useConfirmDialog();
   const [modalOpen, setModalOpen] = useState(false);
   const [editRow, setEditRow] = useState(null);
   const [form, setForm] = useState({ name: "", type: typeRef[0]?.id ?? "", reportName: "", reportUom: "", invUom: "", sortOrder: rows.length + 1 });
@@ -212,8 +217,8 @@ function ComponentsTable({ rows, setRows, typeRef }) {
     setModalOpen(false);
   }
 
-  function remove(row) {
-    if (!confirm(`Delete "${row.component_name}"? Any mappings that use it will also be removed.`)) return;
+  async function remove(row) {
+    if (!(await confirm(`Delete "${row.component_name}"? Any mappings that use it will also be removed.`))) return;
     setRows((prev) => prev.filter((r) => r.id !== row.id));
   }
 
@@ -261,6 +266,8 @@ function ComponentsTable({ rows, setRows, typeRef }) {
           <Button size="xs" onClick={handleSave} disabled={!form.name.trim()} style={{ background: "#0F2744", border: "none" }}>Save</Button>
         </Group>
       </Modal>
+
+      {confirmModal}
     </Box>
   );
 }

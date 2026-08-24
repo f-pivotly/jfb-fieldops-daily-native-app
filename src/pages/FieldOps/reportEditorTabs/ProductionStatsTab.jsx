@@ -3,6 +3,7 @@ import { Box, Table, Text, TextInput, SimpleGrid } from '@mantine/core'
 import { IconTrash } from '@tabler/icons-react'
 import { useProductionStats } from './hooks/useProductionStats'
 import { useProjectAreas } from '../../../hooks/useProjectAreas'
+import { useConfirmDialog } from '../../../hooks/useConfirmDialog'
 import { FlowStatsPanel, PipeConfigPanel } from './components/FlowStatsPanel'
 import LoadingSpinner from '../../../components/LoadingSpinner'
 import SafeError from '../../../components/SafeError'
@@ -50,6 +51,7 @@ function areaCombo(area, areasById) {
 }
 
 export default function ProductionStatsTab({ project, report, equipment = [], selectedEquipmentId }) {
+  const { confirm, modal: confirmModal } = useConfirmDialog()
   const { stats, loading, error, update, remove, create } = useProductionStats(report?.id)
   const { areas, loading: areasLoading } = useProjectAreas(project?.id)
   const rows = stats.filter((s) => s.equipment_id === selectedEquipmentId)
@@ -107,7 +109,7 @@ export default function ProductionStatsTab({ project, report, equipment = [], se
   }, [report?.id, loading, areasLoading, stats.length, equipment, areas, create])
 
   async function handleDelete(row) {
-    if (!window.confirm('Delete this production stat row?')) return
+    if (!(await confirm('Delete this production stat row?'))) return
     await remove(row.id)
   }
 
@@ -231,6 +233,8 @@ export default function ProductionStatsTab({ project, report, equipment = [], se
           <PipeConfigPanel key={report.report_date} projectId={project.id} reportDateISO={report.report_date} />
         </SimpleGrid>
       )}
+
+      {confirmModal}
     </Box>
   )
 }

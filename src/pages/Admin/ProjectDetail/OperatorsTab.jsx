@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Box, Text, Group, Button, Modal, TextInput, Select, Checkbox, Avatar, SegmentedControl } from "@mantine/core";
 import { IconPlus, IconRefresh } from "@tabler/icons-react";
 import { useDomainData } from "../../../hooks/useDomainData";
+import { useConfirmDialog } from "../../../hooks/useConfirmDialog";
 
 function initials(fullName) {
   return (fullName || "")
@@ -16,6 +17,7 @@ const EMPTY_NEW_OPERATOR = { name: "", email: "" };
 
 export default function OperatorsTab({ project }) {
   const hasProject = !!project?.id;
+  const { confirm, modal: confirmModal } = useConfirmDialog();
 
   const {
     records: allOperators,
@@ -77,7 +79,7 @@ export default function OperatorsTab({ project }) {
   }
 
   async function handleRemove(row) {
-    if (!confirm(`Remove "${row.operator.name}" from this project?`)) return;
+    if (!(await confirm(`Remove "${row.operator.name}" from this project?`))) return;
     await removeLink(row.link.id);
   }
 
@@ -192,6 +194,8 @@ export default function OperatorsTab({ project }) {
           </>
         )}
       </Modal>
+
+      {confirmModal}
     </Box>
   );
 }

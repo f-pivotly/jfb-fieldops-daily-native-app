@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Box, Text, Group, Button, Modal, TextInput, Select, Switch } from "@mantine/core";
 import { IconPlus, IconList, IconRefresh } from "@tabler/icons-react";
 import { useDomainData } from "../../../hooks/useDomainData";
+import { useConfirmDialog } from "../../../hooks/useConfirmDialog";
 import { useDelayCodes } from "../../../hooks/useDelayCodes";
 import { useProjectDelayCodes } from "../../../hooks/useProjectDelayCodes";
 import { useAppConfig } from "../../../contexts/appConfigContext";
@@ -46,6 +47,7 @@ function nextCodeNum() {
 export default function DelayCodesTab({ project }) {
   const hasProject = !!project?.id;
   const { config } = useAppConfig();
+  const { confirm, modal: confirmModal } = useConfirmDialog();
 
   const { records: workTypeRecords } = useDomainData({ domain: "jfb_work_types", system: "core" });
   const {
@@ -153,7 +155,7 @@ export default function DelayCodesTab({ project }) {
   }
 
   async function deleteMasterCode(row) {
-    if (!confirm(`Remove "${row.code}" from the master list? This will not affect existing project codes.`)) return;
+    if (!(await confirm(`Remove "${row.code}" from the master list? This will not affect existing project codes.`))) return;
     await removeMasterCode(row.id);
   }
 
@@ -373,6 +375,8 @@ export default function DelayCodesTab({ project }) {
           </Button>
         </Group>
       </Modal>
+
+      {confirmModal}
     </Box>
   );
 }

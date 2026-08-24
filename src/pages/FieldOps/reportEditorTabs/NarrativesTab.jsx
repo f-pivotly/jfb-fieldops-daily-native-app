@@ -1,7 +1,8 @@
 import { Box, Text, Textarea, Stack, Group, Button, Modal, TextInput, Switch } from '@mantine/core'
 import { useEffect, useRef, useState } from 'react'
-import { IconSettings, IconTrash } from '@tabler/icons-react'
+import { IconSettings, IconTrash, IconRefresh } from '@tabler/icons-react'
 import { useDomainData } from '../../../hooks/useDomainData'
+import { useConfirmDialog } from '../../../hooks/useConfirmDialog'
 import LoadingSpinner from '../../../components/LoadingSpinner'
 import SafeError from '../../../components/SafeError'
 
@@ -32,17 +33,27 @@ export default function NarrativesTab({ project, report }) {
   const hasProject = !!project?.id
   const hasReport = !!report?.id
 
-  const { records, loading, error, create, update, remove } = useDomainData({
+  const { records, loading, error, create, update, remove, reload: reloadSections } = useDomainData({
     domain: 'jfb_project_report_narratives',
     system: 'core',
     projectId: project?.id,
   })
-  const { records: contentRows, create: createContent, update: updateContent } = useDomainData({
+  const { records: contentRows, create: createContent, update: updateContent, reload: reloadContent } = useDomainData({
     domain: 'jfb_report_narratives_v2',
     system: 'core',
     projectId: project?.id,
   })
   const [managerOpen, setManagerOpen] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+
+  async function handleRefresh() {
+    setRefreshing(true)
+    try {
+      await Promise.all([reloadSections(), reloadContent()])
+    } finally {
+      setRefreshing(false)
+    }
+  }
   // Shown when a save is rejected because another user's write landed first
   // (HTTP 409 / FWW_LOCK_REQUIRED) -- see handleSave below.
   const [conflictOpen, setConflictOpen] = useState(false)
@@ -188,7 +199,16 @@ export default function NarrativesTab({ project, report }) {
 
   return (
     <Box>
-      <Group justify="flex-end" mb={12}>
+      <Group justify="flex-end" gap={8} mb={12}>
+        <Button
+          size="xs"
+          variant="default"
+          leftSection={<IconRefresh size={12} />}
+          onClick={() => void handleRefresh()}
+          loading={refreshing}
+        >
+          Refresh
+        </Button>
         <Button
           size="xs"
           variant="default"
@@ -352,6 +372,7 @@ function SaveIndicator({ state }) {
 }
 
 function SectionsManagerDialog({ opened, onClose, project, records, create, update, remove }) {
+  const { confirm, modal: confirmModal } = useConfirmDialog()
   const [newLabel, setNewLabel] = useState('')
   const rows = [...records].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
 
@@ -373,7 +394,7 @@ function SectionsManagerDialog({ opened, onClose, project, records, create, upda
     ])
   }
   async function handleRemove(row) {
-    if (!confirm(`Remove the "${row.narrative_label}" section?`)) return
+    if (!(await confirm(`Remove the "${row.narrative_label}" section?`))) return
     await remove(row.id)
   }
   async function addSection() {
@@ -413,6 +434,8 @@ function SectionsManagerDialog({ opened, onClose, project, records, create, upda
       <Group justify="flex-end" mt={16}>
         <Button size="xs" onClick={onClose} style={{ background: "#0F2744", border: "none" }}>Done</Button>
       </Group>
+
+      {confirmModal}
     </Modal>
   )
 }

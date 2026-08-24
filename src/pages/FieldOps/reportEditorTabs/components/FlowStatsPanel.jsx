@@ -3,6 +3,7 @@ import { Box, Text, TextInput, Group, Button } from '@mantine/core'
 import { IconTrash, IconPlus } from '@tabler/icons-react'
 import { useHydraulicFlowStats } from '../hooks/useHydraulicFlowStats'
 import { useHydraulicPipeConfigurations } from '../hooks/useHydraulicPipeConfigurations'
+import { useConfirmDialog } from '../../../../hooks/useConfirmDialog'
 import LoadingSpinner from '../../../../components/LoadingSpinner'
 import SafeError from '../../../../components/SafeError'
 
@@ -169,6 +170,7 @@ export function FlowStatsPanel({ projectId, equipmentId, reportDateISO }) {
 }
 
 export function PipeConfigPanel({ projectId, reportDateISO }) {
+  const { confirm, modal: confirmModal } = useConfirmDialog()
   const { pipeSegments, loading, error, create, update, remove } = useHydraulicPipeConfigurations(projectId)
   const todaysRows = pipeSegments.filter((r) => dateOnly(r.log_date) === reportDateISO)
 
@@ -228,7 +230,7 @@ export function PipeConfigPanel({ projectId, reportDateISO }) {
   }
 
   async function handleDelete(row) {
-    if (!window.confirm('Remove this pipe segment?')) return
+    if (!(await confirm('Remove this pipe segment?'))) return
     await remove(row.id)
     setCarriedFrom(null)
   }
@@ -279,6 +281,8 @@ export function PipeConfigPanel({ projectId, reportDateISO }) {
         <Text size="xs" fw={700}>Total Length</Text>
         <Text size="sm" fw={700}>{totalLength.toLocaleString('en-US')} ft</Text>
       </Group>
+
+      {confirmModal}
     </Box>
   )
 }

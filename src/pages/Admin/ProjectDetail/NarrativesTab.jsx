@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Box, Text, Group, Button, Table, Modal, TextInput, NumberInput, Checkbox } from "@mantine/core";
 import { IconPlus, IconRefresh } from "@tabler/icons-react";
 import { useDomainData } from "../../../hooks/useDomainData";
+import { useConfirmDialog } from "../../../hooks/useConfirmDialog";
 import { useAppConfig } from "../../../contexts/appConfigContext";
 import { createDomainRecord } from "../../../data";
 import LoadingSpinner from "../../../components/LoadingSpinner";
@@ -16,6 +17,7 @@ function toDateInputValue(iso) {
 export default function NarrativesTab({ project }) {
   const hasProject = !!project?.id;
   const { config } = useAppConfig();
+  const { confirm, modal: confirmModal } = useConfirmDialog();
   const { records, loading, error, creating, updating, reload, create, update, remove } = useDomainData({
     domain: "jfb_project_report_narratives",
     system: "core",
@@ -102,7 +104,7 @@ export default function NarrativesTab({ project }) {
   }
 
   async function handleDelete(row) {
-    if (!confirm(`Permanently delete the "${row.narrative_label}" narrative section?`)) return;
+    if (!(await confirm(`Permanently delete the "${row.narrative_label}" narrative section?`))) return;
     await remove(row.id);
   }
 
@@ -254,6 +256,8 @@ export default function NarrativesTab({ project }) {
           </Button>
         </Group>
       </Modal>
+
+      {confirmModal}
     </Box>
   );
 }
