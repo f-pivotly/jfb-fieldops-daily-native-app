@@ -9,6 +9,7 @@ import { useAppConfig } from "../../../contexts/appConfigContext";
 import { createDomainRecord } from "../../../data";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import SafeError from "../../../components/SafeError";
+import { nextReservedCodeNum } from "../../../constants/delayCodeReservedSlots";
 
 const CATEGORY_ORDER = [
   "General",
@@ -32,16 +33,6 @@ function groupByCategory(list) {
   const known = CATEGORY_ORDER.filter((c) => groups.has(c));
   const unknown = [...groups.keys()].filter((c) => !CATEGORY_ORDER.includes(c)).sort();
   return [...known, ...unknown].map((c) => [c, groups.get(c)]);
-}
-
-// Synthetic code_num range for custom codes added from this tab. Resets each
-// page load -- matches the range the admin app has always used (9900+) but
-// isn't guaranteed unique across sessions; a real allocator would need a
-// server-side sequence against jfb_delay_codes.code_num.
-let syntheticCodeNum = 9900;
-function nextCodeNum() {
-  syntheticCodeNum += 1;
-  return syntheticCodeNum;
 }
 
 export default function DelayCodesTab({ project }) {
@@ -73,6 +64,7 @@ export default function DelayCodesTab({ project }) {
   const [customTarget, setCustomTarget] = useState("project");
   const [customForm, setCustomForm] = useState({ category: "", newCategory: "", code: "", work_type: "" });
   const [loadingMaster, setLoadingMaster] = useState(false);
+  const [customError, setCustomError] = useState(null);
 
   const workTypeNameById = Object.fromEntries(workTypeRecords.map((w) => [w.id, w.name]));
   const workTypeIdByName = Object.fromEntries(workTypeRecords.map((w) => [w.name, w.id]));
@@ -125,29 +117,60 @@ export default function DelayCodesTab({ project }) {
       code: "",
       work_type: target === "master" && masterFilter !== "all" ? masterFilter : workTypeNames[0] ?? "",
     });
+    setCustomError(null);
     setCustomOpen(true);
   }
 
   async function saveCustom() {
     const category = effectiveCategory;
     if (!category || !customForm.code.trim()) return;
+    setCustomError(null);
     if (customTarget === "project") {
       if (!hasProject) return;
+      // A project-specific custom code is numbered against the project's
+      // current phase -- if a project has since moved to a different
+      // work type, there's no picker here (unlike the master-list modal)
+      // to backfill a code under an earlier phase; scoped out for now.
+      const workType = currentPhase;
+      // Union of the global master library (codes not yet loaded into this
+      // project still claim their number) and this project's own codes
+      // (covers project-only custom entries the master list doesn't know
+      // about) -- checking against too much is always safe, only checking
+      // against too little risks a real collision.
+      const usedCodeNums = new Set([
+        ...masterCodes.filter((m) => workTypeNameById[m.work_type_id] === workType).map((m) => m.code_num),
+        ...codes.filter((c) => c.work_type === workType).map((c) => c.code_num),
+      ]);
+      const codeNum = nextReservedCodeNum(workType, usedCodeNums);
+      if (codeNum == null) {
+        setCustomError(`No reserved code numbers left for "${workType}". Contact an admin to expand the range.`);
+        return;
+      }
       await create({
         project_id: project.id,
         delay_code_id: null,
-        work_type_id: null,
+        work_type_id: workTypeIdByName[workType] ?? null,
         category,
         code: customForm.code.trim(),
-        code_num: nextCodeNum(),
+        code_num: codeNum,
         active: true,
       });
     } else {
+      const usedCodeNums = new Set(
+        masterCodes
+          .filter((m) => workTypeNameById[m.work_type_id] === customForm.work_type)
+          .map((m) => m.code_num)
+      );
+      const codeNum = nextReservedCodeNum(customForm.work_type, usedCodeNums);
+      if (codeNum == null) {
+        setCustomError(`No reserved code numbers left for "${customForm.work_type}". Contact an admin to expand the range.`);
+        return;
+      }
       await createMasterCode({
         work_type_id: workTypeIdByName[customForm.work_type] ?? null,
         category,
         code: customForm.code.trim(),
-        code_num: nextCodeNum(),
+        code_num: codeNum,
         active: true,
       });
     }
@@ -329,6 +352,7 @@ export default function DelayCodesTab({ project }) {
       </Modal>
 
       <Modal opened={customOpen} onClose={() => setCustomOpen(false)} title={<Text fw={700} size="sm">Add {customTarget === "master" ? "Master" : "Custom"} Code</Text>} size="sm">
+        <SafeError message={customError} mb={8} />
         <Select
           label="Category"
           placeholder="Choose existing category"
