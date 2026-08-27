@@ -1,0 +1,163 @@
+{
+  "schema": [
+    {
+      "pii": false,
+      "name": "project_id",
+      "slug": "project_id",
+      "type": "uuid",
+      "label": "Project Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": true,
+        "target_attr": "id",
+        "target_domain": "jfb_projects",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "project_id",
+      "description": "The project this weekly summary belongs to.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "week_start",
+      "slug": "week_start",
+      "type": "date",
+      "label": "Week Start",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "date",
+      "column_name": "week_start",
+      "description": "Monday date of the Monday-Sunday production week this summary covers (matches the vanilla app's week convention for this feature -- the sibling Metrics feature uses Sunday-start weeks instead, a different convention, not a bug).",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "section_key",
+      "slug": "section_key",
+      "type": "text",
+      "label": "Section Key",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "text",
+      "column_name": "section_key",
+      "description": "Which narrative section this weekly summary is for (e.g. \"mobilization_demobilization\", \"dredging_operations\") -- matches the project's narrative section config/defaults. One row per (project_id, week_start, section_key); the app is responsible for checking for an existing row before creating a new one, since this platform's domains don't enforce composite-unique constraints.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "content",
+      "slug": "content",
+      "type": "text",
+      "label": "Content",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "content",
+      "description": "The PM's hand-written week-level summary for this section. Not the daily narrative text -- that's read live from jfb_report_narratives_v2 as reference only and never stored here.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "edited_by",
+      "slug": "edited_by",
+      "type": "uuid",
+      "label": "Edited By",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "uuid",
+      "column_name": "edited_by",
+      "description": "Pivotly user id of whoever last saved this section's summary. No fk_config -- there is no local jfb_ domain representing platform users to target.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "edited_at",
+      "slug": "edited_at",
+      "type": "timestamp with time zone",
+      "label": "Edited At",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "timestamp with time zone",
+      "column_name": "edited_at",
+      "description": "When this section's summary was last saved (autosave timestamp).",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    }
+  ],
+  "archive": true,
+  "contact": {
+    "name": "System Administrator"
+  },
+  "multi_tenant": false,
+  "xref_enabled": true,
+  "access_control": {
+    "model": "all_systems",
+    "read_access": true,
+    "delete_access": true,
+    "insert_access": true,
+    "update_access": true,
+    "hard_delete_allowed": true,
+    "direct_write_enabled": true
+  },
+  "archive_policy": {
+    "retention_days": 365,
+    "max_record_versions": 10000
+  },
+  "track_versions": true,
+  "domain_table_name": "jfb_weekly_summaries",
+  "slug": "jfb_weekly_summaries",
+  "domain_name_singular": "jfb_weekly_summary",
+  "default_conflict_resolution": {
+    "code": "lww",
+    "human_readable": "Last Write Wins"
+  }
+}
