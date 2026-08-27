@@ -1,19 +1,17 @@
 import { useState } from "react";
-import { Box, Text, Group, Button, Table, Tabs, Modal, TextInput, Select, NumberInput } from "@mantine/core";
+import { Box, Text, Group, Button, Table, Tabs, Modal, TextInput, Select, NumberInput, Switch } from "@mantine/core";
 import { IconPlus } from "@tabler/icons-react";
 import { useConfirmDialog } from "../../../hooks/useConfirmDialog";
-import {
-  SAMPLE_AREAS,
-  SAMPLE_LAYER_TYPE_REF,
-  SAMPLE_MATERIAL_TYPE_REF,
-  SAMPLE_COMPONENT_TYPE_REF,
-  SAMPLE_PROJECT_LAYERS,
-  SAMPLE_PROJECT_MATERIALS,
-  SAMPLE_PROJECT_COMPONENTS,
-  SAMPLE_AREA_LAYER_MAP,
-  SAMPLE_LAYER_MATERIAL_MAP,
-  SAMPLE_MATERIAL_COMPONENT_MAP,
-} from "../../../data/adminProjectDetailSampleData";
+import { useDomainData } from "../../../hooks/useDomainData";
+import { useProjectAreas } from "../../../hooks/useProjectAreas";
+import { useProjectLayers } from "../../../hooks/useProjectLayers";
+import { useProjectMaterials } from "../../../hooks/useProjectMaterials";
+import { useProjectComponents } from "../../../hooks/useProjectComponents";
+import { useProjectAreaLayers } from "../../../hooks/useProjectAreaLayers";
+import { useProjectLayerMaterials } from "../../../hooks/useProjectLayerMaterials";
+import { useProjectMaterialComponents } from "../../../hooks/useProjectMaterialComponents";
+import LoadingSpinner from "../../../components/LoadingSpinner";
+import SafeError from "../../../components/SafeError";
 
 const UOM_OPTIONS = ["", "Tons", "CY", "Qty"];
 
@@ -28,74 +26,194 @@ function areaPath(areaId, areas) {
   return parts.join(" → ");
 }
 
-export default function CappingSetupTab() {
-  const [layers, setLayers] = useState(SAMPLE_PROJECT_LAYERS);
-  const [materials, setMaterials] = useState(SAMPLE_PROJECT_MATERIALS);
-  const [components, setComponents] = useState(SAMPLE_PROJECT_COMPONENTS);
-  const [areaLayerMap, setAreaLayerMap] = useState(SAMPLE_AREA_LAYER_MAP);
-  const [layerMaterialMap, setLayerMaterialMap] = useState(SAMPLE_LAYER_MATERIAL_MAP);
-  const [materialComponentMap, setMaterialComponentMap] = useState(SAMPLE_MATERIAL_COMPONENT_MAP);
+export default function CappingSetupTab({ project }) {
+  const hasProject = !!project?.id;
+
+  const { records: layerTypeRef, loading: layerTypesLoading, error: layerTypesError } =
+    useDomainData({ domain: "jfb_layer_types", system: "core" });
+  const { records: materialTypeRef, loading: materialTypesLoading, error: materialTypesError } =
+    useDomainData({ domain: "jfb_material_types", system: "core" });
+  const { records: componentTypeRef, loading: componentTypesLoading, error: componentTypesError } =
+    useDomainData({ domain: "jfb_component_types", system: "core" });
+
+  const { areas, loading: areasLoading, error: areasError } = useProjectAreas(project?.id);
+
+  const {
+    layers, loading: layersLoading, error: layersError,
+    creating: creatingLayer, updating: updatingLayer,
+    create: createLayer, update: updateLayer, remove: removeLayer,
+  } = useProjectLayers(project?.id);
+
+  const {
+    materials, loading: materialsLoading, error: materialsError,
+    creating: creatingMaterial, updating: updatingMaterial,
+    create: createMaterial, update: updateMaterial, remove: removeMaterial,
+  } = useProjectMaterials(project?.id);
+
+  const {
+    components, loading: componentsLoading, error: componentsError,
+    creating: creatingComponent, updating: updatingComponent,
+    create: createComponent, update: updateComponent, remove: removeComponent,
+  } = useProjectComponents(project?.id);
+
+  const {
+    areaLayers, loading: areaLayersLoading, error: areaLayersError,
+    creating: creatingAreaLayer, updating: updatingAreaLayer,
+    create: createAreaLayer, update: updateAreaLayer, remove: removeAreaLayer,
+  } = useProjectAreaLayers(project?.id);
+
+  const {
+    layerMaterials, loading: layerMaterialsLoading, error: layerMaterialsError,
+    creating: creatingLayerMaterial, updating: updatingLayerMaterial,
+    create: createLayerMaterial, update: updateLayerMaterial, remove: removeLayerMaterial,
+  } = useProjectLayerMaterials(project?.id);
+
+  const {
+    materialComponents, loading: materialComponentsLoading, error: materialComponentsError,
+    creating: creatingMaterialComponent, updating: updatingMaterialComponent,
+    create: createMaterialComponent, update: updateMaterialComponent, remove: removeMaterialComponent,
+  } = useProjectMaterialComponents(project?.id);
+
+  const loading = layerTypesLoading || materialTypesLoading || componentTypesLoading || areasLoading ||
+    layersLoading || materialsLoading || componentsLoading ||
+    areaLayersLoading || layerMaterialsLoading || materialComponentsLoading;
+  const error = layerTypesError || materialTypesError || componentTypesError || areasError ||
+    layersError || materialsError || componentsError ||
+    areaLayersError || layerMaterialsError || materialComponentsError;
+
+  // fk_config on the mapping domains is lookup_only, not a DB-enforced
+  // constraint -- no cascade happens on its own. Mirror AreasTab.jsx's
+  // client-side cleanup: remove every mapping row that points at this id
+  // before removing the row itself.
+  async function deleteLayerCascade(id) {
+    await Promise.all([
+      ...areaLayers.filter((r) => r.layer_id === id).map((r) => removeAreaLayer(r.id)),
+      ...layerMaterials.filter((r) => r.layer_id === id).map((r) => removeLayerMaterial(r.id)),
+    ]);
+    await removeLayer(id);
+  }
+
+  async function deleteMaterialCascade(id) {
+    await Promise.all([
+      ...layerMaterials.filter((r) => r.material_id === id).map((r) => removeLayerMaterial(r.id)),
+      ...materialComponents.filter((r) => r.material_id === id).map((r) => removeMaterialComponent(r.id)),
+    ]);
+    await removeMaterial(id);
+  }
+
+  async function deleteComponentCascade(id) {
+    await Promise.all(
+      materialComponents.filter((r) => r.component_id === id).map((r) => removeMaterialComponent(r.id))
+    );
+    await removeComponent(id);
+  }
 
   return (
     <Box>
       <Text fw={700} size="sm" mb={12}>Capping Setup</Text>
-      <Tabs defaultValue="layers">
-        <Tabs.List mb={12}>
-          <Tabs.Tab value="layers">Layers</Tabs.Tab>
-          <Tabs.Tab value="materials">Materials</Tabs.Tab>
-          <Tabs.Tab value="components">Components</Tabs.Tab>
-          <Tabs.Tab value="mappings">Mappings &amp; Goals</Tabs.Tab>
-        </Tabs.List>
 
-        <Tabs.Panel value="layers">
-          <NamedTypeTable
-            rows={layers}
-            setRows={setLayers}
-            typeRef={SAMPLE_LAYER_TYPE_REF}
-            nameField="layer_name"
-            typeField="layer_type_id"
-            reportNameField="layer_report_name"
-            entityLabel="Layer"
-          />
-        </Tabs.Panel>
-        <Tabs.Panel value="materials">
-          <NamedTypeTable
-            rows={materials}
-            setRows={setMaterials}
-            typeRef={SAMPLE_MATERIAL_TYPE_REF}
-            nameField="material_name"
-            typeField="material_type_id"
-            reportNameField="material_report_name"
-            entityLabel="Material"
-          />
-        </Tabs.Panel>
-        <Tabs.Panel value="components">
-          <ComponentsTable rows={components} setRows={setComponents} typeRef={SAMPLE_COMPONENT_TYPE_REF} />
-        </Tabs.Panel>
-        <Tabs.Panel value="mappings">
-          <Tabs defaultValue="area-layer">
-            <Tabs.List mb={12}>
-              <Tabs.Tab value="area-layer">Areas → Layers</Tabs.Tab>
-              <Tabs.Tab value="layer-material">Layers → Materials</Tabs.Tab>
-              <Tabs.Tab value="material-component">Materials → Components</Tabs.Tab>
-            </Tabs.List>
-            <Tabs.Panel value="area-layer">
-              <AreaLayerMappings map={areaLayerMap} setMap={setAreaLayerMap} layers={layers} />
-            </Tabs.Panel>
-            <Tabs.Panel value="layer-material">
-              <LayerMaterialMappings map={layerMaterialMap} setMap={setLayerMaterialMap} layers={layers} materials={materials} />
-            </Tabs.Panel>
-            <Tabs.Panel value="material-component">
-              <MaterialComponentMappings map={materialComponentMap} setMap={setMaterialComponentMap} materials={materials} components={components} />
-            </Tabs.Panel>
-          </Tabs>
-        </Tabs.Panel>
-      </Tabs>
+      {loading && <LoadingSpinner py={16} />}
+      {!loading && <SafeError message={error} />}
+      {!loading && !error && !hasProject && (
+        <Text size="xs" c="dimmed" ta="center" py={16}>Select a project to manage its capping setup.</Text>
+      )}
+
+      {!loading && !error && hasProject && (
+        <Tabs defaultValue="layers">
+          <Tabs.List mb={12}>
+            <Tabs.Tab value="layers">Layers</Tabs.Tab>
+            <Tabs.Tab value="materials">Materials</Tabs.Tab>
+            <Tabs.Tab value="components">Components</Tabs.Tab>
+            <Tabs.Tab value="mappings">Mappings &amp; Goals</Tabs.Tab>
+          </Tabs.List>
+
+          <Tabs.Panel value="layers">
+            <NamedTypeTable
+              rows={layers}
+              typeRef={layerTypeRef}
+              nameField="layer_name"
+              typeField="layer_type_id"
+              reportNameField="layer_report_name"
+              entityLabel="Layer"
+              saving={creatingLayer || updatingLayer}
+              onCreate={(payload) => createLayer({ project_id: project.id, ...payload })}
+              onUpdate={updateLayer}
+              onDelete={deleteLayerCascade}
+            />
+          </Tabs.Panel>
+          <Tabs.Panel value="materials">
+            <NamedTypeTable
+              rows={materials}
+              typeRef={materialTypeRef}
+              nameField="material_name"
+              typeField="material_type_id"
+              reportNameField="material_report_name"
+              entityLabel="Material"
+              saving={creatingMaterial || updatingMaterial}
+              onCreate={(payload) => createMaterial({ project_id: project.id, ...payload })}
+              onUpdate={updateMaterial}
+              onDelete={deleteMaterialCascade}
+            />
+          </Tabs.Panel>
+          <Tabs.Panel value="components">
+            <ComponentsTable
+              rows={components}
+              typeRef={componentTypeRef}
+              saving={creatingComponent || updatingComponent}
+              onCreate={(payload) => createComponent({ project_id: project.id, ...payload })}
+              onUpdate={updateComponent}
+              onDelete={deleteComponentCascade}
+            />
+          </Tabs.Panel>
+          <Tabs.Panel value="mappings">
+            <Tabs defaultValue="area-layer">
+              <Tabs.List mb={12}>
+                <Tabs.Tab value="area-layer">Areas → Layers</Tabs.Tab>
+                <Tabs.Tab value="layer-material">Layers → Materials</Tabs.Tab>
+                <Tabs.Tab value="material-component">Materials → Components</Tabs.Tab>
+              </Tabs.List>
+              <Tabs.Panel value="area-layer">
+                <AreaLayerMappings
+                  areas={areas}
+                  layers={layers}
+                  map={areaLayers}
+                  saving={creatingAreaLayer || updatingAreaLayer}
+                  onCreate={(payload) => createAreaLayer({ project_id: project.id, ...payload })}
+                  onUpdate={updateAreaLayer}
+                  onDelete={removeAreaLayer}
+                />
+              </Tabs.Panel>
+              <Tabs.Panel value="layer-material">
+                <LayerMaterialMappings
+                  layers={layers}
+                  materials={materials}
+                  map={layerMaterials}
+                  saving={creatingLayerMaterial || updatingLayerMaterial}
+                  onCreate={(payload) => createLayerMaterial({ project_id: project.id, ...payload })}
+                  onUpdate={updateLayerMaterial}
+                  onDelete={removeLayerMaterial}
+                />
+              </Tabs.Panel>
+              <Tabs.Panel value="material-component">
+                <MaterialComponentMappings
+                  materials={materials}
+                  components={components}
+                  map={materialComponents}
+                  saving={creatingMaterialComponent || updatingMaterialComponent}
+                  onCreate={(payload) => createMaterialComponent({ project_id: project.id, ...payload })}
+                  onUpdate={updateMaterialComponent}
+                  onDelete={removeMaterialComponent}
+                />
+              </Tabs.Panel>
+            </Tabs>
+          </Tabs.Panel>
+        </Tabs>
+      )}
     </Box>
   );
 }
 
-function NamedTypeTable({ rows, setRows, typeRef, nameField, typeField, reportNameField, entityLabel }) {
+function NamedTypeTable({ rows, typeRef, nameField, typeField, reportNameField, entityLabel, saving, onCreate, onUpdate, onDelete }) {
   const { confirm, modal: confirmModal } = useConfirmDialog();
   const [modalOpen, setModalOpen] = useState(false);
   const [editRow, setEditRow] = useState(null);
@@ -113,20 +231,24 @@ function NamedTypeTable({ rows, setRows, typeRef, nameField, typeField, reportNa
     setModalOpen(true);
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!form.name.trim()) return;
-    const payload = { [nameField]: form.name.trim(), [typeField]: form.type, [reportNameField]: form.reportName.trim() || null, sort_order: Number(form.sortOrder) || 0 };
+    const payload = { [nameField]: form.name.trim(), [typeField]: form.type || null, [reportNameField]: form.reportName.trim() || null, sort_order: Number(form.sortOrder) || 0 };
     if (editRow) {
-      setRows((prev) => prev.map((r) => (r.id === editRow.id ? { ...r, ...payload } : r)));
+      await onUpdate(editRow.id, payload);
     } else {
-      setRows((prev) => [...prev, { id: `${entityLabel.toLowerCase()}-${Date.now()}`, active: true, ...payload }]);
+      await onCreate({ ...payload, active: true });
     }
     setModalOpen(false);
   }
 
   async function remove(row) {
     if (!(await confirm(`Delete "${row[nameField]}"? Any mappings that use it will also be removed.`))) return;
-    setRows((prev) => prev.filter((r) => r.id !== row.id));
+    await onDelete(row.id);
+  }
+
+  async function toggleActive(row) {
+    await onUpdate(row.id, { active: !row.active });
   }
 
   const typeName = (id) => typeRef.find((t) => t.id === id)?.name ?? "—";
@@ -138,9 +260,12 @@ function NamedTypeTable({ rows, setRows, typeRef, nameField, typeField, reportNa
       </Group>
       <Table withTableBorder verticalSpacing="xs" fz="sm">
         <Table.Thead>
-          <Table.Tr><Table.Th>Name</Table.Th><Table.Th>Type</Table.Th><Table.Th ta="right">Sort</Table.Th><Table.Th>Report Name</Table.Th><Table.Th style={{ width: 150 }} /></Table.Tr>
+          <Table.Tr><Table.Th>Name</Table.Th><Table.Th>Type</Table.Th><Table.Th ta="right">Sort</Table.Th><Table.Th>Report Name</Table.Th><Table.Th style={{ width: 150 }} /><Table.Th style={{ width: 50 }} /></Table.Tr>
         </Table.Thead>
         <Table.Tbody>
+          {rows.length === 0 && (
+            <Table.Tr><Table.Td colSpan={6}><Text size="xs" c="dimmed" ta="center" py={12}>No {entityLabel.toLowerCase()}s yet</Text></Table.Td></Table.Tr>
+          )}
           {rows.map((r) => (
             <Table.Tr key={r.id}>
               <Table.Td>{r[nameField]}</Table.Td>
@@ -153,6 +278,7 @@ function NamedTypeTable({ rows, setRows, typeRef, nameField, typeField, reportNa
                   <Button size="xs" variant="subtle" color="red" onClick={() => remove(r)}>Delete</Button>
                 </Group>
               </Table.Td>
+              <Table.Td><Switch size="xs" checked={!!r.active} onChange={() => toggleActive(r)} /></Table.Td>
             </Table.Tr>
           ))}
         </Table.Tbody>
@@ -165,7 +291,7 @@ function NamedTypeTable({ rows, setRows, typeRef, nameField, typeField, reportNa
         <TextInput label="Report Name (optional)" placeholder="Defaults to name above" value={form.reportName} onChange={(e) => setForm((f) => ({ ...f, reportName: e.currentTarget.value }))} mb={16} />
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => setModalOpen(false)}>Cancel</Button>
-          <Button size="xs" onClick={handleSave} disabled={!form.name.trim()} style={{ background: "#0F2744", border: "none" }}>Save</Button>
+          <Button size="xs" loading={saving} onClick={handleSave} disabled={!form.name.trim()} style={{ background: "#0F2744", border: "none" }}>Save</Button>
         </Group>
       </Modal>
 
@@ -174,7 +300,7 @@ function NamedTypeTable({ rows, setRows, typeRef, nameField, typeField, reportNa
   );
 }
 
-function ComponentsTable({ rows, setRows, typeRef }) {
+function ComponentsTable({ rows, typeRef, saving, onCreate, onUpdate, onDelete }) {
   const { confirm, modal: confirmModal } = useConfirmDialog();
   const [modalOpen, setModalOpen] = useState(false);
   const [editRow, setEditRow] = useState(null);
@@ -199,27 +325,31 @@ function ComponentsTable({ rows, setRows, typeRef }) {
     setModalOpen(true);
   }
 
-  function handleSave() {
+  async function handleSave() {
     if (!form.name.trim()) return;
     const payload = {
       component_name: form.name.trim(),
-      component_type_id: form.type,
+      component_type_id: form.type || null,
       component_report_name: form.reportName.trim() || null,
       component_report_uom: form.reportUom || null,
       component_inventory_uom: form.invUom || null,
       sort_order: Number(form.sortOrder) || 0,
     };
     if (editRow) {
-      setRows((prev) => prev.map((r) => (r.id === editRow.id ? { ...r, ...payload } : r)));
+      await onUpdate(editRow.id, payload);
     } else {
-      setRows((prev) => [...prev, { id: `component-${Date.now()}`, active: true, ...payload }]);
+      await onCreate({ ...payload, active: true });
     }
     setModalOpen(false);
   }
 
   async function remove(row) {
     if (!(await confirm(`Delete "${row.component_name}"? Any mappings that use it will also be removed.`))) return;
-    setRows((prev) => prev.filter((r) => r.id !== row.id));
+    await onDelete(row.id);
+  }
+
+  async function toggleActive(row) {
+    await onUpdate(row.id, { active: !row.active });
   }
 
   const typeName = (id) => typeRef.find((t) => t.id === id)?.name ?? "—";
@@ -232,9 +362,12 @@ function ComponentsTable({ rows, setRows, typeRef }) {
       </Group>
       <Table withTableBorder verticalSpacing="xs" fz="sm">
         <Table.Thead>
-          <Table.Tr><Table.Th>Name</Table.Th><Table.Th>Type</Table.Th><Table.Th>Report UOM</Table.Th><Table.Th>Inventory UOM</Table.Th><Table.Th style={{ width: 150 }} /></Table.Tr>
+          <Table.Tr><Table.Th>Name</Table.Th><Table.Th>Type</Table.Th><Table.Th>Report UOM</Table.Th><Table.Th>Inventory UOM</Table.Th><Table.Th style={{ width: 150 }} /><Table.Th style={{ width: 50 }} /></Table.Tr>
         </Table.Thead>
         <Table.Tbody>
+          {rows.length === 0 && (
+            <Table.Tr><Table.Td colSpan={6}><Text size="xs" c="dimmed" ta="center" py={12}>No components yet</Text></Table.Td></Table.Tr>
+          )}
           {rows.map((r) => (
             <Table.Tr key={r.id}>
               <Table.Td>{r.component_name}</Table.Td>
@@ -247,6 +380,7 @@ function ComponentsTable({ rows, setRows, typeRef }) {
                   <Button size="xs" variant="subtle" color="red" onClick={() => remove(r)}>Delete</Button>
                 </Group>
               </Table.Td>
+              <Table.Td><Switch size="xs" checked={!!r.active} onChange={() => toggleActive(r)} /></Table.Td>
             </Table.Tr>
           ))}
         </Table.Tbody>
@@ -263,7 +397,7 @@ function ComponentsTable({ rows, setRows, typeRef }) {
         <TextInput label="Report Name (optional)" value={form.reportName} onChange={(e) => setForm((f) => ({ ...f, reportName: e.currentTarget.value }))} mb={16} />
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => setModalOpen(false)}>Cancel</Button>
-          <Button size="xs" onClick={handleSave} disabled={!form.name.trim()} style={{ background: "#0F2744", border: "none" }}>Save</Button>
+          <Button size="xs" loading={saving} onClick={handleSave} disabled={!form.name.trim()} style={{ background: "#0F2744", border: "none" }}>Save</Button>
         </Group>
       </Modal>
 
@@ -272,40 +406,66 @@ function ComponentsTable({ rows, setRows, typeRef }) {
   );
 }
 
-function AreaLayerMappings({ map, setMap, layers }) {
+function AreaLayerMappings({ areas, layers, map, saving, onCreate, onUpdate, onDelete }) {
+  const { confirm, modal: confirmModal } = useConfirmDialog();
   const [modalOpen, setModalOpen] = useState(false);
   const [areaId, setAreaId] = useState(null);
+  const [editRow, setEditRow] = useState(null);
   const [form, setForm] = useState({ layerId: "", minThickness: "", targetThickness: "", overplacement: "", cyGoal: "", tonsGoal: "", sfGoal: "" });
 
   const areaIdsWithMappings = [...new Set(map.map((m) => m.area_id))];
   const layerById = Object.fromEntries(layers.map((l) => [l.id, l]));
 
   function openAdd(id) {
+    setEditRow(null);
     setAreaId(id);
     setForm({ layerId: "", minThickness: "", targetThickness: "", overplacement: "", cyGoal: "", tonsGoal: "", sfGoal: "" });
     setModalOpen(true);
   }
 
-  function handleSave() {
+  function openEdit(row) {
+    setEditRow(row);
+    setAreaId(row.area_id);
+    setForm({
+      layerId: row.layer_id,
+      minThickness: row.min_design_thickness ?? "",
+      targetThickness: row.target_thickness ?? "",
+      overplacement: row.overplacement_tolerance ?? "",
+      cyGoal: row.cy_goal ?? "",
+      tonsGoal: row.tons_goal ?? "",
+      sfGoal: row.sf_goal ?? "",
+    });
+    setModalOpen(true);
+  }
+
+  async function handleSave() {
     if (!form.layerId) return;
-    setMap((prev) => [
-      ...prev,
-      {
-        id: `al-${Date.now()}`,
-        area_id: areaId,
-        layer_id: form.layerId,
-        min_design_thickness: form.minThickness === "" ? null : Number(form.minThickness),
-        target_thickness: form.targetThickness === "" ? null : Number(form.targetThickness),
-        overplacement_tolerance: form.overplacement === "" ? null : Number(form.overplacement),
-        cy_goal: form.cyGoal === "" ? null : Number(form.cyGoal),
-        tons_goal: form.tonsGoal === "" ? null : Number(form.tonsGoal),
-        sf_goal: form.sfGoal === "" ? null : Number(form.sfGoal),
-      },
-    ]);
+    const num = (v) => (v === "" ? null : Number(v));
+    const payload = {
+      layer_id: form.layerId,
+      min_design_thickness: num(form.minThickness),
+      target_thickness: num(form.targetThickness),
+      overplacement_tolerance: num(form.overplacement),
+      cy_goal: num(form.cyGoal),
+      tons_goal: num(form.tonsGoal),
+      sf_goal: num(form.sfGoal),
+    };
+    if (editRow) {
+      await onUpdate(editRow.id, payload);
+    } else {
+      await onCreate({ area_id: areaId, ...payload });
+    }
     setModalOpen(false);
   }
 
-  const availableLayers = (id) => layers.filter((l) => !map.some((m) => m.area_id === id && m.layer_id === l.id));
+  async function remove(row) {
+    if (!(await confirm("Remove this layer from the area?"))) return;
+    await onDelete(row.id);
+  }
+
+  // Exclude layers already mapped to this area -- except the row currently
+  // being edited, so its own layer stays selectable.
+  const availableLayers = (id, excludeRowId) => layers.filter((l) => !map.some((m) => m.area_id === id && m.layer_id === l.id && m.id !== excludeRowId));
 
   return (
     <Box>
@@ -315,20 +475,21 @@ function AreaLayerMappings({ map, setMap, layers }) {
         return (
           <Box key={id} mb={14}>
             <Group justify="space-between" mb={6}>
-              <Text size="xs" fw={700}>{areaPath(id, SAMPLE_AREAS)}</Text>
+              <Text size="xs" fw={700}>{areaPath(id, areas)}</Text>
               <Button size="xs" variant="subtle" leftSection={<IconPlus size={11} />} onClick={() => openAdd(id)}>Add Layer</Button>
             </Group>
             {rows.map((m) => {
               const goal = [m.cy_goal ? `${m.cy_goal.toLocaleString()} CY` : null, m.tons_goal ? `${m.tons_goal.toLocaleString()} Tons` : null, m.sf_goal ? `${m.sf_goal.toLocaleString()} SF` : null].filter(Boolean).join(" · ");
+              const thickness = [m.target_thickness ? `Tgt ${m.target_thickness}"` : null, m.min_design_thickness ? `Min ${m.min_design_thickness}"` : null, m.overplacement_tolerance ? `Over ${m.overplacement_tolerance}"` : null].filter(Boolean).join(" · ");
               return (
                 <Group key={m.id} justify="space-between" p={8} mb={4} style={{ background: "#f5f6f8", border: "1px solid #ebebeb", borderRadius: 6 }}>
-                  <Box>
-                    <Text size="xs" fw={600}>{layerById[m.layer_id]?.layer_name ?? "—"}</Text>
-                    <Text size="10px" c="dimmed">
-                      Tgt {m.target_thickness ?? "—"}" · Min {m.min_design_thickness ?? "—"}" · Over {m.overplacement_tolerance ?? "—"}"
-                    </Text>
-                  </Box>
-                  {goal && <Text size="10px" style={{ background: "#eef2f8", padding: "2px 6px", borderRadius: 3 }}>{goal}</Text>}
+                  <Text size="xs" fw={600}>{layerById[m.layer_id]?.layer_name ?? "—"}</Text>
+                  <Group gap={8} wrap="nowrap">
+                    {goal && <Text size="10px" style={{ background: "#eef2f8", padding: "2px 6px", borderRadius: 3 }}>{goal}</Text>}
+                    {thickness && <Text size="10px" c="dimmed">{thickness}</Text>}
+                    <Button size="xs" variant="subtle" onClick={() => openEdit(m)}>Edit</Button>
+                    <Button size="xs" variant="subtle" color="red" onClick={() => remove(m)}>Remove</Button>
+                  </Group>
                 </Group>
               );
             })}
@@ -336,15 +497,15 @@ function AreaLayerMappings({ map, setMap, layers }) {
         );
       })}
       <Box mt={10}>
-        {SAMPLE_AREAS.filter((a) => !areaIdsWithMappings.includes(a.id)).map((a) => (
+        {areas.filter((a) => !areaIdsWithMappings.includes(a.id)).map((a) => (
           <Button key={a.id} size="xs" variant="subtle" leftSection={<IconPlus size={11} />} onClick={() => openAdd(a.id)} mr={8} mb={6}>
             Map {a.name}
           </Button>
         ))}
       </Box>
 
-      <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">Add Layer Mapping</Text>} size="sm">
-        <Select label="Layer" required data={availableLayers(areaId).map((l) => ({ value: l.id, label: l.layer_name }))} value={form.layerId} onChange={(v) => setForm((f) => ({ ...f, layerId: v ?? "" }))} mb={10} />
+      <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit" : "Add"} Layer Mapping</Text>} size="sm">
+        <Select label="Layer" required data={availableLayers(areaId, editRow?.id).map((l) => ({ value: l.id, label: l.layer_name }))} value={form.layerId} onChange={(v) => setForm((f) => ({ ...f, layerId: v ?? "" }))} mb={10} />
         <Group grow mb={10}>
           <NumberInput label='Min Thickness (in)' hideControls value={form.minThickness} onChange={(v) => setForm((f) => ({ ...f, minThickness: v }))} />
           <NumberInput label='Target Thickness (in)' hideControls value={form.targetThickness} onChange={(v) => setForm((f) => ({ ...f, targetThickness: v }))} />
@@ -357,32 +518,64 @@ function AreaLayerMappings({ map, setMap, layers }) {
         </Group>
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => setModalOpen(false)}>Cancel</Button>
-          <Button size="xs" onClick={handleSave} disabled={!form.layerId} style={{ background: "#0F2744", border: "none" }}>Save</Button>
+          <Button size="xs" loading={saving} onClick={handleSave} disabled={!form.layerId} style={{ background: "#0F2744", border: "none" }}>Save</Button>
         </Group>
       </Modal>
+
+      {confirmModal}
     </Box>
   );
 }
 
-function LayerMaterialMappings({ map, setMap, layers, materials }) {
+function LayerMaterialMappings({ layers, materials, map, saving, onCreate, onUpdate, onDelete }) {
+  const { confirm, modal: confirmModal } = useConfirmDialog();
   const [modalOpen, setModalOpen] = useState(false);
   const [layerId, setLayerId] = useState(null);
+  const [editRow, setEditRow] = useState(null);
   const [form, setForm] = useState({ materialId: "", loadingRate: "", reportName: "" });
   const materialById = Object.fromEntries(materials.map((m) => [m.id, m]));
 
   function openAdd(id) {
+    setEditRow(null);
     setLayerId(id);
     setForm({ materialId: "", loadingRate: "", reportName: "" });
     setModalOpen(true);
   }
 
-  function handleSave() {
+  function openEdit(row) {
+    setEditRow(row);
+    setLayerId(row.layer_id);
+    setForm({
+      materialId: row.material_id,
+      loadingRate: row.loading_rate ?? "",
+      reportName: row.layer_material_report_name ?? "",
+    });
+    setModalOpen(true);
+  }
+
+  async function handleSave() {
     if (!form.materialId) return;
-    setMap((prev) => [...prev, { id: `lm-${Date.now()}`, layer_id: layerId, material_id: form.materialId, loading_rate: form.loadingRate === "" ? null : Number(form.loadingRate), layer_material_report_name: form.reportName.trim() || null }]);
+    const payload = {
+      material_id: form.materialId,
+      loading_rate: form.loadingRate === "" ? null : Number(form.loadingRate),
+      layer_material_report_name: form.reportName.trim() || null,
+    };
+    if (editRow) {
+      await onUpdate(editRow.id, payload);
+    } else {
+      await onCreate({ layer_id: layerId, ...payload });
+    }
     setModalOpen(false);
   }
 
-  const availableMaterials = (id) => materials.filter((m) => !map.some((x) => x.layer_id === id && x.material_id === m.id));
+  async function remove(row) {
+    if (!(await confirm("Remove this material from the layer?"))) return;
+    await onDelete(row.id);
+  }
+
+  // Exclude materials already mapped to this layer -- except the row
+  // currently being edited, so its own material stays selectable.
+  const availableMaterials = (id, excludeRowId) => materials.filter((m) => !map.some((x) => x.layer_id === id && x.material_id === m.id && x.id !== excludeRowId));
 
   return (
     <Box>
@@ -398,45 +591,79 @@ function LayerMaterialMappings({ map, setMap, layers, materials }) {
             {rows.map((m) => (
               <Group key={m.id} justify="space-between" p={8} mb={4} style={{ background: "#f5f6f8", border: "1px solid #ebebeb", borderRadius: 6 }}>
                 <Text size="xs" fw={600}>{materialById[m.material_id]?.material_name ?? "—"}{m.layer_material_report_name ? ` (${m.layer_material_report_name})` : ""}</Text>
-                {m.loading_rate != null && <Text size="10px" c="dimmed">{m.loading_rate} tons/hr</Text>}
+                <Group gap={8} wrap="nowrap">
+                  {m.loading_rate != null && <Text size="10px" c="dimmed">{m.loading_rate} tons/hr</Text>}
+                  <Button size="xs" variant="subtle" onClick={() => openEdit(m)}>Edit</Button>
+                  <Button size="xs" variant="subtle" color="red" onClick={() => remove(m)}>Remove</Button>
+                </Group>
               </Group>
             ))}
           </Box>
         );
       })}
 
-      <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">Add Material Mapping</Text>} size="sm">
-        <Select label="Material" required data={availableMaterials(layerId).map((m) => ({ value: m.id, label: m.material_name }))} value={form.materialId} onChange={(v) => setForm((f) => ({ ...f, materialId: v ?? "" }))} mb={10} />
+      <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit" : "Add"} Material Mapping</Text>} size="sm">
+        <Select label="Material" required data={availableMaterials(layerId, editRow?.id).map((m) => ({ value: m.id, label: m.material_name }))} value={form.materialId} onChange={(v) => setForm((f) => ({ ...f, materialId: v ?? "" }))} mb={10} />
         <NumberInput label="Loading Rate (tons/hr, optional)" hideControls value={form.loadingRate} onChange={(v) => setForm((f) => ({ ...f, loadingRate: v }))} mb={10} />
         <TextInput label="Report Name Override (optional)" value={form.reportName} onChange={(e) => setForm((f) => ({ ...f, reportName: e.currentTarget.value }))} mb={16} />
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => setModalOpen(false)}>Cancel</Button>
-          <Button size="xs" onClick={handleSave} disabled={!form.materialId} style={{ background: "#0F2744", border: "none" }}>Save</Button>
+          <Button size="xs" loading={saving} onClick={handleSave} disabled={!form.materialId} style={{ background: "#0F2744", border: "none" }}>Save</Button>
         </Group>
       </Modal>
+
+      {confirmModal}
     </Box>
   );
 }
 
-function MaterialComponentMappings({ map, setMap, materials, components }) {
+function MaterialComponentMappings({ materials, components, map, saving, onCreate, onUpdate, onDelete }) {
+  const { confirm, modal: confirmModal } = useConfirmDialog();
   const [modalOpen, setModalOpen] = useState(false);
   const [materialId, setMaterialId] = useState(null);
+  const [editRow, setEditRow] = useState(null);
   const [form, setForm] = useState({ componentId: "", percent: "" });
   const componentById = Object.fromEntries(components.map((c) => [c.id, c]));
 
   function openAdd(id) {
+    setEditRow(null);
     setMaterialId(id);
     setForm({ componentId: "", percent: "" });
     setModalOpen(true);
   }
 
-  function handleSave() {
+  function openEdit(row) {
+    setEditRow(row);
+    setMaterialId(row.material_id);
+    setForm({
+      componentId: row.component_id,
+      percent: row.component_percent_of_material ?? "",
+    });
+    setModalOpen(true);
+  }
+
+  async function handleSave() {
     if (!form.componentId) return;
-    setMap((prev) => [...prev, { id: `mc-${Date.now()}`, material_id: materialId, component_id: form.componentId, component_percent_of_material: form.percent === "" ? null : Number(form.percent) }]);
+    const payload = {
+      component_id: form.componentId,
+      component_percent_of_material: form.percent === "" ? null : Number(form.percent),
+    };
+    if (editRow) {
+      await onUpdate(editRow.id, payload);
+    } else {
+      await onCreate({ material_id: materialId, ...payload });
+    }
     setModalOpen(false);
   }
 
-  const availableComponents = (id) => components.filter((c) => !map.some((x) => x.material_id === id && x.component_id === c.id));
+  async function remove(row) {
+    if (!(await confirm("Remove this component from the material?"))) return;
+    await onDelete(row.id);
+  }
+
+  // Exclude components already mapped to this material -- except the row
+  // currently being edited, so its own component stays selectable.
+  const availableComponents = (id, excludeRowId) => components.filter((c) => !map.some((x) => x.material_id === id && x.component_id === c.id && x.id !== excludeRowId));
 
   return (
     <Box>
@@ -456,21 +683,27 @@ function MaterialComponentMappings({ map, setMap, materials, components }) {
             {rows.map((m) => (
               <Group key={m.id} justify="space-between" p={8} mb={4} style={{ background: "#f5f6f8", border: "1px solid #ebebeb", borderRadius: 6 }}>
                 <Text size="xs" fw={600}>{componentById[m.component_id]?.component_name ?? "—"}</Text>
-                {m.component_percent_of_material != null && <Text size="10px" c="dimmed">{m.component_percent_of_material}%</Text>}
+                <Group gap={8} wrap="nowrap">
+                  {m.component_percent_of_material != null && <Text size="10px" c="dimmed">{m.component_percent_of_material}%</Text>}
+                  <Button size="xs" variant="subtle" onClick={() => openEdit(m)}>Edit</Button>
+                  <Button size="xs" variant="subtle" color="red" onClick={() => remove(m)}>Remove</Button>
+                </Group>
               </Group>
             ))}
           </Box>
         );
       })}
 
-      <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">Add Component Mapping</Text>} size="sm">
-        <Select label="Component" required data={availableComponents(materialId).map((c) => ({ value: c.id, label: c.component_name }))} value={form.componentId} onChange={(v) => setForm((f) => ({ ...f, componentId: v ?? "" }))} mb={10} />
+      <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit" : "Add"} Component Mapping</Text>} size="sm">
+        <Select label="Component" required data={availableComponents(materialId, editRow?.id).map((c) => ({ value: c.id, label: c.component_name }))} value={form.componentId} onChange={(v) => setForm((f) => ({ ...f, componentId: v ?? "" }))} mb={10} />
         <NumberInput label="% of Material (optional)" hideControls min={0} max={100} value={form.percent} onChange={(v) => setForm((f) => ({ ...f, percent: v }))} mb={16} />
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => setModalOpen(false)}>Cancel</Button>
-          <Button size="xs" onClick={handleSave} disabled={!form.componentId} style={{ background: "#0F2744", border: "none" }}>Save</Button>
+          <Button size="xs" loading={saving} onClick={handleSave} disabled={!form.componentId} style={{ background: "#0F2744", border: "none" }}>Save</Button>
         </Group>
       </Modal>
+
+      {confirmModal}
     </Box>
   );
 }

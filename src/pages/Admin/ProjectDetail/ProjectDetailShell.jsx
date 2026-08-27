@@ -26,7 +26,7 @@ export default function ProjectDetailShell({ project, onBack }) {
         {[project?.project_code, project?.client_name, project?.work_type].filter(Boolean).join(" · ") || "—"}
       </Text>
       <Text size="10px" c="dimmed" mb={16}>
-        Areas, Equipment, Delay Codes, and Operators are live.
+        Areas, Equipment, Delay Codes, Operators, and Capping Setup are live.
       </Text>
 
       <Tabs value={tab} onChange={setTab}>
@@ -42,7 +42,7 @@ export default function ProjectDetailShell({ project, onBack }) {
         <Tabs.Panel value="equipment"><EquipmentTab project={project} /></Tabs.Panel>
         <Tabs.Panel value="delaycodes"><DelayCodesTab project={project} /></Tabs.Panel>
         <Tabs.Panel value="operators"><OperatorsTab project={project} /></Tabs.Panel>
-        {isCapping && <Tabs.Panel value="capping"><CappingSetupTab /></Tabs.Panel>}
+        {isCapping && <Tabs.Panel value="capping"><CappingSetupTab project={project} /></Tabs.Panel>}
       </Tabs>
     </Box>
   );
