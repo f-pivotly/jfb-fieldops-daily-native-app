@@ -8,9 +8,10 @@ import { usePicklist } from '../../../hooks/usePicklist'
 import { useDelayCodes } from '../../../hooks/useDelayCodes'
 import { useProjectDelayCodes } from '../../../hooks/useProjectDelayCodes'
 
-// jfb_daily_activities still has no tsca/source fields, so those two columns
-// have nothing real to show yet — flagged rather than faked. Category/Area/
-// Pass/Notes are real now (delay_code_id, area jsonb, pass_type, notes).
+// jfb_daily_activities still has no source field, so that column has
+// nothing real to show yet — flagged rather than faked. Category/Area/
+// Pass/Notes/TSCA are real now (delay_code_id, area jsonb, pass_type,
+// notes, tsca — tsca added 2026-08-27).
 const SAMPLE = '(sampleData)'
 
 // A jfb_project_delay_codes row either points at a master code (category/code
@@ -26,6 +27,12 @@ function resolveDelayCode(delayCodeId, projectDelayCodeById, masterDelayCodeById
     category: master ? master.category : row.category,
     code: master ? master.code : row.code,
   }
+}
+
+function tscaLabel(tsca) {
+  if (tsca === true) return 'Yes'
+  if (tsca === false) return 'No'
+  return '—'
 }
 
 // area is a jsonb breadcrumb ({area_id, sub_area_id, sub_sub_area_id}) since a
@@ -226,7 +233,7 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
               <Table.Td>{delayCode?.code ?? '—'}</Table.Td>
               <Table.Td>{resolveArea(e.area, areaNameById)}</Table.Td>
               <Table.Td>{e.pass_type ? (passTypeLabels[e.pass_type] ?? e.pass_type) : '—'}</Table.Td>
-              <Table.Td c="dimmed">{SAMPLE}</Table.Td>
+              <Table.Td>{tscaLabel(e.tsca)}</Table.Td>
               <Table.Td>{operators.find((o) => o.id === e.operator_id)?.name ?? '—'}</Table.Td>
               <Table.Td>{e.notes || '—'}</Table.Td>
               <Table.Td c="dimmed">{SAMPLE}</Table.Td>
@@ -247,11 +254,10 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
       </Table>
 
       {/* Insert modal — From/To/Operator are the only fields collected here.
-          Category/Area/Pass/Notes now have real columns (populated from the
-          field app's own tap/selection), but this admin form doesn't offer
-          setting them manually -- it's for correcting time ranges, not
-          authoring a delay/production event from scratch. TSCA still has no
-          column at all. */}
+          Category/Area/Pass/Notes/TSCA now have real columns (populated from
+          the field app's own tap/selection), but this admin form doesn't
+          offer setting them manually -- it's for correcting time ranges, not
+          authoring a delay/production event from scratch. */}
       <Modal key={insertKey} opened={insertOpen} onClose={() => setInsertOpen(false)} title={<Text fw={700} size="sm">Insert Event</Text>} size="sm">
         <Group grow mb={10}>
           <TextInput label="From" type="time" value={form.from} onChange={(e) => setField('from', e.currentTarget.value)} />

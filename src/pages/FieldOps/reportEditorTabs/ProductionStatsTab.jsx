@@ -28,6 +28,12 @@ function num(v, digits) {
   return Number.isFinite(n) ? Number(n.toFixed(digits)) : null
 }
 
+function tscaLabel(tsca) {
+  if (tsca === true) return 'Yes'
+  if (tsca === false) return 'No'
+  return '—'
+}
+
 // Areas form a tree via parent_id (jfb_project_areas). A "leaf" area is one
 // nothing else points at as a parent -- the deepest, most specific place
 // production actually happens. Using every area (not just leaves) would
@@ -161,7 +167,7 @@ export default function ProductionStatsTab({ project, report, equipment = [], se
                 <Table.Td>{comboAt(r.area_level_combinations, 1)}</Table.Td>
                 <Table.Td>{comboAt(r.area_level_combinations, 2)}</Table.Td>
                 <Table.Td c="dimmed">{r.pass_value || '—'}</Table.Td>
-                <Table.Td c="dimmed">{r.tsca ? 'Yes' : '—'}</Table.Td>
+                <Table.Td c="dimmed">{tscaLabel(r.tsca)}</Table.Td>
                 <Table.Td ta="right" c="dimmed">—</Table.Td>
                 <Table.Td ta="right" c="dimmed">—</Table.Td>
                 <Table.Td>

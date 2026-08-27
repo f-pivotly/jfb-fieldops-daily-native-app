@@ -230,6 +230,27 @@
     },
     {
       "pii": false,
+      "name": "tsca",
+      "slug": "tsca",
+      "type": "boolean",
+      "label": "Tsca",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "boolean",
+      "column_name": "tsca",
+      "description": "The TSCA (≥50 ppm PCB) contamination flag for this activity's area, matching the non-native app's daily_events.tsca. Set by the PE when inserting or editing an event in the field ops report app.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
       "name": "delay_code_id",
       "slug": "delay_code_id",
       "type": "uuid",
