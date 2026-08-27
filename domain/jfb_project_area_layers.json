@@ -1,0 +1,238 @@
+{
+  "schema": [
+    {
+      "pii": false,
+      "name": "project_id",
+      "slug": "project_id",
+      "type": "uuid",
+      "label": "Project Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": true,
+        "target_attr": "id",
+        "target_domain": "jfb_projects",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "project_id",
+      "description": "Owning project. Denormalized (rather than resolved through area_id -> jfb_project_areas) so every area/layer mapping for a project loads in one filtered query, matching this app's useDomainData({ projectId }) convention.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "area_id",
+      "slug": "area_id",
+      "type": "uuid",
+      "label": "Area Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": true,
+        "target_attr": "id",
+        "target_domain": "jfb_project_areas",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "area_id",
+      "description": "The area this layer is mapped to.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "layer_id",
+      "slug": "layer_id",
+      "type": "uuid",
+      "label": "Layer Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": true,
+        "target_attr": "id",
+        "target_domain": "jfb_project_layers",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "layer_id",
+      "description": "The layer mapped to that area.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "min_design_thickness",
+      "slug": "min_design_thickness",
+      "type": "numeric",
+      "label": "Min Design Thickness",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "min_design_thickness",
+      "description": "Minimum design thickness (inches) for this layer in this area.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "target_thickness",
+      "slug": "target_thickness",
+      "type": "numeric",
+      "label": "Target Thickness",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "target_thickness",
+      "description": "Target placement thickness (inches) for this layer in this area.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "overplacement_tolerance",
+      "slug": "overplacement_tolerance",
+      "type": "numeric",
+      "label": "Overplacement Tolerance",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "overplacement_tolerance",
+      "description": "Allowed overplacement tolerance (inches) above target thickness.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "cy_goal",
+      "slug": "cy_goal",
+      "type": "numeric",
+      "label": "Cy Goal",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "cy_goal",
+      "description": "Design quantity goal in cubic yards for this layer in this area.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "tons_goal",
+      "slug": "tons_goal",
+      "type": "numeric",
+      "label": "Tons Goal",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "tons_goal",
+      "description": "Design quantity goal in tons for this layer in this area.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "sf_goal",
+      "slug": "sf_goal",
+      "type": "numeric",
+      "label": "Sf Goal",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "sf_goal",
+      "description": "Design quantity goal in square feet for this layer in this area.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    }
+  ],
+  "archive": true,
+  "contact": {
+    "name": "System Administrator"
+  },
+  "multi_tenant": false,
+  "xref_enabled": true,
+  "access_control": {
+    "model": "all_systems",
+    "read_access": true,
+    "delete_access": true,
+    "insert_access": true,
+    "update_access": true,
+    "hard_delete_allowed": true,
+    "direct_write_enabled": true
+  },
+  "archive_policy": {
+    "retention_days": 365,
+    "max_record_versions": 10000
+  },
+  "track_versions": true,
+  "domain_table_name": "jfb_project_area_layers",
+  "slug": "jfb_project_area_layers",
+  "domain_name_singular": "jfb_project_area_layer",
+  "default_conflict_resolution": {
+    "code": "lww",
+    "human_readable": "Last Write Wins"
+  }
+}
