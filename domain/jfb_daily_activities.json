@@ -302,6 +302,33 @@
         "code": "lww"
       },
       "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "layer_id",
+      "slug": "layer_id",
+      "type": "uuid",
+      "label": "Layer Id",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": false,
+        "target_attr": "id",
+        "target_domain": "jfb_project_layers",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "layer_id",
+      "description": "Which capping layer was being placed during this activity. Null on dredging projects and on single-layer capping projects (the layer is implicit there). Matches the non-native app's daily_events.layer_id.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
     }
   ],
   "archive": true,

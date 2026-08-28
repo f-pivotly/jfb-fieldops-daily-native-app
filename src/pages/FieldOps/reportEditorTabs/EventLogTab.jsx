@@ -7,11 +7,14 @@ import { useProjectAreas } from '../../../hooks/useProjectAreas'
 import { usePicklist } from '../../../hooks/usePicklist'
 import { useDelayCodes } from '../../../hooks/useDelayCodes'
 import { useProjectDelayCodes } from '../../../hooks/useProjectDelayCodes'
+import { useProjectAttachments } from '../../../hooks/useProjectAttachments'
+import { useProjectLayers } from '../../../hooks/useProjectLayers'
 
 // jfb_daily_activities still has no source field, so that column has
-// nothing real to show yet — flagged rather than faked. Category/Area/
-// Pass/Notes/TSCA are real now (delay_code_id, area jsonb, pass_type,
-// notes, tsca — tsca added 2026-08-27).
+// nothing real to show yet — flagged rather than faked. Everything else
+// (delay_code_id, area jsonb, pass_type, attachment_id, tsca, layer_id,
+// notes) is real and, as of this pass, collectible through Insert/Edit —
+// layer_id added 2026-08-27 alongside this form update.
 const SAMPLE = '(sampleData)'
 
 // A jfb_project_delay_codes row either points at a master code (category/code
@@ -46,7 +49,21 @@ function resolveArea(area, areaNameById) {
   return parts.length ? parts.join(' / ') : '—'
 }
 
-const EMPTY_FORM = { from: '', to: '', operatorId: null }
+// '' is the Select's own "no value" sentinel (Mantine Select can't take null
+// as a controlled value) -- normalized to real null right before saving.
+const EMPTY_FORM = {
+  from: '',
+  to: '',
+  operatorId: null,
+  delayCodeId: '',
+  areaId: '',
+  subAreaId: '',
+  subSubAreaId: '',
+  passType: '',
+  attachmentId: '',
+  tsca: '',
+  layerId: '',
+}
 
 function hhmm(iso) {
   if (!iso) return ''
@@ -90,18 +107,76 @@ function findGaps(sortedEvents) {
   return gaps
 }
 
+// area_id/sub_area_id/sub_sub_area_id -> the jsonb breadcrumb shape saved on
+// jfb_daily_activities.area, omitting keys the cascade didn't reach.
+function buildAreaJson(areaId, subAreaId, subSubAreaId) {
+  if (!areaId) return null
+  const out = { area_id: areaId }
+  if (subAreaId) out.sub_area_id = subAreaId
+  if (subSubAreaId) out.sub_sub_area_id = subSubAreaId
+  return out
+}
+
+function tscaFromForm(v) {
+  if (v === 'yes') return true
+  if (v === 'no') return false
+  return null
+}
+function tscaToForm(v) {
+  if (v === true) return 'yes'
+  if (v === false) return 'no'
+  return ''
+}
+
+function payloadFromForm(f) {
+  return {
+    operator_id: f.operatorId,
+    delay_code_id: f.delayCodeId === '__operational__' || f.delayCodeId === '' ? null : f.delayCodeId,
+    area: buildAreaJson(f.areaId || null, f.subAreaId || null, f.subSubAreaId || null),
+    pass_type: f.passType || null,
+    attachment_id: f.attachmentId || null,
+    tsca: tscaFromForm(f.tsca),
+    layer_id: f.layerId || null,
+  }
+}
+
 export default function EventLogTab({ project, report, equipment = [], selectedEquipmentId }) {
   const eventDate = report?.report_date
   const { events, create, update, remove } = useEvents(project?.id, eventDate)
   const { operators } = useOperators(project?.id)
   const { areas } = useProjectAreas(project?.id)
-  const { labels: passTypeLabels } = usePicklist('pkl-jfb-pass-type')
+  const { labels: passTypeLabels, values: passTypeValues } = usePicklist('pkl-jfb-pass-type')
   const { delayCodes: masterDelayCodes } = useDelayCodes()
   const { projectDelayCodes } = useProjectDelayCodes(project?.id)
+  const { attachments } = useProjectAttachments(project?.id)
+  const { layers } = useProjectLayers(project?.id)
 
   const areaNameById = new Map(areas.map((a) => [a.id, a.name]))
   const masterDelayCodeById = new Map(masterDelayCodes.map((m) => [m.id, m]))
   const projectDelayCodeById = new Map(projectDelayCodes.map((r) => [r.id, r]))
+
+  // Area cascade: level 1 = no parent; level 2/3 = children of the level above.
+  const l1Areas = areas.filter((a) => !a.parent_id)
+  const l2AreasFor = (l1Id) => areas.filter((a) => a.parent_id === l1Id)
+  const l3AreasFor = (l2Id) => areas.filter((a) => a.parent_id === l2Id)
+
+  // Category options: a synthetic "Operational" choice (delay_code_id = null,
+  // i.e. productive time -- see useGohNoh.js's same convention) plus every
+  // active project delay code, grouped the same way DelayCodesTab shows them.
+  const delayCodeOptions = [
+    { group: 'Operational', items: [{ value: '__operational__', label: 'Operational (no delay)' }] },
+    {
+      group: 'Delay',
+      items: projectDelayCodes
+        .filter((r) => r.active !== false)
+        .map((r) => {
+          const resolved = resolveDelayCode(r.id, projectDelayCodeById, masterDelayCodeById)
+          return { value: r.id, label: resolved?.code ?? '(unnamed)' }
+        }),
+    },
+  ]
+
+  const multiLayer = layers.length > 1
 
   const sorted = events
     .filter((e) => e.equipment_id === selectedEquipmentId)
@@ -117,6 +192,14 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
 
   function setField(key, value) {
     setForm((f) => ({ ...f, [key]: value }))
+  }
+
+  // Changing a higher area level clears the levels below it, same as the
+  // non-native cascade.
+  function setAreaLevel(level, value) {
+    if (level === 1) setForm((f) => ({ ...f, areaId: value, subAreaId: '', subSubAreaId: '' }))
+    else if (level === 2) setForm((f) => ({ ...f, subAreaId: value, subSubAreaId: '' }))
+    else setForm((f) => ({ ...f, subSubAreaId: value }))
   }
 
   function openInsert(defaults) {
@@ -141,22 +224,34 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
     await create({
       project_id: project.id,
       equipment_id: selectedEquipmentId,
-      operator_id: form.operatorId,
       start_date_time: start,
       end_date_time: end,
+      ...payloadFromForm(form),
     })
     setInsertOpen(false)
   }
 
   function openEdit(row) {
     setEditRow(row)
-    setForm({ from: hhmm(row.start_date_time), to: hhmm(row.end_date_time), operatorId: row.operator_id ?? null })
+    setForm({
+      from: hhmm(row.start_date_time),
+      to: hhmm(row.end_date_time),
+      operatorId: row.operator_id ?? null,
+      delayCodeId: row.delay_code_id ?? '__operational__',
+      areaId: row.area?.area_id ?? '',
+      subAreaId: row.area?.sub_area_id ?? '',
+      subSubAreaId: row.area?.sub_sub_area_id ?? '',
+      passType: row.pass_type ?? '',
+      attachmentId: row.attachment_id ?? '',
+      tsca: tscaToForm(row.tsca),
+      layerId: row.layer_id ?? '',
+    })
   }
 
   async function handleSaveEdit() {
     if (!editRow || !eventDate) return
     const { start, end } = eventTimestamps(eventDate, form.from, form.to)
-    await update(editRow.id, { operator_id: form.operatorId, start_date_time: start, end_date_time: end })
+    await update(editRow.id, { start_date_time: start, end_date_time: end, ...payloadFromForm(form) })
     setEditRow(null)
   }
 
@@ -164,6 +259,99 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
     if (!deleteRow) return
     await remove(deleteRow.id)
     setDeleteRow(null)
+  }
+
+  // Shared field set for both Insert and Edit -- same fields, same order, as
+  // the non-native app's InsertTransitionForm.tsx / EditEventDialog.tsx.
+  function FormFields() {
+    const l2Options = form.areaId ? l2AreasFor(form.areaId) : []
+    const l3Options = form.subAreaId ? l3AreasFor(form.subAreaId) : []
+    return (
+      <>
+        <Group grow mb={10}>
+          <TextInput label="From" type="time" value={form.from} onChange={(e) => setField('from', e.currentTarget.value)} />
+          <TextInput label="To" type="time" value={form.to} onChange={(e) => setField('to', e.currentTarget.value)} />
+        </Group>
+        <Select
+          label="Operator"
+          data={operators.map((o) => ({ value: o.id, label: o.name }))}
+          value={form.operatorId}
+          onChange={(v) => setField('operatorId', v)}
+          mb={10}
+        />
+        <Select
+          label="Category"
+          data={delayCodeOptions}
+          value={form.delayCodeId}
+          onChange={(v) => setField('delayCodeId', v ?? '')}
+          mb={10}
+        />
+        <Select
+          label="Area"
+          data={l1Areas.map((a) => ({ value: a.id, label: a.name }))}
+          value={form.areaId || null}
+          onChange={(v) => setAreaLevel(1, v ?? '')}
+          clearable
+          mb={10}
+        />
+        {l2Options.length > 0 && (
+          <Select
+            label="Sub-Area"
+            data={l2Options.map((a) => ({ value: a.id, label: a.name }))}
+            value={form.subAreaId || null}
+            onChange={(v) => setAreaLevel(2, v ?? '')}
+            clearable
+            mb={10}
+          />
+        )}
+        {l3Options.length > 0 && (
+          <Select
+            label="Sub-Sub-Area"
+            data={l3Options.map((a) => ({ value: a.id, label: a.name }))}
+            value={form.subSubAreaId || null}
+            onChange={(v) => setAreaLevel(3, v ?? '')}
+            clearable
+            mb={10}
+          />
+        )}
+        <Select
+          label="Pass"
+          data={passTypeValues.map((v) => ({ value: v, label: passTypeLabels[v] ?? v }))}
+          value={form.passType || null}
+          onChange={(v) => setField('passType', v ?? '')}
+          clearable
+          mb={10}
+        />
+        {multiLayer && (
+          <Select
+            label="Layer"
+            data={layers.map((l) => ({ value: l.id, label: l.layer_name ?? l.name }))}
+            value={form.layerId || null}
+            onChange={(v) => setField('layerId', v ?? '')}
+            clearable
+            mb={10}
+          />
+        )}
+        <Select
+          label="Attachment"
+          data={attachments.map((a) => ({ value: a.id, label: a.name }))}
+          value={form.attachmentId || null}
+          onChange={(v) => setField('attachmentId', v ?? '')}
+          clearable
+          mb={10}
+        />
+        {project?.is_tsca_zone_tracking && (
+          <Select
+            label="TSCA"
+            data={[{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }]}
+            value={form.tsca || null}
+            onChange={(v) => setField('tsca', v ?? '')}
+            clearable
+            mb={10}
+          />
+        )}
+      </>
+    )
   }
 
   return (
@@ -253,45 +441,24 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
         </Table.Tbody>
       </Table>
 
-      {/* Insert modal — From/To/Operator are the only fields collected here.
-          Category/Area/Pass/Notes/TSCA now have real columns (populated from
-          the field app's own tap/selection), but this admin form doesn't
-          offer setting them manually -- it's for correcting time ranges, not
-          authoring a delay/production event from scratch. */}
+      {/* Insert modal — now offers the same real fields as the non-native
+          app's InsertTransitionForm.tsx (Category/Area/Pass/Layer/Attachment/
+          TSCA), added 2026-08-27. Still no Transition-vs-Operational/Delay
+          mode toggle: jfb_daily_activities has no zero-duration transition-
+          marker concept -- every row already carries its own area/pass/
+          attachment/tsca directly, so there's nothing for that toggle to
+          switch between here. */}
       <Modal key={insertKey} opened={insertOpen} onClose={() => setInsertOpen(false)} title={<Text fw={700} size="sm">Insert Event</Text>} size="sm">
-        <Group grow mb={10}>
-          <TextInput label="From" type="time" value={form.from} onChange={(e) => setField('from', e.currentTarget.value)} />
-          <TextInput label="To" type="time" value={form.to} onChange={(e) => setField('to', e.currentTarget.value)} />
-        </Group>
-        <Select
-          label="Operator"
-          data={operators.map((o) => ({ value: o.id, label: o.name }))}
-          value={form.operatorId}
-          onChange={(v) => setField('operatorId', v)}
-          mb={10}
-        />
-        <Text size="10px" c="dimmed" mb={16}>
-          Category, Area, Pass, and Notes come from the field app's own selection — this form only edits the time range and operator.
-        </Text>
+        {FormFields()}
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => setInsertOpen(false)}>Cancel</Button>
           <Button size="xs" onClick={handleInsert} disabled={!form.from || !form.to} style={{ background: '#0F2744', border: 'none' }}>Insert</Button>
         </Group>
       </Modal>
 
-      {/* Edit modal — same real-field-only scope as Insert */}
+      {/* Edit modal — same field set as Insert */}
       <Modal opened={!!editRow} onClose={() => setEditRow(null)} title={<Text fw={700} size="sm">Edit Event</Text>} size="sm">
-        <Group grow mb={10}>
-          <TextInput label="From" type="time" value={form.from} onChange={(e) => setField('from', e.currentTarget.value)} />
-          <TextInput label="To" type="time" value={form.to} onChange={(e) => setField('to', e.currentTarget.value)} />
-        </Group>
-        <Select
-          label="Operator"
-          data={operators.map((o) => ({ value: o.id, label: o.name }))}
-          value={form.operatorId}
-          onChange={(v) => setField('operatorId', v)}
-          mb={16}
-        />
+        {FormFields()}
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => setEditRow(null)}>Cancel</Button>
           <Button size="xs" onClick={handleSaveEdit} style={{ background: '#0F2744', border: 'none' }}>Save</Button>

@@ -29,6 +29,16 @@ function areaPath(areaId, areas) {
 export default function CappingSetupTab({ project }) {
   const hasProject = !!project?.id;
 
+  // Controlled tab state, lifted above the loading gate below. Every
+  // save on ANY of these domains briefly flips the combined `loading` flag
+  // true (each domain's own update() refetches), which used to unmount the
+  // whole <Tabs> block (it was wrapped in `{!loading && ...}`) -- and since
+  // Tabs was uncontrolled (defaultValue only), remounting reset it back to
+  // "layers" every single time, on every save, on every sub-tab. Keeping the
+  // active tab in state that survives that remount fixes it.
+  const [tab, setTab] = useState("layers");
+  const [mappingsTab, setMappingsTab] = useState("area-layer");
+
   const { records: layerTypeRef, loading: layerTypesLoading, error: layerTypesError } =
     useDomainData({ domain: "jfb_layer_types", system: "core" });
   const { records: materialTypeRef, loading: materialTypesLoading, error: materialTypesError } =
@@ -119,7 +129,7 @@ export default function CappingSetupTab({ project }) {
       )}
 
       {!loading && !error && hasProject && (
-        <Tabs defaultValue="layers">
+        <Tabs value={tab} onChange={setTab}>
           <Tabs.List mb={12}>
             <Tabs.Tab value="layers">Layers</Tabs.Tab>
             <Tabs.Tab value="materials">Materials</Tabs.Tab>
@@ -166,7 +176,7 @@ export default function CappingSetupTab({ project }) {
             />
           </Tabs.Panel>
           <Tabs.Panel value="mappings">
-            <Tabs defaultValue="area-layer">
+            <Tabs value={mappingsTab} onChange={setMappingsTab}>
               <Tabs.List mb={12}>
                 <Tabs.Tab value="area-layer">Areas → Layers</Tabs.Tab>
                 <Tabs.Tab value="layer-material">Layers → Materials</Tabs.Tab>
