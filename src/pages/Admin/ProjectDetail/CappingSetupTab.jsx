@@ -29,13 +29,6 @@ function areaPath(areaId, areas) {
 export default function CappingSetupTab({ project }) {
   const hasProject = !!project?.id;
 
-  // Controlled tab state, lifted above the loading gate below. Every
-  // save on ANY of these domains briefly flips the combined `loading` flag
-  // true (each domain's own update() refetches), which used to unmount the
-  // whole <Tabs> block (it was wrapped in `{!loading && ...}`) -- and since
-  // Tabs was uncontrolled (defaultValue only), remounting reset it back to
-  // "layers" every single time, on every save, on every sub-tab. Keeping the
-  // active tab in state that survives that remount fixes it.
   const [tab, setTab] = useState("layers");
   const [mappingsTab, setMappingsTab] = useState("area-layer");
 
@@ -91,10 +84,6 @@ export default function CappingSetupTab({ project }) {
     layersError || materialsError || componentsError ||
     areaLayersError || layerMaterialsError || materialComponentsError;
 
-  // fk_config on the mapping domains is lookup_only, not a DB-enforced
-  // constraint -- no cascade happens on its own. Mirror AreasTab.jsx's
-  // client-side cleanup: remove every mapping row that points at this id
-  // before removing the row itself.
   async function deleteLayerCascade(id) {
     await Promise.all([
       ...areaLayers.filter((r) => r.layer_id === id).map((r) => removeAreaLayer(r.id)),
@@ -473,8 +462,6 @@ function AreaLayerMappings({ areas, layers, map, saving, onCreate, onUpdate, onD
     await onDelete(row.id);
   }
 
-  // Exclude layers already mapped to this area -- except the row currently
-  // being edited, so its own layer stays selectable.
   const availableLayers = (id, excludeRowId) => layers.filter((l) => !map.some((m) => m.area_id === id && m.layer_id === l.id && m.id !== excludeRowId));
 
   return (
@@ -583,8 +570,6 @@ function LayerMaterialMappings({ layers, materials, map, saving, onCreate, onUpd
     await onDelete(row.id);
   }
 
-  // Exclude materials already mapped to this layer -- except the row
-  // currently being edited, so its own material stays selectable.
   const availableMaterials = (id, excludeRowId) => materials.filter((m) => !map.some((x) => x.layer_id === id && x.material_id === m.id && x.id !== excludeRowId));
 
   return (
@@ -671,8 +656,6 @@ function MaterialComponentMappings({ materials, components, map, saving, onCreat
     await onDelete(row.id);
   }
 
-  // Exclude components already mapped to this material -- except the row
-  // currently being edited, so its own component stays selectable.
   const availableComponents = (id, excludeRowId) => components.filter((c) => !map.some((x) => x.material_id === id && x.component_id === c.id && x.id !== excludeRowId));
 
   return (

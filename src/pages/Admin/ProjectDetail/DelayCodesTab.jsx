@@ -71,10 +71,6 @@ export default function DelayCodesTab({ project }) {
   const workTypeNames = workTypeRecords.map((w) => w.name);
   const masterById = Object.fromEntries(masterCodes.map((m) => [m.id, m]));
 
-  // A project_delay_codes row either points at a master code (delay_code_id
-  // set -- category/code/code_num/work_type come from jfb_delay_codes) or is
-  // a project-specific custom code with no master match (delay_code_id null
-  // -- those fields live on the row itself). See jfb_project_delay_codes.json.
   const codes = hasProject
     ? projectCodeRecords.map((row) => {
         const master = row.delay_code_id ? masterById[row.delay_code_id] : null;
@@ -127,16 +123,7 @@ export default function DelayCodesTab({ project }) {
     setCustomError(null);
     if (customTarget === "project") {
       if (!hasProject) return;
-      // A project-specific custom code is numbered against the project's
-      // current phase -- if a project has since moved to a different
-      // work type, there's no picker here (unlike the master-list modal)
-      // to backfill a code under an earlier phase; scoped out for now.
       const workType = currentPhase;
-      // Union of the global master library (codes not yet loaded into this
-      // project still claim their number) and this project's own codes
-      // (covers project-only custom entries the master list doesn't know
-      // about) -- checking against too much is always safe, only checking
-      // against too little risks a real collision.
       const usedCodeNums = new Set([
         ...masterCodes.filter((m) => workTypeNameById[m.work_type_id] === workType).map((m) => m.code_num),
         ...codes.filter((c) => c.work_type === workType).map((c) => c.code_num),
@@ -182,9 +169,6 @@ export default function DelayCodesTab({ project }) {
     await removeMasterCode(row.id);
   }
 
-  // Bulk-creates bypass the useDomainData hook's create() (which reloads the
-  // whole list after every single call) and call createDomainRecord directly,
-  // reloading once at the end -- a project's work-type block is 40-50 rows.
   async function loadFromMaster() {
     if (!hasProject || !currentPhase) return;
     setLoadingMaster(true);
@@ -215,10 +199,6 @@ export default function DelayCodesTab({ project }) {
     ),
   ];
   const categoryOptions = customTarget === "project" ? projectCategories : masterCategoriesForWorkType;
-  // "Or new category" wins when typed; otherwise fall back to the dropdown
-  // pick. Each input only ever writes its own field now -- they used to
-  // clear one another on change, which could wipe out an already-made
-  // dropdown selection from an incidental event on the other field.
   const effectiveCategory = customForm.newCategory.trim() || customForm.category;
 
   const masterFiltered =

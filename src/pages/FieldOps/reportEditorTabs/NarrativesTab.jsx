@@ -8,27 +8,6 @@ import SafeError from '../../../components/SafeError'
 
 const DEBOUNCE_MS = 1500
 
-// Live cross-user editing locks (WebSocket, jfb-narrative-lock-ws) are
-// deferred to a later version -- see NARRATIVE_LOCKING_PLAN_WEBSOCKET.md and
-// jfb-narrative-lock-ws/README.md. Everything that fed that feature is
-// commented out below rather than deleted, so it can be picked back up
-// without re-deriving it from the plan docs.
-//
-// In its place, jfb_report_narratives_v2 (domain/jfb_report_narratives_v2.json)
-// makes the `content` field FWW instead of LWW: a save carrying a stale
-// version_token is rejected outright (require_fww_lock) instead of silently
-// overwriting. That's a correctness backstop, not a UX feature -- there is no
-// live "so-and-so is editing" indicator right now, only a rejection at save
-// time for the user who lost the race.
-// const LOCK_STALE_MINUTES = 10
-// const NARRATIVE_WS_URL = 'ws://localhost:8091/domains/jfb_report_narratives/socket'
-
-// The section LIST (label/order/active) is jfb_project_report_narratives --
-// one row per section, per project. The TEXT below is jfb_report_narratives_v2
-// -- one row per (report, section), joined to its section by narrative_label
-// (not a real FK -- there's no stable section_key in this app, so renaming a
-// section in "Manage sections" orphans any content already written under the
-// old label).
 export default function NarrativesTab({ project, report }) {
   const hasProject = !!project?.id
   const hasReport = !!report?.id
@@ -54,132 +33,12 @@ export default function NarrativesTab({ project, report }) {
       setRefreshing(false)
     }
   }
-  // Shown when a save is rejected because another user's write landed first
-  // (HTTP 409 / FWW_LOCK_REQUIRED) -- see handleSave below.
   const [conflictOpen, setConflictOpen] = useState(false)
-
-  // -- WebSocket live sync + locking (deferred, see file-level comment) --
-  // const [liveContentRows, setLiveContentRows] = useState(initialContentRows)
-  // // narrative_label -> { locked_by, locked_at }. Absent key = unlocked.
-  // const [locks, setLocks] = useState({})
-  // const gotSnapshotRef = useRef(false)
-  // const wsRef = useRef(null)
-  // const pendingAcquiresRef = useRef(new Map())
-  //
-  // // Once the socket has delivered its own snapshot, stop overwriting live
-  // // state with the polled useDomainData fetch -- from then on the socket is
-  // // the source of truth for this report's rows.
-  // useEffect(() => {
-  //   if (!gotSnapshotRef.current) setLiveContentRows(initialContentRows)
-  // }, [initialContentRows])
-  //
-  // useEffect(() => {
-  //   if (!hasReport || !myUserId) return
-  //   gotSnapshotRef.current = false
-  //   let stopped = false
-  //   let ws = null
-  //   let reconnectTimer = null
-  //   let backoffMs = 1000
-  //
-  //   function connect() {
-  //     if (stopped) return
-  //     ws = new WebSocket(`${NARRATIVE_WS_URL}?report_id=${report.id}&user_id=${myUserId}`)
-  //     wsRef.current = ws
-  //     ws.onopen = () => {
-  //       backoffMs = 1000
-  //     }
-  //     ws.onmessage = (event) => {
-  //       const msg = JSON.parse(event.data)
-  //       if (msg.type === 'snapshot') {
-  //         gotSnapshotRef.current = true
-  //         setLiveContentRows(msg.rows)
-  //       } else if (msg.type === 'update') {
-  //         gotSnapshotRef.current = true
-  //         setLiveContentRows((prev) => {
-  //           const idx = prev.findIndex((r) => r.id === msg.row.id)
-  //           if (idx === -1) return [...prev, msg.row]
-  //           const next = [...prev]
-  //           next[idx] = msg.row
-  //           return next
-  //         })
-  //       } else if (msg.type === 'delete') {
-  //         setLiveContentRows((prev) => prev.filter((r) => r.id !== msg.id))
-  //       } else if (msg.type === 'lock_snapshot') {
-  //         setLocks(msg.locks)
-  //       } else if (msg.type === 'lock') {
-  //         setLocks((prev) => ({ ...prev, [msg.narrative_label]: { locked_by: msg.locked_by, locked_at: msg.locked_at } }))
-  //       } else if (msg.type === 'unlock') {
-  //         setLocks((prev) => {
-  //           if (!(msg.narrative_label in prev)) return prev
-  //           const next = { ...prev }
-  //           delete next[msg.narrative_label]
-  //           return next
-  //         })
-  //       } else if (msg.type === 'acquire_result') {
-  //         const pending = pendingAcquiresRef.current.get(msg.narrative_label)
-  //         if (pending) {
-  //           clearTimeout(pending.timeoutId)
-  //           pendingAcquiresRef.current.delete(msg.narrative_label)
-  //           pending.resolve(msg.granted)
-  //         }
-  //         if (msg.granted) {
-  //           setLocks((prev) => ({ ...prev, [msg.narrative_label]: { locked_by: msg.locked_by, locked_at: msg.locked_at } }))
-  //         }
-  //       }
-  //     }
-  //     ws.onclose = () => {
-  //       if (stopped) return
-  //       reconnectTimer = setTimeout(connect, backoffMs)
-  //       backoffMs = Math.min(backoffMs * 2, 30000)
-  //     }
-  //     ws.onerror = () => ws.close()
-  //   }
-  //   connect()
-  //
-  //   return () => {
-  //     stopped = true
-  //     if (reconnectTimer) clearTimeout(reconnectTimer)
-  //     wsRef.current = null
-  //     ws?.close()
-  //   }
-  // }, [hasReport, report?.id, myUserId])
-  // ------------------------------------------------------------------------
 
   const sections = hasProject
     ? [...records].filter((r) => r.is_active !== false).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
     : []
 
-  // -- Lock acquire/release over the WS (deferred, see file-level comment) --
-  // function acquireLock(label) {
-  //   return new Promise((resolve) => {
-  //     const ws = wsRef.current
-  //     if (!ws || ws.readyState !== WebSocket.OPEN) {
-  //       resolve(false)
-  //       return
-  //     }
-  //     const existingPending = pendingAcquiresRef.current.get(label)
-  //     if (existingPending) clearTimeout(existingPending.timeoutId)
-  //     const timeoutId = setTimeout(() => {
-  //       pendingAcquiresRef.current.delete(label)
-  //       resolve(false)
-  //     }, 5000)
-  //     pendingAcquiresRef.current.set(label, { resolve, timeoutId })
-  //     ws.send(JSON.stringify({ type: 'acquire', narrative_label: label }))
-  //   })
-  // }
-  //
-  // function releaseLock(label, force = false) {
-  //   const ws = wsRef.current
-  //   if (!ws || ws.readyState !== WebSocket.OPEN) return
-  //   ws.send(JSON.stringify({ type: 'release', narrative_label: label, force }))
-  // }
-  // --------------------------------------------------------------------------
-
-  // FWW write: replays the version_token read off the row and requires the
-  // lock to hold (require_fww_lock) so a stale save fails outright (409 /
-  // FWW_LOCK_REQUIRED) instead of silently dropping the field. On conflict,
-  // surface the modal and rethrow so the card's own save-state indicator
-  // still flips to "error".
   async function handleSave(contentRow, sectionLabel, text) {
     if (!contentRow) {
       await createContent({ project_id: project.id, report_id: report.id, narrative_label: sectionLabel, content: text })
@@ -276,8 +135,6 @@ function NarrativeSectionCard({ label, contentRow, disabled, onSave }) {
   const draftRef = useRef(draft)
   const onSaveRef = useRef(onSave)
 
-  // Keep "latest value" refs in sync after every render (not during it) --
-  // same pattern already used elsewhere in this app (see PhotoSlot.jsx).
   useEffect(() => {
     draftRef.current = draft
   })
@@ -285,12 +142,6 @@ function NarrativeSectionCard({ label, contentRow, disabled, onSave }) {
     onSaveRef.current = onSave
   })
 
-  // Re-sync from the domain when the underlying row changes (e.g. after a
-  // reload brings back the row we just created, or after a conflict where the
-  // user manually refreshes) -- but not while a save is pending/in-flight, so
-  // we don't clobber what's still being typed. Adjusting state during render
-  // (React's documented pattern for this) instead of an effect, since this is
-  // deriving state from a prop change, not reaching into an external system.
   if (contentRow?.id !== syncedRowId && saveState !== 'pending' && saveState !== 'saving') {
     setSyncedRowId(contentRow?.id)
     setDraft(contentRow?.content ?? '')
@@ -315,8 +166,6 @@ function NarrativeSectionCard({ label, contentRow, disabled, onSave }) {
     flushSaveRef.current = flushSave
   })
 
-  // Flush any pending save on unmount -- switching report day/tab away
-  // shouldn't leave text unsaved.
   useEffect(
     () => () => {
       void flushSaveRef.current()

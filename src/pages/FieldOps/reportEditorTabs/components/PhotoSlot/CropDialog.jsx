@@ -3,8 +3,6 @@ import { Modal, Text, Group, Button, Box } from '@mantine/core'
 import ReactCrop, { centerCrop, makeAspectCrop } from 'react-image-crop'
 import 'react-image-crop/dist/ReactCrop.css'
 
-// Mirrors the web app: crop instead of letterbox, so the PE drives what
-// stays in frame and both report photos land in the same 4:3 box on the PDF.
 const TARGET_ASPECT = 4 / 3
 const OUTPUT_QUALITY = 0.92
 
@@ -16,9 +14,6 @@ export default function CropDialog({ file, onCancel, onConfirm, label }) {
   const [error, setError] = useState(null)
   const imgRef = useRef(null)
 
-  // Loads the picked File into an object URL (and revokes it on cleanup) --
-  // a genuine external-resource sync, not the "you might not need an
-  // effect" case react-hooks/set-state-in-effect is meant to catch.
   useEffect(() => {
     if (!file) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -50,8 +45,6 @@ export default function CropDialog({ file, onCancel, onConfirm, label }) {
     const image = imgRef.current
     const { width: cropW, height: cropH, x: cropX, y: cropY } = completedCrop
 
-    // Scale from displayed image size to natural pixel size so we don't lose
-    // resolution if the browser shrank the displayed image to fit.
     const scaleX = image.naturalWidth / image.width
     const scaleY = image.naturalHeight / image.height
     const outW = Math.round(cropW * scaleX)

@@ -7,18 +7,6 @@ import { useConfirmDialog } from '../../../hooks/useConfirmDialog'
 import LoadingSpinner from '../../../components/LoadingSpinner'
 import SafeError from '../../../components/SafeError'
 
-// Field-for-field port of the non-native app's settings-flavor site
-// equipment manager (src/components/settings/SiteEquipmentManager.tsx) --
-// the project-wide CRUD roster showing ALL rows including demobilized ones
-// (as opposed to the OTHER non-native SiteEquipmentManager.tsx, the
-// report-scoped active/off-site view on the Safety tab -- not ported here).
-// Stored as jfb_project_site_equipment (project_id, category, description,
-// sort_order, mobilized_at, demobilized_at). Category is a real picklist
-// here (pkl-jfb-site-equipment-category) rather than the non-native app's
-// hardcoded 2-value DB check constraint + duplicated <option> list.
-//
-// Repurposes the Project Settings "Site Equipment" tab, previously an
-// unbuilt placeholder (ProjectSettingsPage.jsx's SITE_EQUIPMENT_PLACEHOLDER).
 const emptyDraft = () => ({ category: 'brennan', description: '', mobilized_at: '', demobilized_at: '', sort_order: 10 })
 
 export default function SiteEquipmentTab({ project }) {
@@ -101,9 +89,6 @@ export default function SiteEquipmentTab({ project }) {
     }
   }
 
-  // Rows are never soft-toggled -- matching the non-native app, "removed
-  // from service" is captured via demobilized_at, not a delete. Delete here
-  // is permanent, same warning as the non-native app gives.
   async function handleDelete(row) {
     if (!(await confirm(`Permanently delete "${row.description}"? History will be lost. To remove it from future reports instead, set a demobilization date.`))) return
     await remove(row.id)

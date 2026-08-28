@@ -120,11 +120,6 @@ export default function AdminProjectsSection({ onConfigure }) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  // Create/update the depth-1/2/3 jfb_project_area_levels rows for a project
-  // from the form's 3 label inputs. Never deletes a level if its label is
-  // cleared -- clearing a label in this form just leaves the existing level
-  // (and anything nested under it) untouched rather than risking orphaning
-  // jfb_project_areas rows that reference it.
   async function syncAreaLevels(projectId) {
     const existing = areaLevelRecords.filter((l) => l.project_id === projectId);
     const desired = [

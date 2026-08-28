@@ -3,7 +3,6 @@ import { Box, Text, Group, Button, Table, Badge, Modal, TextInput, Select, Passw
 import { IconPlus } from "@tabler/icons-react";
 import { USER_ROLES } from "../../data/adminSampleData";
 
-// Not yet backed by a real domain -- render empty until one is established.
 const LIVE_PROJECTS_PLACEHOLDER = [];
 
 const CROSS_PROJECT_ROLES = new Set(["admin", "director"]);

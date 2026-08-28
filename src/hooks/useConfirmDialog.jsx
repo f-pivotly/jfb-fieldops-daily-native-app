@@ -1,13 +1,6 @@
 import { useRef, useState } from 'react'
 import { Modal, Text, Group, Button } from '@mantine/core'
 
-// window.confirm() is silently blocked in this app's hosting iframe (its
-// sandbox attribute has no allow-modals -- Portal_Independent_Frontend's
-// src/app/applications/[app_slug]/index.js): it just returns false with no
-// dialog and no error, which makes any "if (!confirm(...)) return" button
-// look dead. Use this in-app modal instead of depending on a browser dialog
-// API at all -- same call shape as window.confirm (await it for a boolean)
-// so call sites barely change.
 export function useConfirmDialog() {
   const [message, setMessage] = useState(null)
   const resolverRef = useRef(null)

@@ -1,10 +1,3 @@
-// Source of truth: JFB_Standard_Delay_Codes.xlsx, "Reserved Slots" sheet.
-// Each work-type group owns a 100-number block (Hydraulic Dredging 0-99,
-// Mechanical Dredging 100-199, Hydraulic Capping 200-299, Mechanical
-// Capping 300-399). These are the numbers within each block deliberately
-// left open in the company master list for project-specific custom codes
-// -- using them keeps a project's own codes from colliding with numbers
-// the shared company library might claim later.
 export const RESERVED_CODE_SLOTS = {
   "Hydraulic Dredging": [
     6, 7, 8, 9, 35, 36, 37, 38, 39, 44, 45, 46, 47, 48, 49, 59, 70, 71, 72,
@@ -31,10 +24,6 @@ export const RESERVED_CODE_SLOTS = {
   ],
 };
 
-// Returns the lowest reserved number for workTypeName not already present
-// in usedCodeNums (a Set of numbers), or null if that group's whole
-// reserved range is already taken -- callers must not fall back to an
-// arbitrary number in that case.
 export function nextReservedCodeNum(workTypeName, usedCodeNums) {
   const pool = RESERVED_CODE_SLOTS[workTypeName] ?? [];
   return pool.find((n) => !usedCodeNums.has(n)) ?? null;

@@ -1,7 +1,6 @@
 import { useParams, Link } from 'react-router-dom'
 import { Box, ScrollArea, Grid, Text, Table, Group, Button, Stack } from '@mantine/core'
 
-// Not yet backed by real domains -- render empty until they're established.
 const REALIZED_SUMMARY_PLACEHOLDER = {
   projectName: '',
   unit: '',

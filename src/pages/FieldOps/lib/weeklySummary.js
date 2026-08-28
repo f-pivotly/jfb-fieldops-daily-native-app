@@ -1,23 +1,6 @@
-// Pure computation for the Weekly Summary page -- no React, no fetching.
-// Mirrors the sibling vanilla app's src/lib/weeklySummary.ts split between
-// pure aggregation and data-fetching, adapted to this app's actual domains.
-
-// Production weeks for THIS feature run Monday->Sunday, matching the vanilla
-// app's own Weekly Summary convention. That's a different convention from
-// the Sunday-start week src/hooks/useAutoMetricValues.js uses for cover-page
-// metrics -- two separate features with two separate (documented) week
-// conventions, not a bug.
-// Anchored entirely in UTC (parse with a 'Z' suffix, mutate with the UTC
-// setters, read back with getUTCDay/toISOString) rather than local time.
-// Parsing as LOCAL midnight and then reading it back via toISOString() rolls
-// the date backward by a day for any viewer whose timezone is ahead of UTC
-// (e.g. Asia/Manila, UTC+8) -- and since defaultWeeklyWeekStart below chains
-// two of these calls together, that one-day slip compounded into a multi-day
-// drift (observed: the page showing "2026-08-15 - 2026-08-20", a 6-day
-// non-Monday-start range, instead of the correct 2026-08-17 - 2026-08-23).
 export function mondayStartISO(dateISO) {
   const d = new Date(`${dateISO}T00:00:00Z`)
-  const day = d.getUTCDay() // 0=Sun..6=Sat
+  const day = d.getUTCDay()
   const diff = day === 0 ? -6 : 1 - day
   d.setUTCDate(d.getUTCDate() + diff)
   return d.toISOString().slice(0, 10)
@@ -41,16 +24,10 @@ export function nextWeekStart(weekStartISO) {
   return addDaysISO(weekStartISO, 7)
 }
 
-// The most recently COMPLETED Monday-Sunday week -- this Monday minus 7
-// days. A PM can't build a summary for the still-in-progress current week,
-// mirroring the vanilla app's own rule.
 export function defaultWeeklyWeekStart(todayISO) {
   return addDaysISO(mondayStartISO(todayISO), -7)
 }
 
-// Same per-row, per-timezone calendar-day check src/pages/FieldOps/
-// reportEditorTabs/hooks/useEvents.js uses for a single day, generalized to
-// a date range.
 function calendarDayISO(iso, timeZone) {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return null
@@ -71,15 +48,6 @@ function durationHours(startISO, endISO) {
   return ms > 0 ? ms / 3600000 : 0
 }
 
-// Builds the week's narrative reference lists plus an approximate hours
-// breakdown.
-//
-// The hours are approximate, not GOH/NOH-exact: jfb_daily_activities has no
-// `category` column (only a nullable delay_code_id), so "operating" here
-// just means "no delay code attached" -- there's no way to further separate
-// true operating time from mobilization/startup/other bookend time the way
-// the vanilla app's richer `daily_events.category` field could. Same
-// platform-level gap already documented in METRICS_MIGRATION_PLAN.md §5.
 export function buildWeeklyReport({ weekStart, reports, sections, contentRows, activities, resolveDelayLabel }) {
   const weekEnd = weekEndISO(weekStart)
 
@@ -132,11 +100,6 @@ export function buildWeeklyReport({ weekStart, reports, sections, contentRows, a
   }
 }
 
-// For the PDF only (rpt-jfb-weekly-summary): the vanilla app's Weekly
-// Summary PDF prints the PM's *saved* weekly rollup per section, never the
-// daily reference bullets -- an unedited section is invisible in the PDF
-// even though its daily entries were visible on screen. Mirrors that exactly
-// via jfb_weekly_summaries instead of jfb_report_narratives_v2.
 export function buildNarrativeSectionsParam(sections, summaries, weekStart) {
   const activeSections = [...sections]
     .filter((s) => s.is_active !== false)

@@ -16,11 +16,6 @@ export default function ReportListPage() {
   const { projectId } = useParams()
   const navigate = useNavigate()
   const { project } = useProject(projectId)
-  // Filter reports by the URL's own projectId, not project?.id -- project?.id
-  // depends on the separate useProject fetch resolving first, which briefly
-  // leaves it undefined on load and fires an unnecessary unfiltered fetch of
-  // every project's reports. projectId is already the right value the whole
-  // time (it's literally in the URL), so there's nothing to wait for.
   const { reports: reportRecords } = useReports(projectId)
   const reports = reportRecords
     .map((r) => ({
@@ -33,9 +28,6 @@ export default function ReportListPage() {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pickerDate, setPickerDate] = useState('2026-08-11')
 
-  // Only navigates -- ReportEditorPage's own effect is the single place that
-  // creates a report if one doesn't exist yet for this project+date, so two
-  // independent "check, then create" call sites can't race each other.
   function startReport(dateISO) {
     navigate(`/projects/${projectId}/reports/${dateISO}`)
   }

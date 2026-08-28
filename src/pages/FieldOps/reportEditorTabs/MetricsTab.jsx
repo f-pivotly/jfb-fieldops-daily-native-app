@@ -76,15 +76,6 @@ export default function MetricsTab({ project, report, equipment = [] }) {
   const visible = rows.filter((r) => !r.hidden)
 
   const { metricSources } = useMetricSources()
-  // Built directly from jfb_metric_sources rather than the
-  // pkl-jfb-metric-source picklist: GET /picklists/:slug/values only ever
-  // reads the static-picklist snapshot table (core.pkl_values_b), which
-  // fnc_pkl_publish deliberately leaves empty for a domain_query source
-  // (confirmed live -- 0 rows there for this picklist). The picklist binding
-  // on jfb_metrics.source itself is still correct config; this just avoids
-  // depending on a REST path that doesn't support domain_query resolution
-  // yet. Same live-updates-automatically behavior either way, since this is
-  // also a live domain fetch.
   const activeSources = metricSources.filter((m) => m.active !== false)
   const sourceValues = activeSources.map((m) => m.value)
   const sourceLabels = Object.fromEntries(activeSources.map((m) => [m.value, m.label ?? m.value]))
@@ -102,12 +93,6 @@ export default function MetricsTab({ project, report, equipment = [] }) {
     create: createValue, update: updateValue, reload: reloadValues,
   })
 
-  // Prefer the project's real, saved jfb_metrics rows. Only when there are
-  // none yet do we fall back to jfb_metric_defaults (mirrors the old app's
-  // DEFAULT_METRICS -- pure runtime substitution, never persisted, see the
-  // notice below). Seeds once per mount/resync so deliberately clearing rows
-  // doesn't keep silently repopulating them; handleSaveMetrics resets the
-  // ref to force a clean resync from the server after a real save.
   const seededRef = useRef(false)
   useEffect(() => {
     if (seededRef.current || rows.length > 0 || metricsLoading || defaultsLoading) return
@@ -130,11 +115,6 @@ export default function MetricsTab({ project, report, equipment = [] }) {
 
   const usingDefaults = rows.some((r) => r.isDefault)
 
-  // Persists the current draft to the real jfb_metrics domain: update rows
-  // that already have a metricId, create rows that don't, and remove any
-  // real row that's no longer in the draft (deleted via the trash icon).
-  // After saving, forces a clean resync from the server rather than trusting
-  // locally-guessed ids.
   async function handleSaveMetrics() {
     setSaving(true)
     try {
@@ -235,11 +215,6 @@ function AutoValueText({ auto, field, unit }) {
   return <Text size="sm">{formatMetricValue(auto[field], unit)}</Text>
 }
 
-// Three states per cell: Auto (live-computed, see useAutoMetricValues),
-// Manual-and-saved (persisted via useManualMetricValues -- debounce-saves on
-// Day edits, Week/Total are read-only sums), and Manual-but-not-yet-saved
-// (a fresh row from "Add" or a default that hasn't hit "Save metrics" yet --
-// purely local state, nothing to attach a persisted value to).
 function MetricValueCell({ r, field, auto, manual, setRows }) {
   if (r.source === 'Auto') {
     return <AutoValueText auto={auto} field={field} unit={r.unit} />
@@ -312,8 +287,6 @@ function MetricsManagerDialog({ opened, onClose, rows, setRows, sourceValues, so
       update(key, { source: 'Manual', autoKind: null })
       return
     }
-    // Auto-populate unit from the chosen source's own row instead of the PE
-    // typing it (METRICS_MIGRATION_PLAN.md §4 open question 2).
     const sourceRow = metricSources.find((m) => m.value === value)
     update(key, { source: 'Auto', autoKind: value, unit: sourceRow?.unit ?? '' })
   }
@@ -323,9 +296,6 @@ function MetricsManagerDialog({ opened, onClose, rows, setRows, sourceValues, so
     ...sourceValues.filter((v) => v !== 'manual').map((v) => ({ value: v, label: sourceLabels[v] ?? v })),
   ]
 
-  // '' (not null) as the Select's own "unset" sentinel -- Mantine clears a
-  // Select to null on its own, which would collide with a real equipment id
-  // if used as the sentinel instead.
   const equipmentOptions = [
     { value: '', label: 'All equipment' },
     ...equipment.map((eq) => ({ value: eq.id, label: eq.name })),

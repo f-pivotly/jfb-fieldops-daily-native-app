@@ -6,22 +6,12 @@ function toISODate(d) {
   return d.toISOString().slice(0, 10)
 }
 
-// Confirmed against the old (non-native) app's own code comment
-// (src/components/MetricsTab.tsx: "Week resets each Sunday") -- not a native
-// app guess, matches real precedent.
 function startOfWeek(dateStr) {
   const d = new Date(`${dateStr}T00:00:00`)
   d.setDate(d.getDate() - d.getDay())
   return toISODate(d)
 }
 
-// Mirrors the old app's manual-metric save behavior exactly: typing updates
-// a local draft immediately (so the input feels instant), then debounce-saves
-// 2 seconds after the last keystroke. Blur or unmount flushes immediately
-// instead of waiting, so switching tabs mid-type doesn't drop the value.
-// Only works for rows with a real metricId (i.e. already saved via "Save
-// metrics") -- there's nowhere to attach a value until the metric itself is
-// a real jfb_metrics row.
 export function useManualMetricValues({ project, report, reports, reportMetricValues, create, update, reload }) {
   const [drafts, setDrafts] = useState({})
   const timersRef = useRef(new Map())
@@ -58,16 +48,13 @@ export function useManualMetricValues({ project, report, reports, reportMetricVa
 
   useEffect(() => {
     return () => {
-      // Flush every still-pending edit on unmount, same as the old app.
       const pending = new Map(pendingRef.current)
       timersRef.current.forEach((t) => clearTimeout(t))
       timersRef.current.clear()
       pendingRef.current.clear()
       pending.forEach((entry, metricId) => { void persist(metricId, entry.value) })
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional
-    // unmount-only flush; re-running this on every dependency change would
-    // fire it constantly instead of just at teardown.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   function onManualChange(metricId, raw) {
@@ -88,9 +75,6 @@ export function useManualMetricValues({ project, report, reports, reportMetricVa
     timersRef.current.set(metricId, t)
   }
 
-  // Day is a direct lookup (whatever was typed for this exact report); Week/
-  // Total are sums across every report in range -- not stored duplicates
-  // (METRICS_MIGRATION_PLAN.md §4 open question 3).
   function valuesFor(metricId) {
     if (!endDate) return { day: null, week: 0, total: 0 }
     let day = null, week = 0, total = 0

@@ -1,6 +1,3 @@
-// Decimal precision per unit, matching the old (non-native) app's
-// fmtMetricValue() rules (METRICS_MIGRATION_PLAN.md §1) — unit-driven, not
-// metric-specific.
 const UNIT_DECIMALS = {
   CY: 1,
   SF: 0,

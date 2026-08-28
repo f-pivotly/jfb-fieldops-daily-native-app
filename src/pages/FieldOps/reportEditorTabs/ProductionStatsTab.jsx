@@ -24,8 +24,6 @@ function num(v, digits) {
   return Number.isFinite(n) ? Number(n.toFixed(digits)) : null
 }
 
-// Avg Face ft = (CY x 27) / SF -- 1 cubic yard = 27 cubic feet, so
-// volume_ft3 / area_sf = average depth in feet.
 function computeAvgFace(volume, area) {
   const v = volume === null || volume === undefined || volume === '' ? null : Number(volume)
   const a = area === null || area === undefined || area === '' ? null : Number(area)
@@ -325,9 +323,6 @@ export default function ProductionStatsTab({ project, report, equipment = [], se
 
       {showFlowAndPipe && report?.report_date && (
         <SimpleGrid cols={{ base: 1, md: 2 }} mt={16}>
-          {/* key forces a remount (clearing in-progress edits) whenever the
-              equipment tab or report date changes, instead of syncing local
-              state back to the fetched row via an effect. */}
           <FlowStatsPanel
             key={`${selectedEquipmentId}:${report.report_date}`}
             projectId={project.id}

@@ -6,17 +6,6 @@ import { useConfirmDialog } from '../../../hooks/useConfirmDialog'
 import LoadingSpinner from '../../../components/LoadingSpinner'
 import SafeError from '../../../components/SafeError'
 
-// Field-for-field port of the non-native app's project attachments manager
-// (src/components/settings/AttachmentsManager.tsx) -- a per-project list of
-// equipment attachments (e.g. "3ft Cutterhead", "Env Bucket") offered as a
-// dropdown when logging/editing an activity. Stored as jfb_project_attachments
-// (project_id, name, sort_order, active), read by name (not FK) onto
-// jfb_daily_activities.attachment / jfb_production_stats.attachment, same
-// convention as pass_type.
-//
-// Repurposes the Project Settings "Attachments" tab, which previously held an
-// unbuilt file-upload placeholder (ProjectSettingsPage.jsx's ATTACHMENTS_PLACEHOLDER) --
-// unrelated feature, same name coincidentally.
 export default function AttachmentsTab({ project }) {
   const hasProject = !!project?.id
   const { confirm, modal: confirmModal } = useConfirmDialog()

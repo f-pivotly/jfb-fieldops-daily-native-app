@@ -10,10 +10,6 @@ import { AppConfigContext, decodeJwtUser, MSG } from "./appConfigContext";
 
 const CONFIG_HANDSHAKE_TIMEOUT_MS = 3000;
 
-// Backfills the platform's internal user UUID once GET /me resolves --
-// decodeJwtUser can't provide it (see appConfigContext.js). Non-fatal on
-// failure: uploaded_by-type fields are nullable, so callers just don't get
-// attribution rather than breaking.
 function resolveCurrentUserId(setConfig) {
   fetchCurrentUser()
     .then((me) => {

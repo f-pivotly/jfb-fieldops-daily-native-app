@@ -10,17 +10,8 @@ import { useProjectDelayCodes } from '../../../hooks/useProjectDelayCodes'
 import { useProjectAttachments } from '../../../hooks/useProjectAttachments'
 import { useProjectLayers } from '../../../hooks/useProjectLayers'
 
-// jfb_daily_activities still has no source field, so that column has
-// nothing real to show yet — flagged rather than faked. Everything else
-// (delay_code_id, area jsonb, pass_type, attachment_id, tsca, layer_id,
-// notes) is real and, as of this pass, collectible through Insert/Edit —
-// layer_id added 2026-08-27 alongside this form update.
 const SAMPLE = '(sampleData)'
 
-// A jfb_project_delay_codes row either points at a master code (category/code
-// come from jfb_delay_codes) or is a project-specific custom code with no
-// master match (those fields live on the row itself) -- same resolution as
-// DelayCodesTab.jsx.
 function resolveDelayCode(delayCodeId, projectDelayCodeById, masterDelayCodeById) {
   if (!delayCodeId) return null
   const row = projectDelayCodeById.get(delayCodeId)
@@ -38,8 +29,6 @@ function tscaLabel(tsca) {
   return '—'
 }
 
-// area is a jsonb breadcrumb ({area_id, sub_area_id, sub_sub_area_id}) since a
-// project's area hierarchy (jfb_project_area_levels) can be 1-3 levels deep.
 function resolveArea(area, areaNameById) {
   if (!area) return '—'
   const parts = [area.area_id, area.sub_area_id, area.sub_sub_area_id]
@@ -49,8 +38,6 @@ function resolveArea(area, areaNameById) {
   return parts.length ? parts.join(' / ') : '—'
 }
 
-// '' is the Select's own "no value" sentinel (Mantine Select can't take null
-// as a controlled value) -- normalized to real null right before saving.
 const EMPTY_FORM = {
   from: '',
   to: '',
@@ -72,9 +59,6 @@ function hhmm(iso) {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-// Combines the report's date with a form's HH:MM into a local ISO timestamp.
-// Rolls the end time to the next calendar day when earlier than the start
-// time, so overnight shifts (e.g. 14:00 -> 02:00) work.
 function eventTimestamps(dateISO, fromHHMM, toHHMM) {
   if (!dateISO || !fromHHMM || !toHHMM) return { start: null, end: null }
   const start = new Date(`${dateISO}T${fromHHMM}:00`)
@@ -107,8 +91,6 @@ function findGaps(sortedEvents) {
   return gaps
 }
 
-// area_id/sub_area_id/sub_sub_area_id -> the jsonb breadcrumb shape saved on
-// jfb_daily_activities.area, omitting keys the cascade didn't reach.
 function buildAreaJson(areaId, subAreaId, subSubAreaId) {
   if (!areaId) return null
   const out = { area_id: areaId }
@@ -155,14 +137,10 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
   const masterDelayCodeById = new Map(masterDelayCodes.map((m) => [m.id, m]))
   const projectDelayCodeById = new Map(projectDelayCodes.map((r) => [r.id, r]))
 
-  // Area cascade: level 1 = no parent; level 2/3 = children of the level above.
   const l1Areas = areas.filter((a) => !a.parent_id)
   const l2AreasFor = (l1Id) => areas.filter((a) => a.parent_id === l1Id)
   const l3AreasFor = (l2Id) => areas.filter((a) => a.parent_id === l2Id)
 
-  // Category options: a synthetic "Operational" choice (delay_code_id = null,
-  // i.e. productive time -- see useGohNoh.js's same convention) plus every
-  // active project delay code, grouped the same way DelayCodesTab shows them.
   const delayCodeOptions = [
     { group: 'Operational', items: [{ value: '__operational__', label: 'Operational (no delay)' }] },
     {
@@ -194,8 +172,6 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
     setForm((f) => ({ ...f, [key]: value }))
   }
 
-  // Changing a higher area level clears the levels below it, same as the
-  // non-native cascade.
   function setAreaLevel(level, value) {
     if (level === 1) setForm((f) => ({ ...f, areaId: value, subAreaId: '', subSubAreaId: '' }))
     else if (level === 2) setForm((f) => ({ ...f, subAreaId: value, subSubAreaId: '' }))
@@ -261,8 +237,6 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
     setDeleteRow(null)
   }
 
-  // Shared field set for both Insert and Edit -- same fields, same order, as
-  // the non-native app's InsertTransitionForm.tsx / EditEventDialog.tsx.
   function FormFields() {
     const l2Options = form.areaId ? l2AreasFor(form.areaId) : []
     const l3Options = form.subAreaId ? l3AreasFor(form.subAreaId) : []
@@ -441,13 +415,6 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
         </Table.Tbody>
       </Table>
 
-      {/* Insert modal — now offers the same real fields as the non-native
-          app's InsertTransitionForm.tsx (Category/Area/Pass/Layer/Attachment/
-          TSCA), added 2026-08-27. Still no Transition-vs-Operational/Delay
-          mode toggle: jfb_daily_activities has no zero-duration transition-
-          marker concept -- every row already carries its own area/pass/
-          attachment/tsca directly, so there's nothing for that toggle to
-          switch between here. */}
       <Modal key={insertKey} opened={insertOpen} onClose={() => setInsertOpen(false)} title={<Text fw={700} size="sm">Insert Event</Text>} size="sm">
         {FormFields()}
         <Group justify="flex-end">
@@ -456,7 +423,6 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
         </Group>
       </Modal>
 
-      {/* Edit modal — same field set as Insert */}
       <Modal opened={!!editRow} onClose={() => setEditRow(null)} title={<Text fw={700} size="sm">Edit Event</Text>} size="sm">
         {FormFields()}
         <Group justify="flex-end">
@@ -465,8 +431,6 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
         </Group>
       </Modal>
 
-      {/* Delete — hard delete via the domain's remove(); no soft-delete/audit
-          table exists (jfb_event_deletions was reverted), so no reason field. */}
       <Modal opened={!!deleteRow} onClose={() => setDeleteRow(null)} title={<Text fw={700} size="sm">Delete Event</Text>} size="sm">
         <Text size="sm" mb={16}>
           {deleteRow ? `Delete the ${hhmm(deleteRow.start_date_time)}–${hhmm(deleteRow.end_date_time)} event? This can't be undone.` : ''}

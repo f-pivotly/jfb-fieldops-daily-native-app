@@ -3,7 +3,6 @@ import { Box, Text, Group, Select, TextInput, Table, Badge } from "@mantine/core
 import { IconRefresh } from "@tabler/icons-react";
 import { NON_OPERATIONAL_CATEGORIES } from "../../data/adminSampleData";
 
-// Not yet backed by a real domain -- render empty until one is established.
 const LIVE_EVENTS_PLACEHOLDER = [];
 const LIVE_PROJECTS_PLACEHOLDER = [];
 

@@ -9,9 +9,6 @@ const GLYPH = {
   na: { Icon: IconMinus, color: "#6b7177" },
 };
 
-// Not yet derived from real report state -- each check should reflect
-// whether its corresponding tab is actually complete, not a hardcoded
-// status. Left "na" (not evaluated) rather than faked pass/fail.
 const PM_REVIEW_CHECKS_PLACEHOLDER = [
   { key: "event_log", label: "Event log present", status: "na" },
   { key: "shift_balance", label: "Shift balance per equipment", status: "na" },

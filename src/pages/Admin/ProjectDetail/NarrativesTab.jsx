@@ -32,9 +32,6 @@ export default function NarrativesTab({ project }) {
   const [form, setForm] = useState(EMPTY_FORM);
   const [seeding, setSeeding] = useState(false);
 
-  // Bypasses the useDomainData hook's create() (which reloads the whole list
-  // after every single call) and calls createDomainRecord directly, reloading
-  // once at the end -- same pattern as DelayCodesTab's "Load from Master List".
   async function handleSeedDefaults() {
     if (!hasProject) return;
     setSeeding(true);

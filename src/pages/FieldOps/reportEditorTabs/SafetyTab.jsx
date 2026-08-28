@@ -4,7 +4,6 @@ import { IconPlus, IconTrash, IconSignature } from '@tabler/icons-react'
 
 const TENET_COLOR = { pass: 'green', fail: 'red', na: 'gray' }
 
-// Not yet backed by real domains -- render empty until each is established.
 const SAFETY_TENETS_PLACEHOLDER = []
 const PRIOR_DAY_CREW_PLACEHOLDER = []
 const SITE_EQUIPMENT_PLACEHOLDER = []

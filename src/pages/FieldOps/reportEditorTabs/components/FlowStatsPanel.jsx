@@ -7,20 +7,6 @@ import { useConfirmDialog } from '../../../../hooks/useConfirmDialog'
 import LoadingSpinner from '../../../../components/LoadingSpinner'
 import SafeError from '../../../../components/SafeError'
 
-// Mirrors the real web app's Flow Stats + Pipe Configuration panels
-// (jfb-fieldops-daily's src/components/FlowStatsPanel.tsx), adapted to the
-// native domains: jfb_hydraulic_flow_stats / jfb_hydraulic_pipe_configurations
-// key by project_id + log_date (a plain date) instead of report_id, and carry
-// a real equipment_id FK instead of a denormalized equipment name.
-//
-// Daily Total Flow / Previous Total / Project Total render as dimmed
-// placeholders on purpose -- the native flow-stats domain has no
-// daily_total_gal column ("everything else derives and is therefore not
-// stored"), and there's no operating-hours source to derive it from anyway
-// (jfb_daily_activities has no category field to separate productive time
-// from delays -- same gap as the Production Stats table's GOH/NOH columns).
-
-// ── Pipe geometry -- pure math, ported as-is from the real app ───────────
 function pipeAreaFt2(diameterIn) {
   return Math.PI * (diameterIn / 24) ** 2
 }
@@ -61,15 +47,9 @@ export function FlowStatsPanel({ projectId, equipmentId, reportDateISO }) {
     .filter((r) => r.equipment_id === equipmentId && dateOnly(r.log_date) < reportDateISO && r.pipe_dia_inches != null)
     .sort((a, b) => (dateOnly(a.log_date) < dateOnly(b.log_date) ? 1 : -1))[0]
 
-  // No sync-effect here on purpose: local edit state is a small overlay on
-  // top of the fetched row (same `edits` pattern as ProductionStatsTab.jsx
-  // and PipeConfigPanel below), not a copy kept in sync via useEffect.
-  // The parent passes a `key` that changes with equipmentId/reportDateISO,
-  // so switching equipment or date remounts this panel and clears `edits`
-  // naturally instead of needing an effect to reset it.
   const [edits, setEdits] = useState({})
   const [savedAt, setSavedAt] = useState(null)
-  const lastEditedRef = useRef(null) // 'velocity' | 'flowRate'
+  const lastEditedRef = useRef(null)
 
   const baseDiameter = formatNum(todaysRow ? todaysRow.pipe_dia_inches : priorRow?.pipe_dia_inches)
   const baseVelocity = formatNum(todaysRow?.avg_line_velocity)
@@ -178,10 +158,6 @@ export function PipeConfigPanel({ projectId, reportDateISO }) {
   const [carriedFrom, setCarriedFrom] = useState(null)
   const seeding = useRef(false)
 
-  // Carry-forward: if today has no segments yet, copy the most recent prior
-  // date's segments in immediately (persisted right away, unlike the flow
-  // stats diameter carry-forward above) -- matches the real app's
-  // PipeConfigPanel behavior exactly.
   useEffect(() => {
     if (loading || todaysRows.length > 0 || seeding.current) return
     const priorDates = [...new Set(

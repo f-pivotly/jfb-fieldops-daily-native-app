@@ -8,21 +8,9 @@ import { useReportPhotos } from './hooks/useReportPhotos'
 import { useAppConfig } from '../../../contexts/appConfigContext'
 import { uploadAttachment, deleteAttachment, readWrittenRecordId } from '../../../data'
 
-// Core-data domain slug -- must stay exactly this, it's the registered
-// Pivotly domain (see domain/jfb_report_photos.json). Also passed as the
-// Attachments API's domain param: deleting the photo's domain record
-// auto-soft-deletes its linked attachment only when this matches exactly.
 const DOMAIN = 'jfb_report_photos'
 const SLOTS = [1, 2]
 
-// Pivotly's file table enforces a unique constraint on
-// (folder_id, logical_name, storage_location). Our uploads always land in
-// the same default folder + storage location, so the original filename is
-// the only thing that can collide -- two different photos picked with the
-// same generic original name (e.g. "images.jpg") otherwise fail with
-// "A file with this name already exists in this location". Renaming to the
-// record's own id + a timestamp guarantees a unique logical_name every time,
-// without needing any change on the Pivotly side.
 function withUniqueName(file, uniqueId) {
   const dot = file.name.lastIndexOf('.')
   const ext = dot >= 0 ? file.name.slice(dot) : ''
@@ -40,10 +28,6 @@ export default function PhotosTab({ project, report }) {
   const photoFor = (n) => photos.find((p) => p.photo_number === n) ?? null
 
   const canEdit = !!project?.id && !!report?.id
-  // No role/permission system exists anywhere in this app yet -- PMReviewPanel
-  // shows its Approve/Send-back actions unconditionally too. Reject /
-  // clear-rejection follow that same precedent: gated on report status like
-  // the web app's canReject, minus the role check.
   const canReject = canEdit && report?.status === 'cqc_review'
 
   async function handleUpload(slot, file, label) {
@@ -62,7 +46,6 @@ export default function PhotosTab({ project, report }) {
           original_file_name: file.name,
           uploaded_by: config?.user?.id ?? null,
           uploaded_date_time: new Date().toISOString(),
-          // Replacing a rejected photo clears the rejection so PM re-reviews.
           pm_comment: null,
         })
       } else {
@@ -106,11 +89,6 @@ export default function PhotosTab({ project, report }) {
     }
   }
 
-  // window.confirm is silently blocked in this app's hosting iframe (its
-  // sandbox attribute has no allow-modals -- Portal_Independent_Frontend's
-  // src/app/applications/[app_slug]/index.js) -- it just returns false with
-  // no dialog and no error, which made Remove look like a dead button. Use
-  // an in-app modal instead of depending on a browser dialog API at all.
   function handleRemove(slot) {
     if (!photoFor(slot)) return
     setRemovingSlot(slot)
@@ -124,13 +102,6 @@ export default function PhotosTab({ project, report }) {
     setUploading((u) => ({ ...u, [slot]: true }))
     setSlotErrors((er) => ({ ...er, [slot]: null }))
     try {
-      // Delete the attachment ourselves rather than relying on the backend's
-      // automatic cascade-on-domain-record-delete: that cascade lives in an
-      // unguarded block in crd-tx-write.routes.ts -- if it throws, the whole
-      // delete request fails before the domain record delete even runs.
-      // Explicit, in order, is deterministic: file first, then the record,
-      // so a failure leaves an orphaned record (visible, fixable) rather
-      // than an orphaned file (invisible, easy to miss).
       if (target.photo_file_path) {
         await deleteAttachment({ fileId: target.photo_file_path, domain: DOMAIN, coreRecordId: target.id })
       }

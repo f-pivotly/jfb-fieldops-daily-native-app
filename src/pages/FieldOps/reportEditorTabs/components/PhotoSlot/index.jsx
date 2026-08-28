@@ -35,23 +35,11 @@ export default function PhotoSlot({
   const fileInputRef = useRef(null)
   const labelInputRef = useRef(null)
   const [previewUrl, setPreviewUrl] = useState(null)
-  // HEIC can't be decoded by browsers, so we can't know it's HEIC from the
-  // stored fileId (unlike the web app, which reads it off storage_path's
-  // extension) -- we only find out once the attachment's mime_type comes
-  // back from the download response.
   const [previewMime, setPreviewMime] = useState(null)
   const [labelDraft, setLabelDraft] = useState(photo?.label ?? '')
   const [previewError, setPreviewError] = useState(null)
   const [pendingCropFile, setPendingCropFile] = useState(null)
 
-  // Resolve the attachment blob whenever photo_file_path changes -- keyed
-  // strictly on that field (not the whole photo object). The parent
-  // re-creates the photo object on every label save, and including the
-  // object reference here would re-fire this effect on every keystroke,
-  // wiping the preview and re-downloading the image each time. This is a
-  // genuine data-fetch-with-cleanup effect (revokes the object URL), so the
-  // reset-then-fetch shape is intentional -- not the "you might not need an
-  // effect" case react-hooks/set-state-in-effect is meant to catch.
   useEffect(() => {
     let alive = true
     let objectUrl = null
@@ -77,10 +65,6 @@ export default function PhotoSlot({
     }
   }, [photo?.photo_file_path])
 
-  // Sync label draft when a different photo lands in this slot, using
-  // React's documented "adjust state during render" reset pattern (not an
-  // effect) -- keyed on photo.id ONLY, since including label here would let
-  // an in-flight save round-trip overwrite text the user is still typing.
   const [syncedPhotoId, setSyncedPhotoId] = useState(photo?.id)
   if (photo?.id !== syncedPhotoId) {
     setSyncedPhotoId(photo?.id)
@@ -105,8 +89,6 @@ export default function PhotoSlot({
     onLabelChangeRef.current(pending)
   }
 
-  // Flush on unmount so a tab switch within the debounce window doesn't
-  // drop the typed text.
   useEffect(() => {
     return () => flushLabel()
   }, [])

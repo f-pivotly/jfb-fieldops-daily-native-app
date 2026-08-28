@@ -30,27 +30,14 @@ const REPORT_SLUG = 'rpt-jfb-weekly-summary'
 const SUMMARY_DEBOUNCE_MS = 1200
 const PHOTO_SLOTS = [1, 2]
 
-// Core-data domain slug -- must stay exactly this, it's the registered
-// Pivotly domain (see domain/jfb_weekly_summary_photos.json). Also passed as
-// the Attachments API's domain param. Same pattern as PhotosTab.jsx's
-// jfb_report_photos wiring, scoped by (project_id, week_start) instead of a
-// single report_id since a weekly photo isn't tied to one daily report.
 const PHOTO_DOMAIN = 'jfb_weekly_summary_photos'
 
-// Pivotly's file table enforces a unique constraint on
-// (folder_id, logical_name, storage_location) -- renaming to the record's
-// own id + a timestamp guarantees a unique logical_name every time. Same
-// helper as PhotosTab.jsx.
 function withUniqueName(file, uniqueId) {
   const dot = file.name.lastIndexOf('.')
   const ext = dot >= 0 ? file.name.slice(dot) : ''
   return new File([file], `${uniqueId}-${Date.now()}${ext}`, { type: file.type })
 }
 
-// A jfb_project_delay_codes row either points at a master code (code/category
-// come from jfb_delay_codes) or is a project-specific custom code with no
-// master match (those fields live on the row itself) -- same resolution as
-// EventLogTab.jsx's resolveDelayCode.
 function resolveDelayLabel(delayCodeId, projectDelayCodeById, masterDelayCodeById) {
   if (!delayCodeId) return null
   const row = projectDelayCodeById.get(delayCodeId)
@@ -173,9 +160,6 @@ export default function WeeklySummaryPage() {
     setPhotoUploading((u) => ({ ...u, [slot]: true }))
     setPhotoSlotErrors((er) => ({ ...er, [slot]: null }))
     try {
-      // File first, then the record -- a failure leaves an orphaned record
-      // (visible, fixable) rather than an orphaned file (invisible, easy to
-      // miss). Same ordering PhotosTab.jsx uses.
       if (target.photo_file_path) {
         await deleteAttachment({ fileId: target.photo_file_path, domain: PHOTO_DOMAIN, coreRecordId: target.id })
       }
@@ -203,11 +187,6 @@ export default function WeeklySummaryPage() {
     }
   }
 
-  // Everything the report's Handlebars template needs is already computed on
-  // this page (unlike the daily report, which needed its own reportPdfData.js
-  // fetch-and-join module) -- so parameters are built directly from state,
-  // no extra data source calls. Only `project` is a real dataSource on the
-  // report side, for the header block.
   async function handleDownloadPdf() {
     setDownloadingPdf(true)
     setPdfError(null)
@@ -234,10 +213,6 @@ export default function WeeklySummaryPage() {
           weeklyDelayTotalHours: report.hours.delayApprox.toFixed(1),
         },
       })
-      // window.open would navigate with no Authorization header, and the
-      // download route requires a bearer token -- fetch the bytes through
-      // the authenticated `api` instance instead, same pattern as
-      // ReportEditorPage.jsx's handleDownloadPdf.
       const fileRes = await api.get(result.downloadUrl, { responseType: 'blob' })
       const blobUrl = URL.createObjectURL(new Blob([fileRes.data], { type: 'application/pdf' }))
       const link = document.createElement('a')
@@ -248,9 +223,6 @@ export default function WeeklySummaryPage() {
       link.remove()
       URL.revokeObjectURL(blobUrl)
 
-      // Best-effort audit log -- a failure here shouldn't block the user
-      // from the PDF they already have in hand. No single report_id exists
-      // for a week, so it's left null; report_date stands in for the period.
       try {
         const [me, file] = await Promise.all([
           fetchCurrentUser(),
@@ -284,10 +256,6 @@ export default function WeeklySummaryPage() {
     }
   }
 
-  // No dedicated "loading" flag -- mirrors useAutoMetricValues.js's pattern
-  // of only ever calling setState from inside the async callback, never
-  // synchronously in the effect body. `production.week === null && !error`
-  // stands in for "still loading" instead.
   const [production, setProduction] = useState({ week: null, toDate: null, error: null })
 
   useEffect(() => {
@@ -487,10 +455,6 @@ export default function WeeklySummaryPage() {
   )
 }
 
-// Debounced autosave textarea for one section's weekly summary -- same
-// shape as NarrativesTab.jsx's NarrativeSectionCard (debounce, flush on
-// blur/unmount, save-state indicator), minus the FWW conflict handling:
-// jfb_weekly_summaries uses plain lww, unlike jfb_report_narratives_v2.
 function WeeklySummaryTextarea({ summaryRow, onSave }) {
   const [draft, setDraft] = useState(summaryRow?.content ?? '')
   const [saveState, setSaveState] = useState('idle')
@@ -506,11 +470,6 @@ function WeeklySummaryTextarea({ summaryRow, onSave }) {
     onSaveRef.current = onSave
   })
 
-  // Re-sync from the domain when the underlying row changes (e.g. after the
-  // first save brings back a real row, or switching weeks) -- but not while
-  // a save is pending/in-flight, so we don't clobber what's still being
-  // typed. Adjusting state during render rather than in an effect, since
-  // this derives state from a prop change.
   if (summaryRow?.id !== syncedRowId && saveState !== 'pending' && saveState !== 'saving') {
     setSyncedRowId(summaryRow?.id)
     setDraft(summaryRow?.content ?? '')
@@ -535,8 +494,6 @@ function WeeklySummaryTextarea({ summaryRow, onSave }) {
     flushSaveRef.current = flushSave
   })
 
-  // Flush any pending save on unmount -- switching weeks shouldn't leave
-  // typed text unsaved.
   useEffect(
     () => () => {
       void flushSaveRef.current()

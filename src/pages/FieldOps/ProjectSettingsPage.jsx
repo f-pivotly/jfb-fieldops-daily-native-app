@@ -7,7 +7,6 @@ import DredgeChartTab from './projectSettingsTabs/DredgeChartTab'
 import AttachmentsTab from './projectSettingsTabs/AttachmentsTab'
 import SiteEquipmentTab from './projectSettingsTabs/SiteEquipmentTab'
 
-// Not yet backed by real domains -- render empty until they're established.
 const PRODUCTION_PLAN_PLACEHOLDER = {
   expectedGohPerDay: '',
   productionDaysPerWeek: '',

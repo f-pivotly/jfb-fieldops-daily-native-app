@@ -1,9 +1,5 @@
 import { useDomainData } from './useDomainData'
 
-// jfb_operators is a global roster (no project_id) -- an operator's project
-// assignments live in jfb_project_operators instead. Pass projectId to get
-// back only the operators actively linked to that project; omit it for the
-// full cross-project roster (e.g. OperatorHoursPage).
 export function useOperators(projectId) {
   const { records: operatorRecords, loading: operatorsLoading, error: operatorsError, creating, updating, create, update, remove } =
     useDomainData({ domain: 'jfb_operators', system: 'core' })

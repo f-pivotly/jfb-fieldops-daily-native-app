@@ -88,7 +88,6 @@ export default function AreasTab({ project }) {
 
   async function removeArea(row) {
     if (!(await confirm(`Delete "${row.name}"? This also removes its children.`))) return;
-    // area_level_id/parent_id have no DB-level cascade -- walk the tree client-side.
     const idsToRemove = new Set([row.id]);
     let changed = true;
     while (changed) {
