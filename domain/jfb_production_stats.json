@@ -98,6 +98,87 @@
     },
     {
       "pii": false,
+      "name": "attachment_id",
+      "slug": "attachment_id",
+      "type": "uuid",
+      "label": "Attachment Id",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": false,
+        "target_attr": "id",
+        "target_domain": "jfb_project_attachments",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "attachment_id",
+      "description": "The equipment attachment this production row was recorded under (e.g. \"3ft Cutterhead\").",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "layer_id",
+      "slug": "layer_id",
+      "type": "uuid",
+      "label": "Layer Id",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": false,
+        "target_attr": "id",
+        "target_domain": "jfb_project_layers",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "layer_id",
+      "description": "Which capping layer this production row is for. Null on dredging rows.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "material_id",
+      "slug": "material_id",
+      "type": "uuid",
+      "label": "Material Id",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": false,
+        "target_attr": "id",
+        "target_domain": "jfb_project_materials",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "material_id",
+      "description": "Which material this production row is for, filtered by the row's own layer_id via jfb_project_layer_materials. Null on dredging rows.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
       "name": "tsca",
       "slug": "tsca",
       "type": "boolean",
