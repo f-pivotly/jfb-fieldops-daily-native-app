@@ -1,0 +1,15 @@
+{
+  "source": {
+    "type": "static",
+    "values": [
+      {
+        "label": "Brennan Equipment",
+        "value": "brennan"
+      },
+      {
+        "label": "Rental Equipment",
+        "value": "rental"
+      }
+    ]
+  }
+}

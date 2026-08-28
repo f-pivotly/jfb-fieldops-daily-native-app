@@ -4,6 +4,8 @@ import { IconTrash } from '@tabler/icons-react'
 import { useProductionStats } from './hooks/useProductionStats'
 import { useProjectAreas } from '../../../hooks/useProjectAreas'
 import { useConfirmDialog } from '../../../hooks/useConfirmDialog'
+import { useGohNoh } from '../../../hooks/useGohNoh'
+import { usePicklist } from '../../../hooks/usePicklist'
 import { FlowStatsPanel, PipeConfigPanel } from './components/FlowStatsPanel'
 import LoadingSpinner from '../../../components/LoadingSpinner'
 import SafeError from '../../../components/SafeError'
@@ -11,12 +13,18 @@ import SafeError from '../../../components/SafeError'
 // Mirrors the real web app's dredging ProductionStatsTable columns/layout.
 // AREA/SUB-AREA/SUB-SUB-AREA come from area_level_combinations (breadcrumb
 // split by depth). CY/SF/Notes map to the domain's real volume/area/notes
-// columns and are editable. Pass/TSCA are real columns too but nothing
-// collects them yet, so they render blank. GOH/NOH/Avg Face Ft have no
-// source at all in this app yet -- GOH/NOH would need jfb_daily_activities
-// to carry area+pass (it only has equipment_id/operator_id/times today),
-// and there's no face-measurement column on jfb_production_stats -- so
-// those three always render blank rather than faked.
+// columns and are editable. Pass/TSCA are real columns, still not collected
+// by any form in this app (they render blank until something writes them --
+// see EventLogTab.jsx). GOH/NOH are computed server-side per row by
+// dvw-jfb-goh/dvw-jfb-noh (see useGohNoh.js), grouping jfb_daily_activities
+// by this row's own Area+Pass+TSCA+Attachment combo -- added once
+// jfb_daily_activities gained attachment_id (2026-08-27). Avg Face Ft is
+// computed client-side from this row's own volume/area -- (CY x 27) / SF,
+// same formula and same "always derive, never trust a stored value" approach
+// as the real web app's computeAvgFace() in ProductionStatsTable.tsx. No
+// data view: both inputs are already loaded in this row, so there's nothing
+// to fetch -- see conversation notes on why a data view would be the wrong
+// tool for a same-row pure calculation.
 function comboAt(combo, depth) {
   if (!Array.isArray(combo)) return '—'
   return combo[depth]?.label ?? '—'
@@ -26,6 +34,17 @@ function num(v, digits) {
   if (v === null || v === undefined || v === '') return null
   const n = Number(v)
   return Number.isFinite(n) ? Number(n.toFixed(digits)) : null
+}
+
+// Avg Face ft = (CY x 27) / SF -- 1 cubic yard = 27 cubic feet, so
+// volume_ft3 / area_sf = average depth in feet. Accepts raw cell values
+// (string while being typed, number/null once fetched) so callers can pass
+// cellValue() output directly without pre-parsing.
+function computeAvgFace(volume, area) {
+  const v = volume === null || volume === undefined || volume === '' ? null : Number(volume)
+  const a = area === null || area === undefined || area === '' ? null : Number(area)
+  if (v === null || a === null || !Number.isFinite(v) || !Number.isFinite(a) || a === 0) return null
+  return (v * 27) / a
 }
 
 function tscaLabel(tsca) {
@@ -61,6 +80,13 @@ export default function ProductionStatsTab({ project, report, equipment = [], se
   const { stats, loading, error, update, remove, create } = useProductionStats(report?.id)
   const { areas, loading: areasLoading } = useProjectAreas(project?.id)
   const rows = stats.filter((s) => s.equipment_id === selectedEquipmentId)
+  const { labels: passTypeLabels } = usePicklist('pkl-jfb-pass-type')
+  const gohNohById = useGohNoh(rows, {
+    projectId: project?.id,
+    reportDate: report?.report_date,
+    equipmentId: selectedEquipmentId,
+    passTypeLabels,
+  })
 
   // Local text state per row+field so typing doesn't fight the refetch that
   // follows every save. Keyed by `${rowId}:${field}`; falls back to the
@@ -121,6 +147,14 @@ export default function ProductionStatsTab({ project, report, equipment = [], se
 
   const totalVolume = rows.reduce((a, r) => a + (Number(r.volume) || 0), 0)
   const totalArea = rows.reduce((a, r) => a + (Number(r.area) || 0), 0)
+  const totalGoh = rows.reduce((a, r) => a + (gohNohById[r.id]?.goh ?? 0), 0)
+  const totalNoh = rows.reduce((a, r) => a + (gohNohById[r.id]?.noh ?? 0), 0)
+  // Averaged (not summed) across rows that have a value -- summing a
+  // per-row depth across different areas isn't a meaningful number.
+  const faceValues = rows
+    .map((r) => computeAvgFace(cellValue(r, 'volume'), cellValue(r, 'area')))
+    .filter((v) => v != null)
+  const avgFaceTotal = faceValues.length > 0 ? faceValues.reduce((a, v) => a + v, 0) / faceValues.length : null
 
   // Flow Stats + Pipe Configuration only apply to hydraulic projects with
   // pipe tracking on -- same gate as the real web app's
@@ -168,8 +202,8 @@ export default function ProductionStatsTab({ project, report, equipment = [], se
                 <Table.Td>{comboAt(r.area_level_combinations, 2)}</Table.Td>
                 <Table.Td c="dimmed">{r.pass_value || '—'}</Table.Td>
                 <Table.Td c="dimmed">{tscaLabel(r.tsca)}</Table.Td>
-                <Table.Td ta="right" c="dimmed">—</Table.Td>
-                <Table.Td ta="right" c="dimmed">—</Table.Td>
+                <Table.Td ta="right" c="dimmed">{(gohNohById[r.id]?.goh ?? 0).toFixed(2)}</Table.Td>
+                <Table.Td ta="right" c="dimmed">{(gohNohById[r.id]?.noh ?? 0).toFixed(2)}</Table.Td>
                 <Table.Td>
                   <TextInput
                     size="xs"
@@ -188,7 +222,12 @@ export default function ProductionStatsTab({ project, report, equipment = [], se
                     onBlur={() => commitCell(r, 'area', 0)}
                   />
                 </Table.Td>
-                <Table.Td ta="right" c="dimmed">—</Table.Td>
+                <Table.Td ta="right" c="dimmed">
+                  {(() => {
+                    const face = computeAvgFace(cellValue(r, 'volume'), cellValue(r, 'area'))
+                    return face != null ? face.toFixed(2) : '—'
+                  })()}
+                </Table.Td>
                 <Table.Td>
                   <TextInput
                     size="xs"
@@ -212,11 +251,11 @@ export default function ProductionStatsTab({ project, report, equipment = [], se
             <Table.Tfoot>
               <Table.Tr>
                 <Table.Td colSpan={5} fw={700}>Totals</Table.Td>
-                <Table.Td ta="right" fw={700}>—</Table.Td>
-                <Table.Td ta="right" fw={700}>—</Table.Td>
+                <Table.Td ta="right" fw={700}>{totalGoh.toFixed(2)}</Table.Td>
+                <Table.Td ta="right" fw={700}>{totalNoh.toFixed(2)}</Table.Td>
                 <Table.Td ta="right" fw={700}>{totalVolume.toFixed(1)}</Table.Td>
                 <Table.Td ta="right" fw={700}>{totalArea.toFixed(0)}</Table.Td>
-                <Table.Td ta="right" fw={700}>—</Table.Td>
+                <Table.Td ta="right" fw={700}>{avgFaceTotal != null ? avgFaceTotal.toFixed(2) : '—'}</Table.Td>
                 <Table.Td />
                 <Table.Td />
               </Table.Tr>

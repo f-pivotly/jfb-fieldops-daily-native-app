@@ -1,0 +1,163 @@
+{
+  "schema": [
+    {
+      "pii": false,
+      "name": "project_id",
+      "slug": "project_id",
+      "type": "uuid",
+      "label": "Project Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": true,
+        "target_attr": "id",
+        "target_domain": "jfb_projects",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "project_id",
+      "description": "The project this site equipment roster row belongs to.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "category",
+      "slug": "category",
+      "type": "text",
+      "label": "Category",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "text",
+      "column_name": "category",
+      "description": "Value from the pkl-jfb-site-equipment-category picklist (brennan / rental), not a domain FK. Matches the non-native app's project_site_equipment.category, which is a two-value DB check constraint there -- here it's a real, editable picklist instead.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "description",
+      "slug": "description",
+      "type": "text",
+      "label": "Description",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "text",
+      "column_name": "description",
+      "description": "Free-text description of the equipment, e.g. \"3 - Kann Boats (7754, 7782, 70021)\".",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "sort_order",
+      "slug": "sort_order",
+      "type": "integer",
+      "label": "Sort Order",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "integer",
+      "column_name": "sort_order",
+      "description": "Display order within its category, lowest first.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "mobilized_at",
+      "slug": "mobilized_at",
+      "type": "date",
+      "label": "Mobilized At",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "date",
+      "column_name": "mobilized_at",
+      "description": "Date this equipment arrived on site. Null if not yet set.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "demobilized_at",
+      "slug": "demobilized_at",
+      "type": "date",
+      "label": "Demobilized At",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "date",
+      "column_name": "demobilized_at",
+      "description": "Date this equipment left site. Null while still on site -- rows are not deleted on demob, matching the non-native app's convention (history is preserved).",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    }
+  ],
+  "archive": true,
+  "contact": {
+    "name": "System Administrator"
+  },
+  "multi_tenant": false,
+  "xref_enabled": true,
+  "access_control": {
+    "model": "all_systems",
+    "read_access": true,
+    "delete_access": true,
+    "insert_access": true,
+    "update_access": true,
+    "hard_delete_allowed": true,
+    "direct_write_enabled": true
+  },
+  "archive_policy": {
+    "retention_days": 365,
+    "max_record_versions": 10000
+  },
+  "track_versions": true,
+  "domain_table_name": "jfb_project_site_equipment",
+  "slug": "jfb_project_site_equipment",
+  "domain_name_singular": "jfb_project_site_equipment",
+  "default_conflict_resolution": {
+    "code": "lww",
+    "human_readable": "Last Write Wins"
+  }
+}

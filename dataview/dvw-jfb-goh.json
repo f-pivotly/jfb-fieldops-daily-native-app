@@ -1,0 +1,20 @@
+{
+  "slug": "dvw-jfb-goh",
+  "description": "Gross Operating Hours: sums jfb_daily_activities duration for a project+date range, optionally filtered down to one equipment unit / area / pass / tsca / attachment combo. Every activity counts, regardless of delay_code_id. Companion to dvw-jfb-noh (same filters, only delay_code_id IS NULL activities). Split into two single-purpose views, same convention as dvw-jfb-metric-cy / dvw-jfb-metric-sf, instead of one view returning both columns.",
+  "authoring_mode": "direct_sql",
+  "implementation": "function",
+  "direct_sql": "SELECT COALESCE(SUM(EXTRACT(EPOCH FROM (da.end_date_time - da.start_date_time)) / 3600.0), 0) AS goh_hours FROM usdf.jfb_daily_activities da WHERE da.project_id = p_project_id AND da.start_date_time::date BETWEEN p_start_date AND p_end_date AND (p_equipment_id IS NULL OR da.equipment_id = p_equipment_id) AND (da.area->>'area_id')::uuid IS NOT DISTINCT FROM p_area_id AND da.pass_type IS NOT DISTINCT FROM p_pass_type AND da.tsca IS NOT DISTINCT FROM p_tsca AND da.attachment_id IS NOT DISTINCT FROM p_attachment_id AND da.is_deleted IS NOT TRUE",
+  "parameters": [
+    { "name": "p_project_id", "type": "uuid", "required": true, "description": "Project to scope the sum to." },
+    { "name": "p_start_date", "type": "date", "required": true, "description": "Inclusive start of the activity date range (compared against start_date_time::date)." },
+    { "name": "p_end_date", "type": "date", "required": true, "description": "Inclusive end of the activity date range." },
+    { "name": "p_equipment_id", "type": "uuid", "required": false, "default": null, "description": "Equipment scope filter. Null includes all equipment (a broader-scope choice, not a combo dimension)." },
+    { "name": "p_area_id", "type": "uuid", "required": false, "default": null, "description": "Combo identity dimension, matched exactly (IS NOT DISTINCT FROM against jfb_daily_activities.area->>'area_id') -- pass the row's own area_id, or null to match only activities with no area set (the 'Unassigned' bucket). Null here does NOT mean 'all areas'." },
+    { "name": "p_pass_type", "type": "text", "required": false, "default": null, "description": "Combo identity dimension, matched exactly including null -- pass the row's own pass_type, or null to match only activities with no pass_type set." },
+    { "name": "p_tsca", "type": "boolean", "required": false, "default": null, "description": "Combo identity dimension, matched exactly including null -- pass the row's own tsca, or null to match only activities with tsca unset." },
+    { "name": "p_attachment_id", "type": "uuid", "required": false, "default": null, "description": "Combo identity dimension, matched exactly including null -- pass the row's own attachment_id, or null to match only activities with no attachment set." }
+  ],
+  "columns": [
+    { "name": "goh_hours", "type": "numeric", "description": "Gross Operating Hours -- summed duration of every matching activity; 0 when none match." }
+  ]
+}

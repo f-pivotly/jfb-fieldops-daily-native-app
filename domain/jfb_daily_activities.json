@@ -188,6 +188,33 @@
     },
     {
       "pii": false,
+      "name": "attachment_id",
+      "slug": "attachment_id",
+      "type": "uuid",
+      "label": "Attachment Id",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": false,
+        "target_attr": "id",
+        "target_domain": "jfb_project_attachments",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "attachment_id",
+      "description": "The equipment attachment (e.g. \"3ft Cutterhead\", \"Env Bucket\") active for this activity.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
       "name": "area",
       "slug": "area",
       "type": "jsonb",

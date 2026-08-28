@@ -1,0 +1,121 @@
+{
+  "schema": [
+    {
+      "pii": false,
+      "name": "project_id",
+      "slug": "project_id",
+      "type": "uuid",
+      "label": "Project Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": true,
+        "target_attr": "id",
+        "target_domain": "jfb_projects",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "project_id",
+      "description": "The project this equipment attachment (cutterhead/bucket/etc.) is configured for. Matches the non-native app's project_attachments.project_id.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "name",
+      "slug": "name",
+      "type": "text",
+      "label": "Name",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "text",
+      "column_name": "name",
+      "description": "Display name of the attachment (e.g. \"3ft Cutterhead\", \"Env Bucket\"). Selected from a dropdown when logging/editing an activity -- stored as this literal string on jfb_daily_activities.attachment and jfb_production_stats.attachment, not a foreign key, matching the non-native app's convention for pass_number.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "sort_order",
+      "slug": "sort_order",
+      "type": "integer",
+      "label": "Sort Order",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "integer",
+      "column_name": "sort_order",
+      "description": "Display order in the attachment picker, lowest first.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "active",
+      "slug": "active",
+      "type": "boolean",
+      "label": "Active",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "boolean",
+      "column_name": "active",
+      "description": "Whether this attachment is currently offered in the picker. False hides it without deleting historical activities/production stats that already reference its name.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    }
+  ],
+  "archive": true,
+  "contact": {
+    "name": "System Administrator"
+  },
+  "multi_tenant": false,
+  "xref_enabled": true,
+  "access_control": {
+    "model": "all_systems",
+    "read_access": true,
+    "delete_access": true,
+    "insert_access": true,
+    "update_access": true,
+    "hard_delete_allowed": true,
+    "direct_write_enabled": true
+  },
+  "archive_policy": {
+    "retention_days": 365,
+    "max_record_versions": 10000
+  },
+  "track_versions": true,
+  "domain_table_name": "jfb_project_attachments",
+  "slug": "jfb_project_attachments",
+  "domain_name_singular": "jfb_project_attachment",
+  "default_conflict_resolution": {
+    "code": "lww",
+    "human_readable": "Last Write Wins"
+  }
+}
