@@ -1,11 +1,11 @@
 import { useNavigate } from 'react-router-dom'
 import { Box, SimpleGrid, Card, Text, Group, Stack, ScrollArea } from '@mantine/core'
-import { useDomainData } from '../../hooks/useDomainData'
+import { useVisibleProjects } from '../../hooks/useVisibleProjects'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import SafeError from '../../components/SafeError'
 
 export default function DashboardPage() {
-  const { records, loading, error } = useDomainData({ domain: 'jfb_projects', system: 'core' })
+  const { projects: records, loading, error } = useVisibleProjects()
 
   return (
     <ScrollArea flex={1} style={{ minHeight: 0 }}>

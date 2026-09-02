@@ -70,7 +70,13 @@ export default function TeamTab({ project }) {
 
   async function handleAdd() {
     if (!selectedUserId || !hasProject) return;
-    await create({ project_id: project.id, user_id: selectedUserId, is_active: true });
+    const selectedUser = availableUsers.find((u) => u.userId === selectedUserId);
+    await create({
+      project_id: project.id,
+      user_id: selectedUserId,
+      email: selectedUser?.email ?? null,
+      is_active: true,
+    });
     setModalOpen(false);
   }
 

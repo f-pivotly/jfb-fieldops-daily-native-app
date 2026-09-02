@@ -5,14 +5,15 @@ export const AppConfigContext = createContext(null);
 export function decodeJwtUser(token) {
   try {
     const payload = JSON.parse(atob(token.split('.')[1].replaceAll('-', '+').replaceAll('_', '/')))
-    const name = payload.name || payload.preferred_username || payload.email || ''
+    const email = payload.email || payload.preferred_username || payload.upn || ''
+    const name = payload.name || email
     const initials = name
       .split(/\s+/)
       .filter(Boolean)
       .slice(0, 2)
       .map(w => w[0].toUpperCase())
       .join('') || '?'
-    return { name, initials, email: payload.email || '' }
+    return { name, initials, email }
   } catch {
     return { name: '', initials: '?', email: '' }
   }
