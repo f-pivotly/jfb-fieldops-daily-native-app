@@ -1,0 +1,110 @@
+{
+  "renderer": "auto",
+  "pageSetup": {
+    "size": "letter",
+    "margins": {
+      "top": "36",
+      "left": "36",
+      "right": "36",
+      "bottom": "36"
+    },
+    "orientation": "portrait",
+    "showPageNumbers": true
+  },
+  "parameters": [
+    {
+      "name": "projectId",
+      "type": "uuid",
+      "label": "Project",
+      "required": true,
+      "description": "jfb_projects row id"
+    },
+    {
+      "name": "projectFilter",
+      "type": "json",
+      "label": "Project filter",
+      "required": true,
+      "description": "Caller-built: {\"id\": \"<projectId>\"}"
+    },
+    {
+      "name": "weekStart",
+      "type": "date",
+      "label": "Week Start",
+      "required": true
+    },
+    {
+      "name": "weekEnd",
+      "type": "date",
+      "label": "Week End",
+      "required": true
+    },
+    {
+      "name": "releasedCount",
+      "type": "number",
+      "label": "Released reports this week",
+      "required": true
+    },
+    {
+      "name": "narrativeSections",
+      "type": "json",
+      "label": "Narrative sections",
+      "required": false,
+      "description": "Caller-resolved [{label, content}] -- only sections with a saved jfb_weekly_summaries entry for this week (mirrors the vanilla app's PDF: prints the PM's saved rollup, never the daily reference entries). Built by buildNarrativeSectionsParam() in weeklySummary.js."
+    },
+    {
+      "name": "weeklyProduction",
+      "type": "json",
+      "label": "Weekly production",
+      "required": false,
+      "description": "Caller-computed {weekCy, weekSf, toDateCy, toDateSf, goal}, pre-formatted strings, from the same dvw-jfb-metric-cy/sf data views the on-screen page calls."
+    },
+    {
+      "name": "weeklyDelays",
+      "type": "json",
+      "label": "Weekly delay breakdown",
+      "required": false,
+      "description": "Caller-computed [{description, hours}] from buildWeeklyReport()'s hours.byDelayLabel -- approximate, jfb_daily_activities has no category column (see METRICS_MIGRATION_PLAN.md)."
+    },
+    {
+      "name": "weeklyDelayTotalHours",
+      "type": "string",
+      "label": "Total delay hours this week",
+      "required": false
+    },
+    {
+      "name": "weeklyPhotoAssets",
+      "type": "json",
+      "label": "Weekly photo assets",
+      "required": false,
+      "description": "Caller-resolved {\"1\": {label, dataUri}|null, \"2\": {...}|null}, one per uploaded jfb_weekly_summary_photos slot for this project+week. Resolved client-side via downloadAttachment() + base64 data-URI conversion, because the render engine cannot fetch a Pivotly file's bytes by id from inside a domain-query source, and the Asset Manifest only supports a fixed fileId set at publish time, not one that changes per week."
+    }
+  ],
+  "reportType": "html",
+  "dataSources": [
+    {
+      "key": "project",
+      "slug": "jfb_projects",
+      "type": "domain-query",
+      "queryParams": {
+        "limit": 1
+      },
+      "parameterMapping": {
+        "filters": "{{parameters.projectFilter}}"
+      }
+    }
+  ],
+  "htmlTemplate": {
+    "css": ":root {\n  --navy: #002f6d;\n  --band-gray-bg: #d1d5db;\n  --band-gray-text: #111827;\n  --body-text: #111827;\n  --muted: #9CA3AF;\n  --alt-row: #F4F6FA;\n  --photo-bg: #F3F4F6;\n}\n\n* { box-sizing: border-box; }\n\nbody {\n  font-family: Helvetica, Arial, sans-serif;\n  font-size: 10pt;\n  color: var(--body-text);\n}\n\n.cover-frame, .sheet-outer-frame { border: 0.75pt solid var(--navy); }\n.page-break { page-break-after: always; }\n\n/* \u2500\u2500 Metadata block: logo | project info | report name + date table \u2500\u2500 */\n.meta-block {\n  display: flex; flex-direction: row;\n  border: 1pt solid var(--navy); margin-bottom: 2pt;\n}\n.meta-logo-col {\n  flex: 0.7; padding: 3pt 6pt; border-right: 1pt solid var(--navy);\n  display: flex; align-items: center; justify-content: center;\n}\n.logo-placeholder {\n  width: 95pt; height: 36pt; border: 0.75pt dashed var(--muted); background: #ffffff;\n}\n.meta-info-col { flex: 1.1; padding: 3pt 8pt; border-right: 1pt solid var(--navy); }\n.meta-project-name {\n  font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold;\n  font-size: 11pt; color: var(--navy); margin-bottom: 2pt;\n}\n.meta-line { display: flex; flex-direction: row; margin-top: 0.5pt; }\n.meta-line-label {\n  font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold;\n  font-size: 9pt; color: var(--body-text); width: 68pt;\n}\n.meta-line-value { font-size: 9pt; color: var(--body-text); flex: 1; }\n.meta-right { flex: 1.2; display: flex; flex-direction: column; }\n.meta-report-name {\n  display: flex; flex-direction: row; padding: 6pt 8pt; border-bottom: 1pt solid var(--navy);\n}\n.meta-report-name-label {\n  font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold;\n  font-size: 10pt; width: 90pt;\n}\n.meta-report-name-value {\n  font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold;\n  font-size: 10pt; color: var(--navy); flex: 1;\n}\n.meta-date-table { width: 100%; border-collapse: collapse; flex-grow: 1; }\n.meta-date-table th {\n  background: var(--navy); color: #ffffff;\n  font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold;\n  font-size: 8.5pt; text-align: center; padding: 3pt 4pt; border-right: 0.5pt solid #ffffff;\n}\n.meta-date-table td {\n  text-align: center; font-size: 10pt;\n  font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold;\n  padding: 4pt; border-right: 1pt solid var(--navy);\n}\n.meta-date-table td .weekday { font-size: 9pt; font-weight: normal; display: block; }\n\n/* \u2500\u2500 Title / section bands \u2500\u2500 */\n.title-band {\n  background: var(--navy); color: #ffffff; padding: 4pt 0; text-align: center;\n  margin: 2pt 0 3pt; font-family: Helvetica-Bold, Helvetica, Arial, sans-serif;\n  font-weight: bold; font-size: 13pt; letter-spacing: 0.3pt;\n}\n.section-band {\n  background: var(--band-gray-bg); color: var(--band-gray-text); padding: 2.5pt 8pt;\n  margin-top: 3pt; font-family: Helvetica-Bold, Helvetica, Arial, sans-serif;\n  font-weight: bold; font-size: 10.5pt; letter-spacing: 0.2pt; text-align: left;\n}\n.section-band.centered { text-align: center; }\n.production-table-band {\n  background: var(--navy); color: #ffffff; padding: 2.5pt 8pt; margin-top: 3pt;\n  font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold;\n  font-size: 10.5pt; letter-spacing: 0.2pt; text-align: center;\n}\n\n/* \u2500\u2500 Narrative body \u2500\u2500 */\n.narrative-body { font-size: 10pt; color: var(--body-text); line-height: 1.32; padding: 2.5pt 6pt; }\n.narrative-empty { font-size: 10pt; color: var(--muted); font-style: italic; padding: 2.5pt 6pt; }\n\n/* \u2500\u2500 Photos \u2500\u2500 */\n.photos-row { display: flex; flex-direction: row; justify-content: space-between; margin-top: 4pt; gap: 10pt; }\n.photo-cell { width: 100%; }\n.photo-frame {\n  width: 100%; height: 140pt; border: 0.75pt solid var(--navy); background: var(--photo-bg);\n  display: flex; align-items: center; justify-content: center;\n}\n.photo-placeholder { font-size: 10pt; color: var(--muted); }\n.photo-label {\n  font-size: 10pt; font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold;\n  color: var(--body-text); margin-top: 3pt; text-align: center;\n}\n\n/* \u2500\u2500 Generic tables \u2500\u2500 */\n.metrics-table, .std-table { width: 100%; border-collapse: collapse; border: 0.5pt solid var(--navy); margin-top: 0; }\n.metrics-table th, .std-table th {\n  background: var(--band-gray-bg); color: var(--band-gray-text);\n  font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold;\n  font-size: 9.5pt; padding: 3.5pt 6pt; text-align: center; letter-spacing: 0.3pt;\n  border: 0.5pt solid var(--navy);\n}\n.metrics-table th.label-col, .std-table th.label-col { text-align: left; padding-left: 8pt; }\n.metrics-table td, .std-table td {\n  font-size: 9.5pt; color: var(--body-text); padding: 3pt 6pt; text-align: right;\n  border: 0.5pt solid var(--navy);\n}\n.metrics-table td.label-col, .std-table td.label-col { text-align: left; padding-left: 8pt; }\n.std-table td.center { text-align: center; }\n.metrics-table tr:nth-child(even) td, .std-table tbody tr:nth-child(even) td { background: var(--alt-row); }\n.metrics-empty, .table-empty { text-align: center; color: var(--muted); font-style: italic; padding: 8pt; }\n\n/* \u2500\u2500 Equipment list \u2500\u2500 */\n.equipment-list { font-size: 10pt; padding: 4pt 8pt; }\n.equipment-list li { margin-bottom: 2pt; }\n\n/* \u2500\u2500 Footer \u2500\u2500 */\n.footer { font-size: 7pt; color: var(--muted); text-align: center; margin-top: 10pt; }\n\n/* \u2500\u2500 Sheet header (Production Sheet / Dredge Progress / Safety) \u2500\u2500 */\n.sheet-meta-row { display: flex; flex-direction: row; border-bottom: 0.75pt solid var(--navy); }\n.sheet-logo-col {\n  flex: 0 0 130pt; padding: 4pt 6pt; border-right: 0.75pt solid var(--navy);\n  display: flex; align-items: center; justify-content: center;\n}\n.sheet-title-col {\n  flex: 0 0 130pt; padding: 4pt 6pt; border-right: 0.75pt solid var(--navy);\n  font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold;\n  font-size: 12pt; color: var(--body-text); display: flex; align-items: center;\n}\n.sheet-equipment-col {\n  flex: 1; padding: 4pt 8pt; border-right: 0.75pt solid var(--navy);\n  font-family: Helvetica-BoldOblique, Helvetica, Arial, sans-serif; font-style: italic; font-weight: bold;\n  font-size: 15pt; color: var(--navy); display: flex; align-items: center; justify-content: center;\n}\n.sheet-date-table { flex: 0 0 260pt; border-collapse: collapse; }\n.sheet-date-table th {\n  background: var(--navy); color: #fff; font-size: 8pt;\n  font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold;\n  padding: 2pt 4pt; text-align: center; border-right: 0.5pt solid #fff;\n}\n.sheet-date-table td {\n  font-size: 9.5pt; font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold;\n  padding: 3pt 4pt; text-align: center; border-right: 0.5pt solid var(--navy); border-top: 0.5pt solid var(--navy);\n}\n.sheet-date-table td .weekday { font-size: 8.5pt; font-weight: normal; display: block; }\n\n.sheet-info-row { display: flex; flex-direction: row; border-bottom: 0.75pt solid var(--navy); font-size: 9pt; }\n.sheet-info-col { flex: 1; padding: 4pt 8pt; border-right: 0.75pt solid var(--navy); }\n.sheet-info-col:last-child { border-right: none; }\n.sheet-info-col .lbl { font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold; width: 70pt; display: inline-block; }\n\n.op-time-row { display: flex; flex-direction: row; border-bottom: 0.75pt solid var(--navy); }\n.op-time-stat {\n  flex: 1; padding: 4pt 8pt; border-right: 0.75pt solid var(--navy); text-align: center;\n}\n.op-time-stat:last-child { border-right: none; }\n.op-time-stat .stat-label { font-size: 8pt; font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold; }\n.op-time-stat .stat-value { font-size: 14pt; font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold; color: var(--navy); }\n.op-time-stat .stat-sub { font-size: 7.5pt; color: var(--muted); font-style: italic; }\n\n.sheet-band {\n  background: var(--navy); color: #fff; padding: 3pt 8pt; text-align: center;\n  font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold; font-size: 10pt;\n}\n.sheet-section { padding: 6pt 8pt; }\n\n.stats-grid { display: flex; flex-direction: row; gap: 8pt; padding: 6pt 8pt; }\n.stats-grid > div { flex: 1; }\n.stats-grid .box-title {\n  background: var(--band-gray-bg); color: var(--band-gray-text); text-align: center;\n  font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold; font-size: 9pt;\n  padding: 3pt; border: 0.5pt solid var(--navy); border-bottom: none;\n}\n.stats-grid .box-body { border: 0.5pt solid var(--navy); padding: 6pt; font-size: 9pt; min-height: 50pt; color: var(--muted); font-style: italic; text-align: center; }\n\n/* \u2500\u2500 Dredge Progress chart skeleton \u2500\u2500 */\n.chart-legend-row { display: flex; flex-direction: row; align-items: center; padding: 6pt 8pt; gap: 16pt; font-size: 9pt; }\n.chart-legend-item { display: flex; flex-direction: row; align-items: center; gap: 4pt; }\n.chart-swatch { width: 12pt; height: 8pt; display: inline-block; border: 0.5pt solid var(--navy); }\n.chart-placeholder {\n  border: 0.75pt solid var(--navy); background: var(--photo-bg); height: 480pt;\n  display: flex; align-items: center; justify-content: center; color: var(--muted);\n  font-size: 11pt; font-style: italic; margin: 4pt 8pt;\n}\n\n/* \u2500\u2500 Safety page \u2500\u2500 */\n.safety-updates-row { display: flex; flex-direction: row; border-bottom: 0.5pt solid var(--navy); font-size: 9pt; }\n.safety-updates-label {\n  flex: 0 0 200pt; padding: 4pt 8pt; border-right: 0.5pt solid var(--navy);\n  font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold; background: var(--alt-row);\n}\n.safety-updates-value { flex: 1; padding: 4pt 8pt; color: var(--muted); }\n.safety-two-col { display: flex; flex-direction: row; }\n.safety-col { flex: 1; border-right: 0.75pt solid var(--navy); }\n.safety-col:last-child { border-right: none; }\n.safety-sig-row { display: flex; flex-direction: row; margin-top: 30pt; padding: 0 8pt 8pt; gap: 20pt; }\n.safety-sig { flex: 1; text-align: center; font-size: 8.5pt; border-top: 0.5pt solid var(--body-text); padding-top: 3pt; }\n/* \u2500\u2500 Weekly Summary: side-by-side production boxes + delay total row \u2500\u2500 */\n.weekly-two-col { display: flex; flex-direction: row; gap: 10pt; margin-top: 2pt; }\n.weekly-box { flex: 1; border: 0.5pt solid var(--navy); }\n.weekly-box-band {\n  background: var(--navy); color: #ffffff; padding: 2.5pt 6pt;\n  font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold; font-size: 9pt; text-align: center;\n}\n.weekly-kv {\n  display: flex; flex-direction: row; justify-content: space-between;\n  padding: 2.5pt 6pt; font-size: 9.5pt; border-bottom: 0.5pt solid #e5e7eb;\n}\n.weekly-kv:last-child { border-bottom: none; }\n.weekly-kv-label { color: var(--body-text); }\n.weekly-kv-value { font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold; }\n.weekly-footnote-inline { padding: 2pt 6pt; margin-top: 2pt; }\n.weekly-total-row td { font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold; border-top: 0.75pt solid var(--navy); }\n\n\n/* \u2500\u2500 Logo / photo image fit (added for asset embedding) \u2500\u2500 */\n.logo-img { max-width: 100%; max-height: 100%; object-fit: contain; }\n.photo-img { width: 100%; height: 100%; object-fit: cover; }",
+    "content": "<div class=\"cover-frame\">\n  <div class=\"meta-block\">\n    <div class=\"meta-logo-col\"><div class=\"logo-placeholder\"><img class=\"logo-img\" src=\"{{asset \\\"jfb-logo\\\"}}\" alt=\"J.F. Brennan Company\" /></div></div>\n    <div class=\"meta-info-col\">\n      <div class=\"meta-project-name\">Project: {{project.[0].name}}</div>\n      <div class=\"meta-line\"><span class=\"meta-line-label\">Project Code:</span><span class=\"meta-line-value\">{{project.[0].project_code}}</span></div>\n      <div class=\"meta-line\"><span class=\"meta-line-label\">Client:</span><span class=\"meta-line-value\">{{project.[0].client_name}}</span></div>\n      <div class=\"meta-line\"><span class=\"meta-line-label\">Start Date:</span><span class=\"meta-line-value\">{{project.[0].start_date}}</span></div>\n      <div class=\"meta-line\"><span class=\"meta-line-label\">Location:</span><span class=\"meta-line-value\">{{project.[0].site_city}}, {{project.[0].site_state}}</span></div>\n    </div>\n    <div class=\"meta-right\">\n      <div class=\"meta-report-name\"><span class=\"meta-report-name-label\">Report:</span><span class=\"meta-report-name-value\">Weekly Summary</span></div>\n      <table class=\"meta-date-table\">\n        <thead><tr><th style=\"width:55%\">Week Of</th><th>Released Reports</th></tr></thead>\n        <tbody><tr><td>{{parameters.weekStart}} &ndash; {{parameters.weekEnd}}</td><td>{{parameters.releasedCount}}</td></tr></tbody>\n      </table>\n    </div>\n  </div>\n\n  <div class=\"title-band\">Brennan Weekly Report of Operations</div>\n\n  {{#if parameters.narrativeSections.length}}\n  {{#each parameters.narrativeSections}}\n  <div class=\"section-band\">{{this.label}}</div>\n  <div class=\"narrative-body\">{{this.content}}</div>\n  {{/each}}\n  {{else}}\n  <div class=\"section-band\">Narrative Summary</div>\n  <div class=\"narrative-empty\">No narrative summary was entered for this week.</div>\n  {{/if}}\n\n  <div class=\"section-band centered\">Site Photos</div>\n  <div class=\"photos-row\">\n    <div class=\"photo-cell\">\n      <div class=\"photo-frame\">\n        {{#if parameters.weeklyPhotoAssets.[1].dataUri}}\n        <img class=\"photo-img\" src=\"{{parameters.weeklyPhotoAssets.[1].dataUri}}\" alt=\"{{parameters.weeklyPhotoAssets.[1].label}}\" />\n        {{else}}\n        <span class=\"photo-placeholder\">No photo uploaded</span>\n        {{/if}}\n      </div>\n      <div class=\"photo-label\">{{#if parameters.weeklyPhotoAssets.[1].label}}{{parameters.weeklyPhotoAssets.[1].label}}{{else}}Photo 1{{/if}}</div>\n    </div>\n    <div class=\"photo-cell\">\n      <div class=\"photo-frame\">\n        {{#if parameters.weeklyPhotoAssets.[2].dataUri}}\n        <img class=\"photo-img\" src=\"{{parameters.weeklyPhotoAssets.[2].dataUri}}\" alt=\"{{parameters.weeklyPhotoAssets.[2].label}}\" />\n        {{else}}\n        <span class=\"photo-placeholder\">No photo uploaded</span>\n        {{/if}}\n      </div>\n      <div class=\"photo-label\">{{#if parameters.weeklyPhotoAssets.[2].label}}{{parameters.weeklyPhotoAssets.[2].label}}{{else}}Photo 2{{/if}}</div>\n    </div>\n  </div>\n\n  <div class=\"production-table-band\">Production</div>\n  <div class=\"weekly-two-col\">\n    <div class=\"weekly-box\">\n      <div class=\"weekly-box-band\">This Week</div>\n      <div class=\"weekly-kv\"><span class=\"weekly-kv-label\">Volume (CY)</span><span class=\"weekly-kv-value\">{{parameters.weeklyProduction.weekCy}}</span></div>\n      <div class=\"weekly-kv\"><span class=\"weekly-kv-label\">Area (SF)</span><span class=\"weekly-kv-value\">{{parameters.weeklyProduction.weekSf}}</span></div>\n    </div>\n    <div class=\"weekly-box\">\n      <div class=\"weekly-box-band\">Project to Date</div>\n      <div class=\"weekly-kv\"><span class=\"weekly-kv-label\">Volume (CY)</span><span class=\"weekly-kv-value\">{{parameters.weeklyProduction.toDateCy}}</span></div>\n      <div class=\"weekly-kv\"><span class=\"weekly-kv-label\">Area (SF)</span><span class=\"weekly-kv-value\">{{parameters.weeklyProduction.toDateSf}}</span></div>\n      {{#if parameters.weeklyProduction.goal}}\n      <div class=\"weekly-kv\"><span class=\"weekly-kv-label\">Goal</span><span class=\"weekly-kv-value\">{{parameters.weeklyProduction.goal}}</span></div>\n      {{/if}}\n    </div>\n  </div>\n  <div class=\"narrative-empty weekly-footnote-inline\">Operating hours (GOH/NOH) aren't shown &mdash; no category field exists yet to compute them from.</div>\n\n  <div class=\"section-band\">Delay Summary &mdash; This Week (Approximate)</div>\n  {{#if parameters.weeklyDelays.length}}\n  <table class=\"std-table\">\n    <thead><tr><th class=\"label-col\">Delay</th><th>Hours</th></tr></thead>\n    <tbody>\n      {{#each parameters.weeklyDelays}}\n      <tr><td class=\"label-col\">{{this.description}}</td><td class=\"center\">{{this.hours}}</td></tr>\n      {{/each}}\n      <tr class=\"weekly-total-row\"><td class=\"label-col\">Total</td><td class=\"center\">{{parameters.weeklyDelayTotalHours}}</td></tr>\n    </tbody>\n  </table>\n  {{else}}\n  <div class=\"narrative-empty\">No delay-coded activity this week.</div>\n  {{/if}}\n\n  <div class=\"footer\">Delay hours are approximate (based on whether a logged activity has a delay code attached, not a true operating/delay/bookend split). J.F. Brennan Company, Inc. &mdash; Environmental Group &mdash; Confidential</div>\n</div>\n"
+  },
+  "outputFormat": "pdf",
+  "publishStatus": "published",
+  "schemaVersion": "3.0",
+  "assets": [
+    {
+      "key": "jfb-logo",
+      "fileId": "01a0488c-1f10-7eca-81e6-21c3145163fa",
+      "alt": "J.F. Brennan Company logo"
+    }
+  ]
+}

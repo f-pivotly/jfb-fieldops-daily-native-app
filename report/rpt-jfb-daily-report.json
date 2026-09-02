@@ -1,0 +1,154 @@
+{
+  "renderer": "auto",
+  "pageSetup": {
+    "size": "letter",
+    "margins": {
+      "top": "36",
+      "left": "36",
+      "right": "36",
+      "bottom": "36"
+    },
+    "orientation": "portrait",
+    "showPageNumbers": true
+  },
+  "parameters": [
+    {
+      "name": "projectId",
+      "type": "uuid",
+      "label": "Project",
+      "required": true,
+      "description": "jfb_projects row id"
+    },
+    {
+      "name": "reportId",
+      "type": "uuid",
+      "label": "Report",
+      "required": true,
+      "description": "jfb_reports row id for this day"
+    },
+    {
+      "name": "date",
+      "type": "date",
+      "label": "Report Date",
+      "required": true
+    },
+    {
+      "name": "projectFilter",
+      "type": "json",
+      "label": "Project filter",
+      "required": true,
+      "description": "Caller-built: {\"id\": \"<projectId>\"}"
+    },
+    {
+      "name": "reportFilter",
+      "type": "json",
+      "label": "Report filter",
+      "required": true,
+      "description": "Caller-built: {\"report_id\": \"<reportId>\"}"
+    },
+    {
+      "name": "equipmentFilter",
+      "type": "json",
+      "label": "Equipment filter",
+      "required": true,
+      "description": "Caller-built: {\"project_id\": \"<projectId>\"}"
+    },
+    {
+      "name": "narrativeSections",
+      "type": "json",
+      "label": "Narrative sections",
+      "required": false,
+      "description": "Caller-resolved ordered [{label, content}], one per configured jfb_project_report_narratives section for this project. Resolved client-side (not a domain-query source) because jfb_report_narratives_v2 has no sort_order of its own -- order lives on the separate template domain, joined by label."
+    },
+    {
+      "name": "dailyActivityByEquipment",
+      "type": "json",
+      "label": "Daily activity by equipment",
+      "required": false,
+      "description": "Caller-resolved {equipmentId: [{num,from,to,minutes,area,pass,event,notes}]}. Resolved client-side because it needs timezone-aware calendar-day matching (jfb_daily_activities has no report_id/date column) and a two-hop delay-code lookup -- neither reachable from a domain-query filter or this engine's Handlebars (no eq/date-math helpers)."
+    },
+    {
+      "name": "photoAssets",
+      "type": "json",
+      "label": "Photo assets",
+      "required": false,
+      "description": "Caller-resolved {\"1\": {label, dataUri}|null, \"2\": {...}|null}, one per uploaded jfb_report_photos slot for this report. Resolved client-side via downloadAttachment() + base64 data-URI conversion, because the render engine's domain-query sources return only the photo_file_path file id, not file bytes, and the Asset Manifest only supports a fixed fileId set at publish time, not one that changes per report."
+    }
+  ],
+  "reportType": "html",
+  "dataSources": [
+    {
+      "key": "project",
+      "slug": "jfb_projects",
+      "type": "domain-query",
+      "queryParams": {
+        "limit": 1
+      },
+      "parameterMapping": {
+        "filters": "{{parameters.projectFilter}}"
+      }
+    },
+    {
+      "key": "narratives",
+      "slug": "jfb_report_narratives_v2",
+      "type": "domain-query",
+      "queryParams": {
+        "limit": 100,
+        "sortCol": "narrative_label",
+        "sortDir": "asc"
+      },
+      "parameterMapping": {
+        "filters": "{{parameters.reportFilter}}"
+      }
+    },
+    {
+      "key": "photos",
+      "slug": "jfb_report_photos",
+      "type": "domain-query",
+      "queryParams": {
+        "limit": 50,
+        "sortCol": "photo_number",
+        "sortDir": "asc"
+      },
+      "parameterMapping": {
+        "filters": "{{parameters.reportFilter}}"
+      }
+    },
+    {
+      "key": "production",
+      "slug": "jfb_production_stats",
+      "type": "domain-query",
+      "queryParams": {
+        "limit": 100
+      },
+      "parameterMapping": {
+        "filters": "{{parameters.reportFilter}}"
+      }
+    },
+    {
+      "key": "equipment",
+      "slug": "jfb_equipments",
+      "type": "domain-query",
+      "queryParams": {
+        "limit": 50
+      },
+      "parameterMapping": {
+        "filters": "{{parameters.equipmentFilter}}"
+      }
+    }
+  ],
+  "htmlTemplate": {
+    "css": ":root {\n  --navy: #002f6d;\n  --band-gray-bg: #d1d5db;\n  --band-gray-text: #111827;\n  --body-text: #111827;\n  --muted: #9CA3AF;\n  --alt-row: #F4F6FA;\n  --photo-bg: #F3F4F6;\n}\n\n* { box-sizing: border-box; }\n\nbody {\n  font-family: Helvetica, Arial, sans-serif;\n  font-size: 10pt;\n  color: var(--body-text);\n}\n\n.cover-frame, .sheet-outer-frame { border: 0.75pt solid var(--navy); }\n.page-break { page-break-after: always; }\n\n/* \u2500\u2500 Metadata block: logo | project info | report name + date table \u2500\u2500 */\n.meta-block {\n  display: flex; flex-direction: row;\n  border: 1pt solid var(--navy); margin-bottom: 2pt;\n}\n.meta-logo-col {\n  flex: 0.7; padding: 3pt 6pt; border-right: 1pt solid var(--navy);\n  display: flex; align-items: center; justify-content: center;\n}\n.logo-placeholder {\n  width: 95pt; height: 36pt; border: 0.75pt dashed var(--muted); background: #ffffff;\n}\n.meta-info-col { flex: 1.1; padding: 3pt 8pt; border-right: 1pt solid var(--navy); }\n.meta-project-name {\n  font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold;\n  font-size: 11pt; color: var(--navy); margin-bottom: 2pt;\n}\n.meta-line { display: flex; flex-direction: row; margin-top: 0.5pt; }\n.meta-line-label {\n  font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold;\n  font-size: 9pt; color: var(--body-text); width: 68pt;\n}\n.meta-line-value { font-size: 9pt; color: var(--body-text); flex: 1; }\n.meta-right { flex: 1.2; display: flex; flex-direction: column; }\n.meta-report-name {\n  display: flex; flex-direction: row; padding: 6pt 8pt; border-bottom: 1pt solid var(--navy);\n}\n.meta-report-name-label {\n  font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold;\n  font-size: 10pt; width: 90pt;\n}\n.meta-report-name-value {\n  font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold;\n  font-size: 10pt; color: var(--navy); flex: 1;\n}\n.meta-date-table { width: 100%; border-collapse: collapse; flex-grow: 1; }\n.meta-date-table th {\n  background: var(--navy); color: #ffffff;\n  font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold;\n  font-size: 8.5pt; text-align: center; padding: 3pt 4pt; border-right: 0.5pt solid #ffffff;\n}\n.meta-date-table td {\n  text-align: center; font-size: 10pt;\n  font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold;\n  padding: 4pt; border-right: 1pt solid var(--navy);\n}\n.meta-date-table td .weekday { font-size: 9pt; font-weight: normal; display: block; }\n\n/* \u2500\u2500 Title / section bands \u2500\u2500 */\n.title-band {\n  background: var(--navy); color: #ffffff; padding: 4pt 0; text-align: center;\n  margin: 2pt 0 3pt; font-family: Helvetica-Bold, Helvetica, Arial, sans-serif;\n  font-weight: bold; font-size: 13pt; letter-spacing: 0.3pt;\n}\n.section-band {\n  background: var(--band-gray-bg); color: var(--band-gray-text); padding: 2.5pt 8pt;\n  margin-top: 3pt; font-family: Helvetica-Bold, Helvetica, Arial, sans-serif;\n  font-weight: bold; font-size: 10.5pt; letter-spacing: 0.2pt; text-align: left;\n}\n.section-band.centered { text-align: center; }\n.production-table-band {\n  background: var(--navy); color: #ffffff; padding: 2.5pt 8pt; margin-top: 3pt;\n  font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold;\n  font-size: 10.5pt; letter-spacing: 0.2pt; text-align: center;\n}\n\n/* \u2500\u2500 Narrative body \u2500\u2500 */\n.narrative-body { font-size: 10pt; color: var(--body-text); line-height: 1.32; padding: 2.5pt 6pt; }\n.narrative-empty { font-size: 10pt; color: var(--muted); font-style: italic; padding: 2.5pt 6pt; }\n\n/* \u2500\u2500 Photos \u2500\u2500 */\n.photos-row { display: flex; flex-direction: row; justify-content: space-between; margin-top: 4pt; gap: 10pt; }\n.photo-cell { width: 100%; }\n.photo-frame {\n  width: 100%; height: 140pt; border: 0.75pt solid var(--navy); background: var(--photo-bg);\n  display: flex; align-items: center; justify-content: center;\n}\n.photo-placeholder { font-size: 10pt; color: var(--muted); }\n.photo-label {\n  font-size: 10pt; font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold;\n  color: var(--body-text); margin-top: 3pt; text-align: center;\n}\n\n/* \u2500\u2500 Generic tables \u2500\u2500 */\n.metrics-table, .std-table { width: 100%; border-collapse: collapse; border: 0.5pt solid var(--navy); margin-top: 0; }\n.metrics-table th, .std-table th {\n  background: var(--band-gray-bg); color: var(--band-gray-text);\n  font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold;\n  font-size: 9.5pt; padding: 3.5pt 6pt; text-align: center; letter-spacing: 0.3pt;\n  border: 0.5pt solid var(--navy);\n}\n.metrics-table th.label-col, .std-table th.label-col { text-align: left; padding-left: 8pt; }\n.metrics-table td, .std-table td {\n  font-size: 9.5pt; color: var(--body-text); padding: 3pt 6pt; text-align: right;\n  border: 0.5pt solid var(--navy);\n}\n.metrics-table td.label-col, .std-table td.label-col { text-align: left; padding-left: 8pt; }\n.std-table td.center { text-align: center; }\n.metrics-table tr:nth-child(even) td, .std-table tbody tr:nth-child(even) td { background: var(--alt-row); }\n.metrics-empty, .table-empty { text-align: center; color: var(--muted); font-style: italic; padding: 8pt; }\n\n/* \u2500\u2500 Equipment list \u2500\u2500 */\n.equipment-list { font-size: 10pt; padding: 4pt 8pt; }\n.equipment-list li { margin-bottom: 2pt; }\n\n/* \u2500\u2500 Footer \u2500\u2500 */\n.footer { font-size: 7pt; color: var(--muted); text-align: center; margin-top: 10pt; }\n\n/* \u2500\u2500 Sheet header (Production Sheet / Dredge Progress / Safety) \u2500\u2500 */\n.sheet-meta-row { display: flex; flex-direction: row; border-bottom: 0.75pt solid var(--navy); }\n.sheet-logo-col {\n  flex: 0 0 130pt; padding: 4pt 6pt; border-right: 0.75pt solid var(--navy);\n  display: flex; align-items: center; justify-content: center;\n}\n.sheet-title-col {\n  flex: 0 0 130pt; padding: 4pt 6pt; border-right: 0.75pt solid var(--navy);\n  font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold;\n  font-size: 12pt; color: var(--body-text); display: flex; align-items: center;\n}\n.sheet-equipment-col {\n  flex: 1; padding: 4pt 8pt; border-right: 0.75pt solid var(--navy);\n  font-family: Helvetica-BoldOblique, Helvetica, Arial, sans-serif; font-style: italic; font-weight: bold;\n  font-size: 15pt; color: var(--navy); display: flex; align-items: center; justify-content: center;\n}\n.sheet-date-table { flex: 0 0 260pt; border-collapse: collapse; }\n.sheet-date-table th {\n  background: var(--navy); color: #fff; font-size: 8pt;\n  font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold;\n  padding: 2pt 4pt; text-align: center; border-right: 0.5pt solid #fff;\n}\n.sheet-date-table td {\n  font-size: 9.5pt; font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold;\n  padding: 3pt 4pt; text-align: center; border-right: 0.5pt solid var(--navy); border-top: 0.5pt solid var(--navy);\n}\n.sheet-date-table td .weekday { font-size: 8.5pt; font-weight: normal; display: block; }\n\n.sheet-info-row { display: flex; flex-direction: row; border-bottom: 0.75pt solid var(--navy); font-size: 9pt; }\n.sheet-info-col { flex: 1; padding: 4pt 8pt; border-right: 0.75pt solid var(--navy); }\n.sheet-info-col:last-child { border-right: none; }\n.sheet-info-col .lbl { font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold; width: 70pt; display: inline-block; }\n\n.op-time-row { display: flex; flex-direction: row; border-bottom: 0.75pt solid var(--navy); }\n.op-time-stat {\n  flex: 1; padding: 4pt 8pt; border-right: 0.75pt solid var(--navy); text-align: center;\n}\n.op-time-stat:last-child { border-right: none; }\n.op-time-stat .stat-label { font-size: 8pt; font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold; }\n.op-time-stat .stat-value { font-size: 14pt; font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold; color: var(--navy); }\n.op-time-stat .stat-sub { font-size: 7.5pt; color: var(--muted); font-style: italic; }\n\n.sheet-band {\n  background: var(--navy); color: #fff; padding: 3pt 8pt; text-align: center;\n  font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold; font-size: 10pt;\n}\n.sheet-section { padding: 6pt 8pt; }\n\n.stats-grid { display: flex; flex-direction: row; gap: 8pt; padding: 6pt 8pt; }\n.stats-grid > div { flex: 1; }\n.stats-grid .box-title {\n  background: var(--band-gray-bg); color: var(--band-gray-text); text-align: center;\n  font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold; font-size: 9pt;\n  padding: 3pt; border: 0.5pt solid var(--navy); border-bottom: none;\n}\n.stats-grid .box-body { border: 0.5pt solid var(--navy); padding: 6pt; font-size: 9pt; min-height: 50pt; color: var(--muted); font-style: italic; text-align: center; }\n\n/* \u2500\u2500 Dredge Progress chart skeleton \u2500\u2500 */\n.chart-legend-row { display: flex; flex-direction: row; align-items: center; padding: 6pt 8pt; gap: 16pt; font-size: 9pt; }\n.chart-legend-item { display: flex; flex-direction: row; align-items: center; gap: 4pt; }\n.chart-swatch { width: 12pt; height: 8pt; display: inline-block; border: 0.5pt solid var(--navy); }\n.chart-placeholder {\n  border: 0.75pt solid var(--navy); background: var(--photo-bg); height: 480pt;\n  display: flex; align-items: center; justify-content: center; color: var(--muted);\n  font-size: 11pt; font-style: italic; margin: 4pt 8pt;\n}\n\n/* \u2500\u2500 Safety page \u2500\u2500 */\n.safety-updates-row { display: flex; flex-direction: row; border-bottom: 0.5pt solid var(--navy); font-size: 9pt; }\n.safety-updates-label {\n  flex: 0 0 200pt; padding: 4pt 8pt; border-right: 0.5pt solid var(--navy);\n  font-family: Helvetica-Bold, Helvetica, Arial, sans-serif; font-weight: bold; background: var(--alt-row);\n}\n.safety-updates-value { flex: 1; padding: 4pt 8pt; color: var(--muted); }\n.safety-two-col { display: flex; flex-direction: row; }\n.safety-col { flex: 1; border-right: 0.75pt solid var(--navy); }\n.safety-col:last-child { border-right: none; }\n.safety-sig-row { display: flex; flex-direction: row; margin-top: 30pt; padding: 0 8pt 8pt; gap: 20pt; }\n.safety-sig { flex: 1; text-align: center; font-size: 8.5pt; border-top: 0.5pt solid var(--body-text); padding-top: 3pt; }\n\n/* \u2500\u2500 Logo / photo image fit (added for asset embedding) \u2500\u2500 */\n.logo-img { max-width: 100%; max-height: 100%; object-fit: contain; }\n.photo-img { width: 100%; height: 100%; object-fit: cover; }",
+    "content": "\n<div class=\"cover-frame\">\n  <div class=\"meta-block\">\n    <div class=\"meta-logo-col\"><div class=\"logo-placeholder\"><img class=\"logo-img\" src=\"{{asset \"jfb-logo\"}}\" alt=\"J.F. Brennan Company\" /></div></div>\n    <div class=\"meta-info-col\">\n      <div class=\"meta-project-name\">Project: {{project.[0].name}}</div>\n      <div class=\"meta-line\"><span class=\"meta-line-label\">Project Code:</span><span class=\"meta-line-value\">{{project.[0].project_code}}</span></div>\n      <div class=\"meta-line\"><span class=\"meta-line-label\">Client:</span><span class=\"meta-line-value\">{{project.[0].client_name}}</span></div>\n      <div class=\"meta-line\"><span class=\"meta-line-label\">Start Date:</span><span class=\"meta-line-value\">{{project.[0].start_date}}</span></div>\n      <div class=\"meta-line\"><span class=\"meta-line-label\">Location:</span><span class=\"meta-line-value\">{{project.[0].site_city}}, {{project.[0].site_state}}</span></div>\n    </div>\n    <div class=\"meta-right\">\n      <div class=\"meta-report-name\"><span class=\"meta-report-name-label\">Report Name:</span><span class=\"meta-report-name-value\">{{parameters.date}}</span></div>\n      <table class=\"meta-date-table\">\n        <thead><tr><th style=\"width:40%\">Date</th><th>Cal. Wk. #</th><th>Project Wk. #</th></tr></thead>\n        <tbody><tr><td>{{parameters.date}}</td><td>&mdash;</td><td>&mdash;</td></tr></tbody>\n      </table>\n    </div>\n  </div>\n\n  <div class=\"title-band\">Brennan Daily Report of Operations</div>\n\n  {{#if parameters.narrativeSections.length}}\n  {{#each parameters.narrativeSections}}\n  <div class=\"section-band\">{{this.label}}</div>\n  {{#if this.content}}\n  <div class=\"narrative-body\">{{this.content}}</div>\n  {{else}}\n  <div class=\"narrative-empty\">(no entry)</div>\n  {{/if}}\n  {{/each}}\n  {{else}}\n  <div class=\"section-band\">Narratives</div>\n  <div class=\"narrative-empty\">No narrative sections configured for this project.</div>\n  {{/if}}\n\n  <div class=\"section-band centered\">Daily Photos</div>\n  <div class=\"photos-row\">\n    <div class=\"photo-cell\">\n      <div class=\"photo-frame\">\n        {{#if parameters.photoAssets.[1].dataUri}}\n        <img class=\"photo-img\" src=\"{{parameters.photoAssets.[1].dataUri}}\" alt=\"{{parameters.photoAssets.[1].label}}\" />\n        {{else}}\n        <span class=\"photo-placeholder\">No photo uploaded</span>\n        {{/if}}\n      </div>\n      <div class=\"photo-label\">{{#if parameters.photoAssets.[1].label}}{{parameters.photoAssets.[1].label}}{{else}}Photo 1{{/if}}</div>\n    </div>\n    <div class=\"photo-cell\">\n      <div class=\"photo-frame\">\n        {{#if parameters.photoAssets.[2].dataUri}}\n        <img class=\"photo-img\" src=\"{{parameters.photoAssets.[2].dataUri}}\" alt=\"{{parameters.photoAssets.[2].label}}\" />\n        {{else}}\n        <span class=\"photo-placeholder\">No photo uploaded</span>\n        {{/if}}\n      </div>\n      <div class=\"photo-label\">{{#if parameters.photoAssets.[2].label}}{{parameters.photoAssets.[2].label}}{{else}}Photo 2{{/if}}</div>\n    </div>\n  </div>\n\n  <div class=\"production-table-band\">Project Production Table</div>\n  <table class=\"metrics-table\">\n    <thead><tr><th class=\"label-col\">&nbsp;</th><th>Day</th><th>Week</th><th>Project Total</th></tr></thead>\n    <tbody>\n      {{#if production.length}}\n        {{#each production}}\n        <tr><td class=\"label-col\">{{this.pass_value}}</td><td>{{this.volume}}</td><td>&mdash;</td><td>&mdash;</td></tr>\n        {{/each}}\n      {{else}}\n        <tr><td colspan=\"4\" class=\"metrics-empty\">No production stats entered for this report.</td></tr>\n      {{/if}}\n    </tbody>\n  </table>\n\n  <div class=\"footer\">J.F. Brennan Company, Inc. &mdash; Environmental Group &mdash; Confidential</div>\n</div>\n{{#each equipment}}\n<div class=\"page-break\"></div>\n<div class=\"sheet-outer-frame\">\n  <div class=\"sheet-meta-row\">\n    <div class=\"sheet-logo-col\"><div class=\"logo-placeholder\"><img class=\"logo-img\" src=\"{{asset \"jfb-logo\"}}\" alt=\"J.F. Brennan Company\" /></div></div>\n    <div class=\"sheet-title-col\">Production Report</div>\n    <div class=\"sheet-equipment-col\">{{this.name}}</div>\n    <table class=\"sheet-date-table\">\n      <thead><tr><th>Date</th><th>Cal. Wk #</th><th>Prod. Wk #</th></tr></thead>\n      <tbody><tr><td>{{../parameters.date}}</td><td>&mdash;</td><td>&mdash;</td></tr></tbody>\n    </table>\n  </div>\n  <div class=\"sheet-info-row\">\n    <div class=\"sheet-info-col\">\n      <div><span class=\"lbl\">Project:</span>{{../project.[0].name}}</div>\n      <div><span class=\"lbl\">Client:</span>{{../project.[0].client_name}}</div>\n      <div><span class=\"lbl\">Project Code:</span>{{../project.[0].project_code}}</div>\n      <div><span class=\"lbl\">Start Date:</span>{{../project.[0].start_date}}</div>\n      <div><span class=\"lbl\">Report #:</span>&mdash;</div>\n      <div><span class=\"lbl\">Equipment #:</span>&mdash;</div>\n    </div>\n    <div class=\"op-time-row\" style=\"flex:2;border-right:none;\">\n      <div class=\"op-time-stat\"><div class=\"stat-label\">Operating Hours</div><div class=\"stat-value\">&mdash;</div><div class=\"stat-sub\">(NOH)</div></div>\n      <div class=\"op-time-stat\"><div class=\"stat-label\">Delay Hours</div><div class=\"stat-value\">&mdash;</div><div class=\"stat-sub\">(DELAY)</div></div>\n      <div class=\"op-time-stat\"><div class=\"stat-label\">Total Hours</div><div class=\"stat-value\">&mdash;</div><div class=\"stat-sub\">(GOH)</div></div>\n      <div class=\"op-time-stat\" style=\"border-right:none;\"><div class=\"stat-label\">Operator</div><div class=\"stat-sub\">Shift &mdash; to &mdash;</div></div>\n    </div>\n  </div>\n\n  <div class=\"sheet-band\">Daily Production Totals by Activity</div>\n  <table class=\"std-table\">\n    <thead><tr><th class=\"label-col\">Category</th><th>Total</th><th>&mdash;</th><th>&mdash;</th></tr></thead>\n    <tbody>\n      <tr><td class=\"label-col\">Gross Operating Hours (GOH)</td><td class=\"center\">&mdash;</td><td class=\"center\">&mdash;</td><td class=\"center\">&mdash;</td></tr>\n      <tr><td class=\"label-col\">Net Operating Hours (NOH)</td><td class=\"center\">&mdash;</td><td class=\"center\">&mdash;</td><td class=\"center\">&mdash;</td></tr>\n      <tr><td class=\"label-col\">Delay Hours</td><td class=\"center\">&mdash;</td><td class=\"center\">&mdash;</td><td class=\"center\">&mdash;</td></tr>\n      <tr><td class=\"label-col\">Efficiency</td><td class=\"center\">&mdash;</td><td class=\"center\">&mdash;</td><td class=\"center\">&mdash;</td></tr>\n      <tr><td class=\"label-col\">Area (SF)</td><td class=\"center\">&mdash;</td><td class=\"center\">&mdash;</td><td class=\"center\">&mdash;</td></tr>\n      <tr><td class=\"label-col\">Volume (CY)</td><td class=\"center\">&mdash;</td><td class=\"center\">&mdash;</td><td class=\"center\">&mdash;</td></tr>\n    </tbody>\n  </table>\n\n  <div class=\"sheet-band\">Daily Activity</div>\n  <table class=\"std-table\">\n    <thead><tr><th style=\"width:5%\">#</th><th style=\"width:10%\">From</th><th style=\"width:10%\">To</th><th style=\"width:8%\">Min.</th><th>Area</th><th>Pass</th><th>Event</th><th>Notes</th></tr></thead>\n    <tbody>\n      {{#with (lookup ../parameters.dailyActivityByEquipment this.id) as |acts|}}\n      {{#each acts}}\n      <tr><td class=\"center\">{{this.num}}</td><td class=\"center\">{{this.from}}</td><td class=\"center\">{{this.to}}</td><td class=\"center\">{{this.minutes}}</td><td>{{this.area}}</td><td>{{this.pass}}</td><td>{{this.event}}</td><td>{{this.notes}}</td></tr>\n      {{/each}}\n      {{else}}\n      <tr><td colspan=\"8\" class=\"table-empty\">No activity logged for this equipment on this date.</td></tr>\n      {{/with}}\n    </tbody>\n  </table>\n\n  <div class=\"stats-grid\">\n    <div><div class=\"box-title\">Delay Summary</div><div class=\"box-body\">No data yet</div></div>\n    <div><div class=\"box-title\">Flow Stats</div><div class=\"box-body\">No data yet</div></div>\n    <div><div class=\"box-title\">Pipe Lengths</div><div class=\"box-body\">No data yet</div></div>\n  </div>\n\n  <div class=\"footer\">J.F. Brennan Company, Inc. &mdash; Environmental Group &mdash; {{../parameters.date}} &mdash; {{this.name}}</div>\n</div>\n\n<div class=\"page-break\"></div>\n<div class=\"sheet-outer-frame\">\n  <div class=\"sheet-meta-row\">\n    <div class=\"sheet-logo-col\"><div class=\"logo-placeholder\"><img class=\"logo-img\" src=\"{{asset \"jfb-logo\"}}\" alt=\"J.F. Brennan Company\" /></div></div>\n    <div class=\"sheet-title-col\" style=\"flex:2;\">Project: {{../project.[0].name}}</div>\n    <div class=\"sheet-equipment-col\" style=\"flex:0 0 auto;padding:4pt 16pt;\">{{../parameters.date}}</div>\n  </div>\n  <div class=\"chart-legend-row\">\n    <div class=\"chart-legend-item\"><span class=\"chart-swatch\" style=\"background:#e0852a\"></span>1st Pass Dredging</div>\n    <div class=\"chart-legend-item\"><span class=\"chart-swatch\" style=\"background:#8a8a2a\"></span>2nd Pass Dredging</div>\n    <div class=\"chart-legend-item\"><span class=\"chart-swatch\" style=\"background:#b3b3b3\"></span>Residual Dredging</div>\n    <div class=\"chart-legend-item\"><span class=\"chart-swatch\" style=\"background:#c4d99a\"></span>Progress to Date</div>\n  </div>\n  <div class=\"sheet-band\">Daily Dredge Progress Chart &mdash; {{this.name}}</div>\n  <div class=\"chart-placeholder\">No dredge progress chart generated for this day</div>\n  <div class=\"footer\">J.F. Brennan Company, Inc. &mdash; Environmental Group &mdash; {{../parameters.date}} &mdash; {{this.name}}</div>\n</div>\n{{/each}}\n<div class=\"page-break\"></div>\n<div class=\"sheet-outer-frame\">\n  <div class=\"sheet-meta-row\">\n    <div class=\"sheet-logo-col\"><div class=\"logo-placeholder\"><img class=\"logo-img\" src=\"{{asset \"jfb-logo\"}}\" alt=\"J.F. Brennan Company\" /></div></div>\n    <div class=\"sheet-title-col\">Safety Report</div>\n    <div class=\"sheet-equipment-col\">{{project.[0].name}}</div>\n    <table class=\"sheet-date-table\">\n      <thead><tr><th>Date</th><th>Cal. Wk #</th><th>Prod. Wk #</th></tr></thead>\n      <tbody><tr><td>{{parameters.date}}</td><td>&mdash;</td><td>&mdash;</td></tr></tbody>\n    </table>\n  </div>\n\n  <div class=\"sheet-band\">Daily Safety Updates</div>\n  <div class=\"safety-updates-row\"><div class=\"safety-updates-label\">JHA / AHA Reviewed</div><div class=\"safety-updates-value\">N/A</div></div>\n<div class=\"safety-updates-row\"><div class=\"safety-updates-label\">High Risk Task of the Day</div><div class=\"safety-updates-value\">N/A</div></div>\n<div class=\"safety-updates-row\"><div class=\"safety-updates-label\">Daily Safety / Tool Box Topic</div><div class=\"safety-updates-value\">N/A</div></div>\n<div class=\"safety-updates-row\"><div class=\"safety-updates-label\">Afternoon Safety Meeting Topic</div><div class=\"safety-updates-value\">N/A</div></div>\n<div class=\"safety-updates-row\"><div class=\"safety-updates-label\">Incidents to Report</div><div class=\"safety-updates-value\">N/A</div></div>\n<div class=\"safety-updates-row\"><div class=\"safety-updates-label\">Brennan Culture Tenant: &ldquo;Keys to our Success&rdquo;</div><div class=\"safety-updates-value\">N/A</div></div>\n<div class=\"safety-updates-row\"><div class=\"safety-updates-label\">Plan of the Day</div><div class=\"safety-updates-value\">N/A</div></div>\n<div class=\"safety-updates-row\"><div class=\"safety-updates-label\">Summary of Next Day&rsquo;s Expected Work</div><div class=\"safety-updates-value\">N/A</div></div>\n\n  <div class=\"safety-two-col\">\n    <div class=\"safety-col\">\n      <div class=\"sheet-band\">Equipment on Site</div>\n      <div class=\"sheet-section\"><div class=\"table-empty\">No equipment status data yet.</div></div>\n    </div>\n    <div class=\"safety-col\">\n      <div class=\"sheet-band\">Crew Summary</div>\n      <table class=\"std-table\">\n        <thead><tr><th class=\"label-col\">Staff</th><th>Count</th><th>Hours</th></tr></thead>\n        <tbody>\n          <tr><td class=\"label-col\">Brennan Management, Survey, Safety</td><td class=\"center\">&mdash;</td><td class=\"center\">&mdash;</td></tr>\n          <tr><td class=\"label-col\">Brennan Dredge Crew</td><td class=\"center\">&mdash;</td><td class=\"center\">&mdash;</td></tr>\n          <tr><td class=\"label-col\">Subcontractors</td><td class=\"center\">&mdash;</td><td class=\"center\">&mdash;</td></tr>\n          <tr><td class=\"label-col\">Mechanics</td><td class=\"center\">&mdash;</td><td class=\"center\">&mdash;</td></tr>\n        </tbody>\n      </table>\n      <div class=\"sheet-band\">Climate Summary</div>\n      <div class=\"sheet-section\"><div class=\"table-empty\">No climate data yet.</div></div>\n    </div>\n  </div>\n\n  <div class=\"safety-sig-row\">\n    <div class=\"safety-sig\">Report Preparer Certification<br/>I Certify that this Report is Correct to the Best of my Knowledge</div>\n    <div class=\"safety-sig\">Project SSHO Certification<br/>I Certify that this Report is Correct to the Best of my Knowledge</div>\n  </div>\n\n  <div class=\"footer\">J.F. Brennan Company, Inc. &mdash; Environmental Group &mdash; {{parameters.date}} &mdash; Safety</div>\n</div>\n"
+  },
+  "outputFormat": "pdf",
+  "publishStatus": "published",
+  "schemaVersion": "3.0",
+  "assets": [
+    {
+      "key": "jfb-logo",
+      "fileId": "01a0488c-1f10-7eca-81e6-21c3145163fa",
+      "alt": "J.F. Brennan Company logo"
+    }
+  ]
+}

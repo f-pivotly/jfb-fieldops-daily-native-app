@@ -1,0 +1,18 @@
+{
+  "slug": "dvw-jfb-operator-hours",
+  "description": "Cross-project per-operator hours rollup: sums jfb_daily_activities duration per operator, split into operating hours (delay_code_id IS NULL) and delay hours (delay_code_id IS NOT NULL), plus how many distinct projects and how many activity rows each operator has. Optionally scoped to one project via p_project_id. CY moved is deliberately NOT included -- jfb_production_stats has no operator_id column, so a per-operator CY figure can only ever be an estimate (proportional split of each equipment/day's volume by operator hours share); that is a separate follow-up, not part of this view.",
+  "authoring_mode": "direct_sql",
+  "implementation": "function",
+  "direct_sql": "SELECT o.id AS operator_id, o.name AS full_name, round(coalesce(sum(EXTRACT(EPOCH FROM (da.end_date_time - da.start_date_time)) / 3600.0) FILTER (WHERE da.delay_code_id IS NULL), 0), 2) AS operating_hours, round(coalesce(sum(EXTRACT(EPOCH FROM (da.end_date_time - da.start_date_time)) / 3600.0) FILTER (WHERE da.delay_code_id IS NOT NULL), 0), 2) AS delay_hours, count(DISTINCT da.project_id) AS project_count, count(da.id) AS event_count FROM usdf.jfb_daily_activities da JOIN usdf.jfb_operators o ON o.id = da.operator_id AND o.is_deleted IS NOT TRUE WHERE da.is_deleted IS NOT TRUE AND (p_project_id IS NULL OR da.project_id = p_project_id) GROUP BY o.id, o.name ORDER BY operating_hours DESC",
+  "parameters": [
+    { "name": "p_project_id", "type": "uuid", "required": false, "default": null, "description": "Optional project filter. Null (the default) includes every project -- the cross-project rollup." }
+  ],
+  "columns": [
+    { "name": "operator_id", "type": "uuid", "description": "jfb_operators.id -- the person." },
+    { "name": "full_name", "type": "text", "description": "Operator's name." },
+    { "name": "operating_hours", "type": "numeric", "description": "Summed duration (hours) of activities with no delay_code_id -- productive time." },
+    { "name": "delay_hours", "type": "numeric", "description": "Summed duration (hours) of activities with a delay_code_id set." },
+    { "name": "project_count", "type": "bigint", "description": "Distinct projects this operator has logged activity on." },
+    { "name": "event_count", "type": "bigint", "description": "Total activity rows logged by this operator." }
+  ]
+}

@@ -1,0 +1,469 @@
+{
+    "slug": "jfb_dredge_progress",
+    "schema": [
+        {
+            "pii": false,
+            "name": "project_id",
+            "slug": "project_id",
+            "type": "uuid",
+            "label": "Project Id",
+            "unique": false,
+            "indexed": true,
+            "masking": {
+                "masked": false
+            },
+            "nullable": false,
+            "required": true,
+            "data_type": "uuid",
+            "fk_config": {
+                "required": true,
+                "target_attr": "id",
+                "target_domain": "jfb_projects",
+                "resolution_policy": "lookup_only"
+            },
+            "column_name": "project_id",
+            "description": "Owning project.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
+            "name": "report_id",
+            "slug": "report_id",
+            "type": "uuid",
+            "label": "Report Id",
+            "unique": false,
+            "indexed": true,
+            "masking": {
+                "masked": false
+            },
+            "nullable": false,
+            "required": true,
+            "data_type": "uuid",
+            "fk_config": {
+                "required": true,
+                "target_attr": "id",
+                "target_domain": "jfb_reports",
+                "resolution_policy": "lookup_only"
+            },
+            "column_name": "report_id",
+            "description": "The day's report this progress row belongs to. Unique together with equipment_id.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
+            "name": "equipment_id",
+            "slug": "equipment_id",
+            "type": "uuid",
+            "label": "Equipment Id",
+            "unique": false,
+            "indexed": true,
+            "masking": {
+                "masked": false
+            },
+            "nullable": false,
+            "required": true,
+            "data_type": "uuid",
+            "fk_config": {
+                "required": true,
+                "target_attr": "id",
+                "target_domain": "jfb_equipments",
+                "resolution_policy": "lookup_only"
+            },
+            "column_name": "equipment_id",
+            "description": "Which piece of equipment this row is for.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
+            "name": "chart_path",
+            "slug": "chart_path",
+            "type": "text",
+            "label": "Chart Path",
+            "unique": false,
+            "indexed": false,
+            "masking": {
+                "masked": false
+            },
+            "nullable": true,
+            "required": false,
+            "data_type": "text",
+            "column_name": "chart_path",
+            "description": "The rendered/saved chart image for this day.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
+            "name": "coverage_rings",
+            "slug": "coverage_rings",
+            "type": "jsonb",
+            "label": "Coverage Rings",
+            "unique": false,
+            "indexed": false,
+            "masking": {
+                "masked": false
+            },
+            "nullable": true,
+            "required": false,
+            "data_type": "jsonb",
+            "column_name": "coverage_rings",
+            "description": "Net-new (first-pass) coverage area for the day.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
+            "name": "footprint_rings",
+            "slug": "footprint_rings",
+            "type": "jsonb",
+            "label": "Footprint Rings",
+            "unique": false,
+            "indexed": false,
+            "masking": {
+                "masked": false
+            },
+            "nullable": true,
+            "required": false,
+            "data_type": "jsonb",
+            "column_name": "footprint_rings",
+            "description": "Full raw digging footprint for the day (falls back to coverage_rings for older rows).",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
+            "name": "today_sqft",
+            "slug": "today_sqft",
+            "type": "numeric",
+            "label": "Today Sq Ft",
+            "unique": false,
+            "indexed": false,
+            "masking": {
+                "masked": false
+            },
+            "nullable": true,
+            "required": false,
+            "data_type": "numeric",
+            "column_name": "today_sqft",
+            "description": "Square footage covered today.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
+            "name": "cumulative_sqft",
+            "slug": "cumulative_sqft",
+            "type": "numeric",
+            "label": "Cumulative Sq Ft",
+            "unique": false,
+            "indexed": false,
+            "masking": {
+                "masked": false
+            },
+            "nullable": true,
+            "required": false,
+            "data_type": "numeric",
+            "column_name": "cumulative_sqft",
+            "description": "Running total square footage covered to date.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
+            "name": "dredge_pose",
+            "slug": "dredge_pose",
+            "type": "jsonb",
+            "label": "Dredge Pose",
+            "unique": false,
+            "indexed": false,
+            "masking": {
+                "masked": false
+            },
+            "nullable": true,
+            "required": false,
+            "data_type": "jsonb",
+            "column_name": "dredge_pose",
+            "description": "Last known cutter/stern position, carried forward to the next day's chart.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
+            "name": "placement_override",
+            "slug": "placement_override",
+            "type": "jsonb",
+            "label": "Placement Override",
+            "unique": false,
+            "indexed": false,
+            "masking": {
+                "masked": false
+            },
+            "nullable": true,
+            "required": false,
+            "data_type": "jsonb",
+            "column_name": "placement_override",
+            "description": "Manual correction to the dredge's cutter/stern placement.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
+            "name": "second_pass_flags",
+            "slug": "second_pass_flags",
+            "type": "jsonb",
+            "label": "Second Pass Flags",
+            "unique": false,
+            "indexed": false,
+            "masking": {
+                "masked": false
+            },
+            "nullable": true,
+            "required": false,
+            "data_type": "jsonb",
+            "column_name": "second_pass_flags",
+            "description": "Rings flagged as rework (a second pass over already-covered ground).",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
+            "name": "advance_ft",
+            "slug": "advance_ft",
+            "type": "numeric",
+            "label": "Advance Ft",
+            "unique": false,
+            "indexed": false,
+            "masking": {
+                "masked": false
+            },
+            "nullable": true,
+            "required": false,
+            "data_type": "numeric",
+            "column_name": "advance_ft",
+            "description": "Distance advanced today, for station/chainage-style projects.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
+            "name": "advance_lines",
+            "slug": "advance_lines",
+            "type": "jsonb",
+            "label": "Advance Lines",
+            "unique": false,
+            "indexed": false,
+            "masking": {
+                "masked": false
+            },
+            "nullable": true,
+            "required": false,
+            "data_type": "jsonb",
+            "column_name": "advance_lines",
+            "description": "Geometry behind the advance-distance calculation.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
+            "name": "progress_rings",
+            "slug": "progress_rings",
+            "type": "jsonb",
+            "label": "Progress Rings",
+            "unique": false,
+            "indexed": false,
+            "masking": {
+                "masked": false
+            },
+            "nullable": true,
+            "required": false,
+            "data_type": "jsonb",
+            "column_name": "progress_rings",
+            "description": "Present for schema parity with the source table; confirmed unused/legacy there -- no current code reads or writes it.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
+            "name": "cell_breakdown",
+            "slug": "cell_breakdown",
+            "type": "jsonb",
+            "label": "Cell Breakdown",
+            "unique": false,
+            "indexed": false,
+            "masking": {
+                "masked": false
+            },
+            "nullable": true,
+            "required": false,
+            "data_type": "jsonb",
+            "column_name": "cell_breakdown",
+            "description": "Per-grid-cell coverage/area breakdown.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
+            "name": "material_text",
+            "slug": "material_text",
+            "type": "text",
+            "label": "Material Text",
+            "unique": false,
+            "indexed": false,
+            "masking": {
+                "masked": false
+            },
+            "nullable": true,
+            "required": false,
+            "data_type": "text",
+            "column_name": "material_text",
+            "description": "The PE's typed 'material encountered' note for the day.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
+            "name": "generated_by_user_id",
+            "slug": "generated_by_user_id",
+            "type": "uuid",
+            "label": "Generated By (User Id)",
+            "unique": false,
+            "indexed": false,
+            "masking": {
+                "masked": false
+            },
+            "nullable": true,
+            "required": false,
+            "data_type": "uuid",
+            "column_name": "generated_by_user_id",
+            "description": "The Pivotly IAM user id who saved this row.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
+            "name": "chart_paths",
+            "slug": "chart_paths",
+            "type": "jsonb",
+            "label": "Chart Paths (Zoomed Views)",
+            "unique": false,
+            "indexed": false,
+            "masking": {
+                "masked": false
+            },
+            "nullable": true,
+            "required": false,
+            "data_type": "jsonb",
+            "column_name": "chart_paths",
+            "description": "Array of zoomed split-view chart PNG paths, for days where a large dredge move splits the chart into per-area pages. Confirmed used by jfb-fieldops-daily's saveDredgeProgress().",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
+            "name": "gross_cy",
+            "slug": "gross_cy",
+            "type": "numeric",
+            "label": "Gross CY",
+            "unique": false,
+            "indexed": false,
+            "masking": {
+                "masked": false
+            },
+            "nullable": true,
+            "required": false,
+            "data_type": "numeric",
+            "column_name": "gross_cy",
+            "description": "Estimated volume (CY) removed today, before the recovery factor is applied.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
+            "name": "adjusted_cy",
+            "slug": "adjusted_cy",
+            "type": "numeric",
+            "label": "Adjusted CY",
+            "unique": false,
+            "indexed": false,
+            "masking": {
+                "masked": false
+            },
+            "nullable": true,
+            "required": false,
+            "data_type": "numeric",
+            "column_name": "adjusted_cy",
+            "description": "Estimated volume (CY) removed today, after the recovery factor is applied. This is the reported number.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        }
+    ],
+    "archive": true,
+    "contact": {
+        "name": "System Administrator"
+    },
+    "multi_tenant": false,
+    "xref_enabled": true,
+    "access_control": {
+        "model": "all_systems",
+        "read_access": true,
+        "delete_access": true,
+        "insert_access": true,
+        "update_access": true,
+        "hard_delete_allowed": true,
+        "direct_write_enabled": true
+    },
+    "archive_policy": {
+        "retention_days": 365,
+        "max_record_versions": 10000
+    },
+    "track_versions": true,
+    "domain_table_name": "jfb_dredge_progress",
+    "domain_name_singular": "jfb_dredge_progres",
+    "default_conflict_resolution": {
+        "code": "lww",
+        "human_readable": "Last Write Wins"
+    }
+}

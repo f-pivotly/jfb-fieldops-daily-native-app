@@ -10,6 +10,7 @@ import ReportEditorPage from "./pages/FieldOps/ReportEditorPage";
 import RealizedToDatePage from "./pages/FieldOps/RealizedToDatePage";
 import WeeklySummaryPage from "./pages/FieldOps/WeeklySummaryPage";
 import ProjectSettingsPage from "./pages/FieldOps/ProjectSettingsPage";
+import OperatorHoursPage from "./pages/FieldOps/OperatorHoursPage";
 import Forbidden from "./pages/Forbidden";
 import NotFound from "./pages/NotFound";
 
@@ -44,6 +45,7 @@ export default function App() {
           <Route path="/projects/:projectId/realized" element={<RealizedToDatePage />} />
           <Route path="/projects/:projectId/weekly" element={<WeeklySummaryPage />} />
           <Route path="/projects/:projectId/settings" element={<ProjectSettingsPage />} />
+          <Route path="/admin/operators" element={<OperatorHoursPage />} />
           <Route path="/forbidden" element={<Forbidden />} />
           <Route path="*" element={<NotFound />} />
         </Routes>

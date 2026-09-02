@@ -345,7 +345,7 @@ export default function DelayCodesTab({ project }) {
         <TextInput
           label="Or new category"
           value={customForm.newCategory}
-          onChange={(e) => setCustomForm((f) => ({ ...f, newCategory: e.currentTarget.value }))}
+          onChange={(e) => { const value = e.currentTarget.value; setCustomForm((f) => ({ ...f, newCategory: value })) }}
           mb={10}
         />
         <TextInput
@@ -353,7 +353,7 @@ export default function DelayCodesTab({ project }) {
           required
           placeholder="e.g. Regulatory Hold, Ice Conditions"
           value={customForm.code}
-          onChange={(e) => setCustomForm((f) => ({ ...f, code: e.currentTarget.value }))}
+          onChange={(e) => { const value = e.currentTarget.value; setCustomForm((f) => ({ ...f, code: value })) }}
           mb={10}
         />
         {customTarget === "master" && (

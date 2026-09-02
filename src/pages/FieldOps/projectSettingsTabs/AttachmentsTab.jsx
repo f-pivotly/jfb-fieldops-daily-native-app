@@ -148,7 +148,10 @@ export default function AttachmentsTab({ project }) {
           required
           placeholder="e.g. 3ft Cutterhead, Env Bucket"
           value={addForm.name}
-          onChange={(e) => setAddForm((f) => ({ ...f, name: e.currentTarget.value }))}
+          onChange={(e) => {
+            const value = e.currentTarget.value
+            setAddForm((f) => ({ ...f, name: value }))
+          }}
           mb={10}
         />
         <NumberInput
@@ -173,7 +176,10 @@ export default function AttachmentsTab({ project }) {
               label="Name"
               required
               value={editRow.name}
-              onChange={(e) => setEditRow((r) => ({ ...r, name: e.currentTarget.value }))}
+              onChange={(e) => {
+                const value = e.currentTarget.value
+                setEditRow((r) => ({ ...r, name: value }))
+              }}
               mb={10}
             />
             <NumberInput
@@ -185,7 +191,10 @@ export default function AttachmentsTab({ project }) {
             <Switch
               label="Active"
               checked={editRow.active}
-              onChange={(e) => setEditRow((r) => ({ ...r, active: e.currentTarget.checked }))}
+              onChange={(e) => {
+                const checked = e.currentTarget.checked
+                setEditRow((r) => ({ ...r, active: checked }))
+              }}
               mb={10}
             />
             <Group justify="flex-end" mt={10}>

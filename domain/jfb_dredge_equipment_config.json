@@ -1,0 +1,127 @@
+{
+    "slug": "jfb_dredge_equipment_config",
+    "schema": [
+        {
+            "pii": false,
+            "name": "equipment_id",
+            "slug": "equipment_id",
+            "type": "uuid",
+            "label": "Equipment Id",
+            "unique": false,
+            "indexed": true,
+            "masking": {
+                "masked": false
+            },
+            "nullable": false,
+            "required": true,
+            "data_type": "uuid",
+            "fk_config": {
+                "required": true,
+                "target_attr": "id",
+                "target_domain": "jfb_equipments",
+                "resolution_policy": "lookup_only"
+            },
+            "column_name": "equipment_id",
+            "description": "One row per piece of equipment. The dredge/excavator this shape belongs to.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
+            "name": "project_id",
+            "slug": "project_id",
+            "type": "uuid",
+            "label": "Project Id",
+            "unique": false,
+            "indexed": true,
+            "masking": {
+                "masked": false
+            },
+            "nullable": false,
+            "required": true,
+            "data_type": "uuid",
+            "fk_config": {
+                "required": true,
+                "target_attr": "id",
+                "target_domain": "jfb_projects",
+                "resolution_policy": "lookup_only"
+            },
+            "column_name": "project_id",
+            "description": "Owning project. Denormalized so all equipment configs for a project load in one query.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
+            "name": "shape_path",
+            "slug": "shape_path",
+            "type": "text",
+            "label": "Shape Path",
+            "unique": false,
+            "indexed": false,
+            "masking": {
+                "masked": false
+            },
+            "nullable": true,
+            "required": false,
+            "data_type": "text",
+            "column_name": "shape_path",
+            "description": "The equipment's CAD outline (DXF) drawn on the chart to show its position.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
+            "name": "label",
+            "slug": "label",
+            "type": "text",
+            "label": "Chart Label",
+            "unique": false,
+            "indexed": false,
+            "masking": {
+                "masked": false
+            },
+            "nullable": true,
+            "required": false,
+            "data_type": "text",
+            "column_name": "label",
+            "description": "Display label for this equipment's shape on the chart -- overrides the equipment's own name when set.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        }
+    ],
+    "archive": true,
+    "contact": {
+        "name": "System Administrator"
+    },
+    "multi_tenant": false,
+    "xref_enabled": true,
+    "access_control": {
+        "model": "all_systems",
+        "read_access": true,
+        "delete_access": true,
+        "insert_access": true,
+        "update_access": true,
+        "hard_delete_allowed": true,
+        "direct_write_enabled": true
+    },
+    "archive_policy": {
+        "retention_days": 365,
+        "max_record_versions": 10000
+    },
+    "track_versions": true,
+    "domain_table_name": "jfb_dredge_equipment_config",
+    "domain_name_singular": "jfb_dredge_equipment_config",
+    "default_conflict_resolution": {
+        "code": "lww",
+        "human_readable": "Last Write Wins"
+    }
+}

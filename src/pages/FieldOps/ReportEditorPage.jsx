@@ -8,6 +8,7 @@ import { useReports } from '../../hooks/useReports'
 import { useEquipment } from '../../hooks/useEquipment'
 import { api, createDomainRecord, executeReport, fetchCurrentUser, fetchFileById } from '../../data'
 import { useAppConfig } from '../../contexts/appConfigContext'
+import { buildNarrativeSectionsParam, buildDailyActivityByEquipmentParam, buildPhotoAssetsParam } from './lib/reportPdfData'
 import PMReviewPanel from './components/PMReviewPanel'
 import EventLogTab from './reportEditorTabs/EventLogTab'
 import ProductionStatsTab from './reportEditorTabs/ProductionStatsTab'
@@ -37,10 +38,6 @@ const CHECKLIST_LABELS = {
   metrics_entered: 'Metrics entered',
 }
 
-// Not yet derived from real report state -- each item should reflect whether
-// its tab actually has data (e.g. event_log_reviewed once EventLogTab has
-// entries), not a hardcoded flag. Left false rather than faked true/false
-// values so the checklist doesn't claim work is done that isn't.
 const CHECKLIST_PLACEHOLDER = {
   event_log_reviewed: false,
   transitions_added: false,
@@ -59,9 +56,6 @@ export default function ReportEditorPage() {
   const status = report?.status ?? 'draft'
 
   useEffect(() => {
-    // Wait for the real fetch to finish before deciding a report is missing --
-    // otherwise an empty-but-still-loading `reports` array reads as "no report
-    // exists yet" and creates a duplicate of one that's already there.
     if (!project || reportsLoading || report) return
     ensureReport({
       project_id: project.id,
@@ -83,28 +77,24 @@ export default function ReportEditorPage() {
     setDownloadingPdf(true)
     try {
       const reportId = report?.id
+      const [narrativeSections, dailyActivityByEquipment, photoAssets] = await Promise.all([
+        buildNarrativeSectionsParam({ appSlug: config.appSlug, projectId, reportId }),
+        buildDailyActivityByEquipmentParam({ appSlug: config.appSlug, projectId, dateISO: date }),
+        buildPhotoAssetsParam({ appSlug: config.appSlug, reportId }),
+      ])
       const result = await executeReport('rpt-jfb-daily-report', {
         parameters: {
           projectId,
           reportId,
           date,
-          // The report's domain-query sources can only be parameterized by
-          // mapping their whole `filters` object to one resolved value (see
-          // REPORT_PDF_INTEGRATION.md) -- so the caller builds the filter
-          // shape each source's CRD query expects, keyed by that domain's
-          // actual FK column name.
           projectFilter: { id: projectId },
           reportFilter: { report_id: reportId },
           equipmentFilter: { project_id: projectId },
+          narrativeSections,
+          dailyActivityByEquipment,
+          photoAssets,
         },
       })
-      // window.open(downloadUrl) navigates the browser directly with no
-      // Authorization header, and the download route requires a bearer
-      // token -- so fetch the bytes through the authenticated `api`
-      // instance instead (it already carries the token as a default
-      // header, applied even for an absolute URL like this one), then
-      // save via a blob + hidden <a download>, same pattern as
-      // jfb-fieldops-daily's own triggerDownload().
       const fileRes = await api.get(result.downloadUrl, { responseType: 'blob' })
       const blobUrl = URL.createObjectURL(new Blob([fileRes.data], { type: 'application/pdf' }))
       const link = document.createElement('a')
@@ -115,8 +105,6 @@ export default function ReportEditorPage() {
       link.remove()
       URL.revokeObjectURL(blobUrl)
 
-      // Best-effort audit log -- a failure here shouldn't block the user
-      // from the PDF they already have in hand.
       try {
         const [me, file] = await Promise.all([
           fetchCurrentUser(),
@@ -134,12 +122,7 @@ export default function ReportEditorPage() {
             generated_at: new Date().toISOString(),
             generated_by_user_id: me.id,
             generated_by_email: me.email,
-            // The /execute response calls this `fileKey`, not `fileId` --
-            // report-output-store.service.ts's persist() renames it from
-            // the internal upload result before returning.
             file_id: result.fileKey ?? null,
-            // filesView (Drizzle) maps these to camelCase -- the /v3/files/:id
-            // response is logicalName/storagePath, not the snake_case DB names.
             file_name: file?.logicalName ?? null,
             file_path: file?.storagePath ?? null,
             download_url: result.downloadUrl,
@@ -225,7 +208,7 @@ export default function ReportEditorPage() {
               </Tabs.List>
               {contentTabs.map((t) => (
                 <Tabs.Panel key={t.key} value={t.key}>
-                  <t.Comp project={project} report={report} equipment={equipment} selectedEquipmentId={effectiveEquipmentId} />
+                  <t.Comp project={project} report={report} reports={reports} equipment={equipment} selectedEquipmentId={effectiveEquipmentId} />
                 </Tabs.Panel>
               ))}
             </Tabs>

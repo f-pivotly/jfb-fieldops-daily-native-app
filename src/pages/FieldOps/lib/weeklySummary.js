@@ -1,3 +1,27 @@
+import { downloadAttachment } from '../../../data'
+
+function blobToDataUri(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onloadend = () => resolve(reader.result)
+    reader.onerror = reject
+    reader.readAsDataURL(blob)
+  })
+}
+
+export async function buildPhotoAssetsParam(photos, weekStart) {
+  const weekPhotos = photos.filter((p) => p.week_start === weekStart && p.photo_file_path)
+
+  const entries = await Promise.all(
+    weekPhotos.map(async (p) => {
+      const blob = await downloadAttachment(p.photo_file_path)
+      const dataUri = await blobToDataUri(blob)
+      return [String(p.photo_number), { label: p.label || `Photo ${p.photo_number}`, dataUri }]
+    }),
+  )
+  return Object.fromEntries(entries)
+}
+
 export function mondayStartISO(dateISO) {
   const d = new Date(`${dateISO}T00:00:00Z`)
   const day = d.getUTCDay()

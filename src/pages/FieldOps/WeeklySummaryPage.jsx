@@ -23,6 +23,7 @@ import {
   defaultWeeklyWeekStart,
   buildWeeklyReport,
   buildNarrativeSectionsParam,
+  buildPhotoAssetsParam,
 } from './lib/weeklySummary'
 
 const REPORT_SLUG = 'rpt-jfb-weekly-summary'
@@ -192,6 +193,7 @@ export default function WeeklySummaryPage() {
     setPdfError(null)
     try {
       const narrativeSections = buildNarrativeSectionsParam(sections, summaries, weekStart)
+      const weeklyPhotoAssets = await buildPhotoAssetsParam(photos, weekStart)
       const result = await executeReport(REPORT_SLUG, {
         parameters: {
           projectId,
@@ -200,6 +202,7 @@ export default function WeeklySummaryPage() {
           weekEnd,
           releasedCount: report.releasedCount,
           narrativeSections,
+          weeklyPhotoAssets,
           weeklyProduction: production.week && production.toDate
             ? {
                 weekCy: production.week.cy.toLocaleString(),

@@ -173,7 +173,10 @@ export default function SiteEquipmentTab({ project }) {
           required
           placeholder='e.g. "3 - Kann Boats (7754, 7782, 70021)"'
           value={addForm.description}
-          onChange={(e) => setAddForm((f) => ({ ...f, description: e.currentTarget.value }))}
+          onChange={(e) => {
+            const value = e.currentTarget.value
+            setAddForm((f) => ({ ...f, description: value }))
+          }}
           mb={10}
         />
         <Select
@@ -188,13 +191,13 @@ export default function SiteEquipmentTab({ project }) {
             label="Mobilized At"
             type="date"
             value={addForm.mobilized_at}
-            onChange={(e) => setAddForm((f) => ({ ...f, mobilized_at: e.currentTarget.value }))}
+            onChange={(e) => { const v = e.currentTarget.value; setAddForm((f) => ({ ...f, mobilized_at: v })) }}
           />
           <TextInput
             label="Demobilized At"
             type="date"
             value={addForm.demobilized_at}
-            onChange={(e) => setAddForm((f) => ({ ...f, demobilized_at: e.currentTarget.value }))}
+            onChange={(e) => { const v = e.currentTarget.value; setAddForm((f) => ({ ...f, demobilized_at: v })) }}
           />
         </Group>
         <NumberInput
@@ -219,7 +222,10 @@ export default function SiteEquipmentTab({ project }) {
               label="Description"
               required
               value={editRow.description}
-              onChange={(e) => setEditRow((r) => ({ ...r, description: e.currentTarget.value }))}
+              onChange={(e) => {
+                const value = e.currentTarget.value
+                setEditRow((r) => ({ ...r, description: value }))
+              }}
               mb={10}
             />
             <Select
@@ -234,13 +240,13 @@ export default function SiteEquipmentTab({ project }) {
                 label="Mobilized At"
                 type="date"
                 value={editRow.mobilized_at}
-                onChange={(e) => setEditRow((r) => ({ ...r, mobilized_at: e.currentTarget.value }))}
+                onChange={(e) => { const v = e.currentTarget.value; setEditRow((r) => ({ ...r, mobilized_at: v })) }}
               />
               <TextInput
                 label="Demobilized At"
                 type="date"
                 value={editRow.demobilized_at}
-                onChange={(e) => setEditRow((r) => ({ ...r, demobilized_at: e.currentTarget.value }))}
+                onChange={(e) => { const v = e.currentTarget.value; setEditRow((r) => ({ ...r, demobilized_at: v })) }}
               />
             </Group>
             <NumberInput

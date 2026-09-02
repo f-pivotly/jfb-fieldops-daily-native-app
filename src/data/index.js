@@ -204,6 +204,14 @@ export async function fetchPublicAsset(url) {
   return res.blob()
 }
 
+// For external (non-Pivotly) JSON APIs, e.g. the USGS basemap metadata call
+// in lib/dredge/aerial.js -- lint forbids fetch() outside this file.
+export async function fetchExternalJson(url) {
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`${url}: ${res.status}`)
+  return res.json()
+}
+
 export async function downloadAttachment(fileId) {
   const { data } = await api.get(`/attachments/${fileId}/download`, {
     responseType: 'blob',

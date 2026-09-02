@@ -284,10 +284,10 @@ function NamedTypeTable({ rows, typeRef, nameField, typeField, reportNameField, 
       </Table>
 
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit" : "Add"} {entityLabel}</Text>} size="sm">
-        <TextInput label={`${entityLabel} Name`} required value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.currentTarget.value }))} mb={10} autoFocus />
+        <TextInput label={`${entityLabel} Name`} required value={form.name} onChange={(e) => { const v = e.currentTarget.value; setForm((f) => ({ ...f, name: v })) }} mb={10} autoFocus />
         <Select label={`${entityLabel} Type`} data={typeRef.map((t) => ({ value: t.id, label: t.name }))} value={form.type} onChange={(v) => setForm((f) => ({ ...f, type: v }))} mb={10} />
         <NumberInput label="Sort Order" hideControls value={form.sortOrder} onChange={(v) => setForm((f) => ({ ...f, sortOrder: v }))} mb={10} />
-        <TextInput label="Report Name (optional)" placeholder="Defaults to name above" value={form.reportName} onChange={(e) => setForm((f) => ({ ...f, reportName: e.currentTarget.value }))} mb={16} />
+        <TextInput label="Report Name (optional)" placeholder="Defaults to name above" value={form.reportName} onChange={(e) => { const v = e.currentTarget.value; setForm((f) => ({ ...f, reportName: v })) }} mb={16} />
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => setModalOpen(false)}>Cancel</Button>
           <Button size="xs" loading={saving} onClick={handleSave} disabled={!form.name.trim()} style={{ background: "#0F2744", border: "none" }}>Save</Button>
@@ -386,14 +386,14 @@ function ComponentsTable({ rows, typeRef, saving, onCreate, onUpdate, onDelete }
       </Table>
 
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit" : "Add"} Component</Text>} size="sm">
-        <TextInput label="Component Name" required value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.currentTarget.value }))} mb={10} autoFocus />
+        <TextInput label="Component Name" required value={form.name} onChange={(e) => { const v = e.currentTarget.value; setForm((f) => ({ ...f, name: v })) }} mb={10} autoFocus />
         <Select label="Component Type" data={typeRef.map((t) => ({ value: t.id, label: t.name }))} value={form.type} onChange={(v) => setForm((f) => ({ ...f, type: v }))} mb={10} />
         <Group grow mb={10}>
           <Select label="Report UOM" data={UOM_OPTIONS} value={form.reportUom} onChange={(v) => setForm((f) => ({ ...f, reportUom: v ?? "" }))} />
           <Select label="Inventory UOM" data={UOM_OPTIONS} value={form.invUom} onChange={(v) => setForm((f) => ({ ...f, invUom: v ?? "" }))} />
         </Group>
         <NumberInput label="Sort Order" hideControls value={form.sortOrder} onChange={(v) => setForm((f) => ({ ...f, sortOrder: v }))} mb={10} />
-        <TextInput label="Report Name (optional)" value={form.reportName} onChange={(e) => setForm((f) => ({ ...f, reportName: e.currentTarget.value }))} mb={16} />
+        <TextInput label="Report Name (optional)" value={form.reportName} onChange={(e) => { const v = e.currentTarget.value; setForm((f) => ({ ...f, reportName: v })) }} mb={16} />
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => setModalOpen(false)}>Cancel</Button>
           <Button size="xs" loading={saving} onClick={handleSave} disabled={!form.name.trim()} style={{ background: "#0F2744", border: "none" }}>Save</Button>
@@ -600,7 +600,7 @@ function LayerMaterialMappings({ layers, materials, map, saving, onCreate, onUpd
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit" : "Add"} Material Mapping</Text>} size="sm">
         <Select label="Material" required data={availableMaterials(layerId, editRow?.id).map((m) => ({ value: m.id, label: m.material_name }))} value={form.materialId} onChange={(v) => setForm((f) => ({ ...f, materialId: v ?? "" }))} mb={10} />
         <NumberInput label="Loading Rate (tons/hr, optional)" hideControls value={form.loadingRate} onChange={(v) => setForm((f) => ({ ...f, loadingRate: v }))} mb={10} />
-        <TextInput label="Report Name Override (optional)" value={form.reportName} onChange={(e) => setForm((f) => ({ ...f, reportName: e.currentTarget.value }))} mb={16} />
+        <TextInput label="Report Name Override (optional)" value={form.reportName} onChange={(e) => { const v = e.currentTarget.value; setForm((f) => ({ ...f, reportName: v })) }} mb={16} />
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => setModalOpen(false)}>Cancel</Button>
           <Button size="xs" loading={saving} onClick={handleSave} disabled={!form.materialId} style={{ background: "#0F2744", border: "none" }}>Save</Button>
