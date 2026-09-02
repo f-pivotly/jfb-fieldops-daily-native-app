@@ -88,6 +88,24 @@ export async function fetchPageDetails(appSlug, pageSlug) {
   console.log('Fetched page details:', data)
   return data
 }
+export async function fetchRoleUsers(roleId) {
+  const { data } = await api.get(`/iam/user-roles/role/${roleId}/users`, {
+    params: { pageSize: 100 },
+  })
+  return data?.data ?? data ?? []
+}
+
+export async function fetchRoleByCode(code) {
+  const { data } = await api.get('/iam/roles', {
+    params: {
+      pageSize: 1,
+      filterModel: JSON.stringify([{ field: 'code', operator: 'equals', value: code }]),
+    },
+  })
+  const rows = data?.data ?? data ?? []
+  return rows[0] ?? null
+}
+
 export async function fetchPicklistValues(slug) {
   const { data } = await api.get(`/picklists/${slug}/values`)
   return data?.data ?? data ?? []

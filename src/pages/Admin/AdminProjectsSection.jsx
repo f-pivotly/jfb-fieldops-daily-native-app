@@ -15,6 +15,7 @@ import {
 import { IconPlus, IconRefresh } from "@tabler/icons-react";
 import { useDomainData } from "../../hooks/useDomainData";
 import { usePicklist } from "../../hooks/usePicklist";
+import { useDomainAccess } from "../../contexts/adminAccessContext";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import SafeError from "../../components/SafeError";
 
@@ -81,6 +82,9 @@ function toPayload(form) {
 }
 
 export default function AdminProjectsSection({ onConfigure }) {
+  const { canCreate: canCreateProject } = useDomainAccess("jfb_projects");
+  const { canCreate: canCreateAreaLevels, canUpdate: canUpdateAreaLevels } = useDomainAccess("jfb_project_area_levels");
+  const canEditAreaLevels = canCreateAreaLevels || canUpdateAreaLevels;
   const { records, loading, error, creating, updating, reload, create, update } = useDomainData({
     domain: "jfb_projects",
     system: "core",
@@ -148,7 +152,7 @@ export default function AdminProjectsSection({ onConfigure }) {
       const res = await create({ ...payload, is_active: true });
       projectId = res?.data?.id;
     }
-    if (projectId) await syncAreaLevels(projectId);
+    if (projectId && canEditAreaLevels) await syncAreaLevels(projectId);
     setModalOpen(false);
   }
 
@@ -171,14 +175,16 @@ export default function AdminProjectsSection({ onConfigure }) {
           <Box onClick={reload} style={{ cursor: "pointer", color: "#aaa", display: "flex", alignItems: "center" }} title="Refresh">
             <IconRefresh size={14} />
           </Box>
-          <Button
-            size="xs"
-            leftSection={<IconPlus size={13} />}
-            onClick={openCreate}
-            style={{ background: "#0F2744", border: "none" }}
-          >
-            New Project
-          </Button>
+          {canCreateProject && (
+            <Button
+              size="xs"
+              leftSection={<IconPlus size={13} />}
+              onClick={openCreate}
+              style={{ background: "#0F2744", border: "none" }}
+            >
+              New Project
+            </Button>
+          )}
         </Group>
       </Group>
 
@@ -263,9 +269,9 @@ export default function AdminProjectsSection({ onConfigure }) {
           Area Level Labels
         </Text>
         <SimpleGrid cols={3} spacing="sm" mb={16}>
-          <TextInput label="Level 1 Label" placeholder="e.g. Basin, Area, Cell" value={form.area_lvl1_label} onChange={(e) => setField("area_lvl1_label", e.currentTarget.value)} />
-          <TextInput label="Level 2 Label" placeholder="Optional" value={form.area_lvl2_label} onChange={(e) => setField("area_lvl2_label", e.currentTarget.value)} />
-          <TextInput label="Level 3 Label" placeholder="Optional" value={form.area_lvl3_label} onChange={(e) => setField("area_lvl3_label", e.currentTarget.value)} />
+          <TextInput label="Level 1 Label" placeholder="e.g. Basin, Area, Cell" value={form.area_lvl1_label} onChange={(e) => setField("area_lvl1_label", e.currentTarget.value)} disabled={!canEditAreaLevels} />
+          <TextInput label="Level 2 Label" placeholder="Optional" value={form.area_lvl2_label} onChange={(e) => setField("area_lvl2_label", e.currentTarget.value)} disabled={!canEditAreaLevels} />
+          <TextInput label="Level 3 Label" placeholder="Optional" value={form.area_lvl3_label} onChange={(e) => setField("area_lvl3_label", e.currentTarget.value)} disabled={!canEditAreaLevels} />
         </SimpleGrid>
 
         <Text size="10px" fw={700} c="dimmed" mb={8} style={{ textTransform: "uppercase", letterSpacing: ".5px" }}>

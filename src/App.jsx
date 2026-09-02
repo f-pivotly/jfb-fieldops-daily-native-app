@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
-import { Box } from "@mantine/core";
+import { Box, Loader } from "@mantine/core";
 import AppHeader from "./components/AppHeader";
 import LaunchPage from "./pages/LaunchPage";
 import AdminApp from "./pages/Admin/AdminApp";
@@ -13,9 +13,60 @@ import ProjectSettingsPage from "./pages/FieldOps/ProjectSettingsPage";
 import OperatorHoursPage from "./pages/FieldOps/OperatorHoursPage";
 import Forbidden from "./pages/Forbidden";
 import NotFound from "./pages/NotFound";
+import { useAppConfig } from "./contexts/appConfigContext";
+import { fetchPageDetails } from "./data";
+
+// The Admin page's own required_claims gate (apg-jfb-admin.view) — pe lacks
+// it, pm/director/admin have it. Reused here so the launcher never offers a
+// choice the backend would refuse anyway.
+const ADMIN_PAGE_SLUG = "apg-jfb-admin";
 
 export default function App() {
+  const { config, ready } = useAppConfig();
   const [mode, setMode] = useState(null);
+  // "checking" | "allowed" | "denied" — gates whether the launcher is shown at all.
+  const [adminAccess, setAdminAccess] = useState("checking");
+
+  useEffect(() => {
+    if (!ready || !config.appSlug) return;
+    let cancelled = false;
+
+    fetchPageDetails(config.appSlug, ADMIN_PAGE_SLUG)
+      .then(() => {
+        if (!cancelled) setAdminAccess("allowed");
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        const status = err?.response?.status;
+        const errorCode = err?.response?.data?.error_code;
+        if (status === 403 || errorCode === "PAGE_ACCESS_DENIED") {
+          setAdminAccess("denied");
+          setMode("fieldops");
+        } else {
+          // Fail-open: a transient/network error shouldn't lock the user out.
+          setAdminAccess("allowed");
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [ready, config.appSlug]);
+
+  if (!ready || adminAccess === "checking") {
+    return (
+      <Box
+        style={{
+          height: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Loader />
+      </Box>
+    );
+  }
 
   if (!mode) {
     return <LaunchPage onSelect={setMode} />;

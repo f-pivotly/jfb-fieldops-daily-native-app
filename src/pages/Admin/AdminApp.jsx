@@ -5,13 +5,16 @@ import {
   IconBolt,
   IconFolder,
   IconUsers,
+  IconUsersGroup,
   IconLogout,
 } from "@tabler/icons-react";
 import AdminDashboardSection from "./AdminDashboardSection";
 import AdminLiveDataSection from "./AdminLiveDataSection";
 import AdminProjectsSection from "./AdminProjectsSection";
 import AdminUsersSection from "./AdminUsersSection";
+import AdminTeamSection from "./AdminTeamSection";
 import ProjectDetailShell from "./ProjectDetail/ProjectDetailShell";
+import { AdminAccessProvider } from "../../contexts/AdminAccessProvider";
 
 const NAV_SECTIONS = [
   {
@@ -25,6 +28,7 @@ const NAV_SECTIONS = [
     section: "Configuration",
     items: [
       { id: "projects", label: "Projects", icon: IconFolder },
+      { id: "team", label: "Team", icon: IconUsersGroup },
       { id: "users", label: "Users", icon: IconUsers },
     ],
   },
@@ -34,6 +38,7 @@ const SECTION_COMPONENTS = {
   dashboard: AdminDashboardSection,
   livedata: AdminLiveDataSection,
   projects: AdminProjectsSection,
+  team: AdminTeamSection,
   users: AdminUsersSection,
 };
 
@@ -57,6 +62,7 @@ export default function AdminApp({ onExit }) {
   }
 
   return (
+    <AdminAccessProvider>
     <Box
       style={{
         display: "flex",
@@ -153,5 +159,6 @@ export default function AdminApp({ onExit }) {
         <Box p={24}>{mainContent}</Box>
       </ScrollArea>
     </Box>
+    </AdminAccessProvider>
   );
 }

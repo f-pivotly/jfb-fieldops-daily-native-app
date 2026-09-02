@@ -3,6 +3,7 @@ import { Box, Text, Group, Button, Modal, TextInput, Select, Checkbox, Avatar, S
 import { IconPlus, IconRefresh } from "@tabler/icons-react";
 import { useDomainData } from "../../../hooks/useDomainData";
 import { useConfirmDialog } from "../../../hooks/useConfirmDialog";
+import { useDomainAccess } from "../../../contexts/adminAccessContext";
 
 function initials(fullName) {
   return (fullName || "")
@@ -18,6 +19,12 @@ const EMPTY_NEW_OPERATOR = { name: "", email: "" };
 export default function OperatorsTab({ project }) {
   const hasProject = !!project?.id;
   const { confirm, modal: confirmModal } = useConfirmDialog();
+  const { canCreate: canCreateOperator } = useDomainAccess("jfb_operators");
+  const {
+    canCreate: canCreateLink,
+    canUpdate: canUpdateLink,
+    canDelete: canDeleteLink,
+  } = useDomainAccess("jfb_project_operators");
 
   const {
     records: allOperators,
@@ -53,7 +60,7 @@ export default function OperatorsTab({ project }) {
   const [existingOperatorId, setExistingOperatorId] = useState(null);
 
   function openModal() {
-    setMode(availableOperators.length > 0 ? "existing" : "new");
+    setMode(availableOperators.length > 0 || !canCreateOperator ? "existing" : "new");
     setNewOperator(EMPTY_NEW_OPERATOR);
     setExistingOperatorId(null);
     setModalOpen(true);
@@ -91,16 +98,18 @@ export default function OperatorsTab({ project }) {
           <Box onClick={reload} style={{ cursor: "pointer", color: "#aaa", display: "flex", alignItems: "center" }} title="Refresh">
             <IconRefresh size={14} />
           </Box>
-          <Button
-            size="xs"
-            leftSection={<IconPlus size={12} />}
-            onClick={openModal}
-            disabled={!hasProject}
-            title={hasProject ? undefined : "Select a project to manage its operators"}
-            style={{ background: "#0F2744", border: "none" }}
-          >
-            Add Operator
-          </Button>
+          {canCreateLink && (
+            <Button
+              size="xs"
+              leftSection={<IconPlus size={12} />}
+              onClick={openModal}
+              disabled={!hasProject}
+              title={hasProject ? undefined : "Select a project to manage its operators"}
+              style={{ background: "#0F2744", border: "none" }}
+            >
+              Add Operator
+            </Button>
+          )}
         </Group>
       </Group>
 
@@ -125,24 +134,30 @@ export default function OperatorsTab({ project }) {
               </Box>
             </Group>
             <Group gap={10}>
-              <Checkbox size="xs" checked={link.is_active !== false} onChange={() => toggleActive(link)} label={link.is_active === false ? "Hidden" : "Active"} disabled={updating} />
-              <Button size="xs" variant="subtle" color="red" onClick={() => handleRemove({ link, operator })}>Remove</Button>
+              {canUpdateLink && (
+                <Checkbox size="xs" checked={link.is_active !== false} onChange={() => toggleActive(link)} label={link.is_active === false ? "Hidden" : "Active"} disabled={updating} />
+              )}
+              {canDeleteLink && (
+                <Button size="xs" variant="subtle" color="red" onClick={() => handleRemove({ link, operator })}>Remove</Button>
+              )}
             </Group>
           </Group>
         ))}
       </Box>
 
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">Add Operator</Text>} size="xs">
-        <SegmentedControl
-          fullWidth
-          mb={16}
-          value={mode}
-          onChange={setMode}
-          data={[
-            { label: "Existing Operator", value: "existing" },
-            { label: "New Operator", value: "new" },
-          ]}
-        />
+        {canCreateOperator && (
+          <SegmentedControl
+            fullWidth
+            mb={16}
+            value={mode}
+            onChange={setMode}
+            data={[
+              { label: "Existing Operator", value: "existing" },
+              { label: "New Operator", value: "new" },
+            ]}
+          />
+        )}
 
         {mode === "existing" && (
           <>
@@ -163,7 +178,7 @@ export default function OperatorsTab({ project }) {
           </>
         )}
 
-        {mode === "new" && (
+        {mode === "new" && canCreateOperator && (
           <>
             <TextInput
               label="Full Name"

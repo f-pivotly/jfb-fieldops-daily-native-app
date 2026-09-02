@@ -6,6 +6,7 @@ import { useConfirmDialog } from "../../../hooks/useConfirmDialog";
 import { useDelayCodes } from "../../../hooks/useDelayCodes";
 import { useProjectDelayCodes } from "../../../hooks/useProjectDelayCodes";
 import { useAppConfig } from "../../../contexts/appConfigContext";
+import { useDomainAccess } from "../../../contexts/adminAccessContext";
 import { createDomainRecord } from "../../../data";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import SafeError from "../../../components/SafeError";
@@ -39,6 +40,7 @@ export default function DelayCodesTab({ project }) {
   const hasProject = !!project?.id;
   const { config } = useAppConfig();
   const { confirm, modal: confirmModal } = useConfirmDialog();
+  const { canCreate: canCreateMasterCode, canDelete: canDeleteMasterCode } = useDomainAccess("jfb_delay_codes");
 
   const { records: workTypeRecords } = useDomainData({ domain: "jfb_work_types", system: "core" });
   const {
@@ -307,9 +309,11 @@ export default function DelayCodesTab({ project }) {
             onChange={(v) => setMasterFilter(v ?? "all")}
             w={240}
           />
-          <Button size="xs" mt={20} leftSection={<IconPlus size={12} />} onClick={() => openCustom("master")} style={{ background: "#0F2744", border: "none" }}>
-            Add to Master List
-          </Button>
+          {canCreateMasterCode && (
+            <Button size="xs" mt={20} leftSection={<IconPlus size={12} />} onClick={() => openCustom("master")} style={{ background: "#0F2744", border: "none" }}>
+              Add to Master List
+            </Button>
+          )}
         </Group>
         {masterByWorkType.map(([wt, items]) => (
           <Box key={wt} mb={14}>
@@ -321,7 +325,9 @@ export default function DelayCodesTab({ project }) {
                   {catItems.map((m) => (
                     <Group key={m.id} gap={6} p={6} style={{ background: "#f5f6f8", border: "1px solid #e7ecf5", borderRadius: 6 }}>
                       <Text size="xs">{m.code} <Text component="span" c="dimmed" size="10px">#{m.code_num}</Text></Text>
-                      <Text size="10px" fw={700} c="#ef4444" onClick={() => deleteMasterCode(m)} style={{ cursor: "pointer" }}>Delete</Text>
+                      {canDeleteMasterCode && (
+                        <Text size="10px" fw={700} c="#ef4444" onClick={() => deleteMasterCode(m)} style={{ cursor: "pointer" }}>Delete</Text>
+                      )}
                     </Group>
                   ))}
                 </Group>
