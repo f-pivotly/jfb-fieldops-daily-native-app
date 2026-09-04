@@ -8,7 +8,7 @@ import { useReports } from '../../hooks/useReports'
 import { useEquipment } from '../../hooks/useEquipment'
 import { api, createDomainRecord, executeReport, fetchCurrentUser, fetchFileById } from '../../data'
 import { useAppConfig } from '../../contexts/appConfigContext'
-import { buildNarrativeSectionsParam, buildDailyActivityByEquipmentParam, buildPhotoAssetsParam } from './lib/reportPdfData'
+import { buildNarrativeSectionsParam, buildDailyActivityByEquipmentParam, buildPhotoAssetsParam, buildDredgeChartAssetsParam } from './lib/reportPdfData'
 import PMReviewPanel from './components/PMReviewPanel'
 import EventLogTab from './reportEditorTabs/EventLogTab'
 import ProductionStatsTab from './reportEditorTabs/ProductionStatsTab'
@@ -51,7 +51,7 @@ export default function ReportEditorPage() {
   const { projectId, date } = useParams()
   const { config } = useAppConfig()
   const { project } = useProject(projectId)
-  const { reports, loading: reportsLoading, ensureReport } = useReports(projectId)
+  const { reports, loading: reportsLoading, ensureReport, update: updateReport, updating: reportSaving } = useReports(projectId)
   const report = reports.find((r) => r.report_date === date)
   const status = report?.status ?? 'draft'
 
@@ -71,17 +71,42 @@ export default function ReportEditorPage() {
   const [downloadingPdf, setDownloadingPdf] = useState(false)
   const effectiveEquipmentId = selectedEquipment ?? equipment[0]?.id ?? null
   const canDownloadPdf = status === 'approved' || status === 'released'
+  const canSubmitForReview = status === 'draft'
+  const canUnlock = status === 'approved' || status === 'released'
   const contentTabs = shouldShowDredgeProgress(project) ? [...CONTENT_TABS, DREDGE_PROGRESS_TAB] : CONTENT_TABS
+
+  async function handleSubmitForReview() {
+    if (!report?.id) return
+    await updateReport(report.id, { status: 'cqc_review' })
+  }
+
+  async function handleApprove() {
+    if (!report?.id) return
+    await updateReport(report.id, { status: 'approved' })
+  }
+
+  async function handleSendBack() {
+    if (!report?.id) return
+    await updateReport(report.id, { status: 'draft' })
+  }
+
+  async function handleUnlock() {
+    if (!report?.id) return
+    await updateReport(report.id, { status: 'draft' })
+  }
 
   async function handleDownloadPdf() {
     setDownloadingPdf(true)
     try {
       const reportId = report?.id
-      const [narrativeSections, dailyActivityByEquipment, photoAssets] = await Promise.all([
+      const [narrativeSections, dailyActivityByEquipment, photoAssets, dredgeChartAssets] = await Promise.all([
         buildNarrativeSectionsParam({ appSlug: config.appSlug, projectId, reportId }),
         buildDailyActivityByEquipmentParam({ appSlug: config.appSlug, projectId, dateISO: date }),
         buildPhotoAssetsParam({ appSlug: config.appSlug, reportId }),
+        buildDredgeChartAssetsParam({ appSlug: config.appSlug, reportId }),
       ])
+      // TEMP DIAGNOSTIC -- remove once the missing-chart-image bug is found.
+      console.log('[dredge-pdf-debug] reportId:', reportId, 'dredgeChartAssets:', dredgeChartAssets)
       const result = await executeReport('rpt-jfb-daily-report', {
         parameters: {
           projectId,
@@ -93,6 +118,7 @@ export default function ReportEditorPage() {
           narrativeSections,
           dailyActivityByEquipment,
           photoAssets,
+          dredgeChartAssets,
         },
       })
       const fileRes = await api.get(result.downloadUrl, { responseType: 'blob' })
@@ -156,6 +182,18 @@ export default function ReportEditorPage() {
                 <Badge size="sm" color={REPORT_STATUS_COLOR[status]}>{REPORT_STATUS_LABEL[status]}</Badge>
               </Box>
 
+              {canSubmitForReview && (
+                <Button size="xs" loading={reportSaving} onClick={handleSubmitForReview} style={{ background: '#0F2744', border: 'none' }}>
+                  Submit for review
+                </Button>
+              )}
+
+              {canUnlock && (
+                <Button size="xs" variant="default" loading={reportSaving} onClick={handleUnlock}>
+                  Unlock
+                </Button>
+              )}
+
               <Checkbox
                 size="xs"
                 label="Mobilization day (no production)"
@@ -189,7 +227,7 @@ export default function ReportEditorPage() {
                 </Stack>
               </Box>
 
-              <PMReviewPanel />
+              <PMReviewPanel report={report} onApprove={handleApprove} onSendBack={handleSendBack} saving={reportSaving} />
 
               {canDownloadPdf && (
                 <Button size="xs" loading={downloadingPdf} onClick={handleDownloadPdf}>

@@ -11,10 +11,9 @@
 // DIGGING vertices only.
 //
 // Ported from jfb-fieldops-daily/src/lib/dredge/track.ts (types dropped to
-// JSDoc). The hard-structure alignment snap (opts.alignment) is NOT ported --
-// alignment.ts is a separate, still-unbuilt gap (DREDGE_FEATURE_GAPS.md); this
-// port always behaves as if no alignment is configured.
+// JSDoc).
 import { close, fillHoles, dropSmallIslands, maskToPolys } from './coverage'
+import { snapToAlignment, ALIGNMENT_SNAP_FT } from './alignment'
 
 /** @typedef {{x: number, y: number, z: number}} TrackVertex */
 /** @typedef {TrackVertex[]} TrackCycle One bucket cycle: dig -> swing -> dump -> return, in file order. */
@@ -138,6 +137,15 @@ export function trackCoverage(cycles, opts = {}) {
   }
   let m = fillHoles(close(mask, Math.max(1, Math.round(closeFt / R)), G), G)
   if (minIsland > 0) m = dropSmallIslands(m, G, Math.round(minIsland / (R * R)))
+  // Extend to a hard structure the teeth can't sit on (sheet-pile wall). Done
+  // AFTER the island filter so the snap can't resurrect dropped specks, and
+  // after fillHoles so it only ever reaches outward.
+  let alignmentAddedSqFt = 0
+  if (opts.alignment && opts.alignment.length) {
+    const snapped = snapToAlignment(m, G, opts.alignment, opts.alignmentSnapFt ?? ALIGNMENT_SNAP_FT)
+    m = snapped.mask
+    alignmentAddedSqFt = snapped.addedSqFt
+  }
   let kept = 0
   for (let i = 0; i < m.length; i++) kept += m[i]
   return {
@@ -146,6 +154,6 @@ export function trackCoverage(cycles, opts = {}) {
     cycles: cycles.length,
     digVertices: digs.length,
     travelVertices: travel,
-    alignmentAddedSqFt: 0,
+    alignmentAddedSqFt,
   }
 }

@@ -7,7 +7,11 @@ import SafeError from '../../../components/SafeError'
 import { useReportPhotos } from './hooks/useReportPhotos'
 import { useAppConfig } from '../../../contexts/appConfigContext'
 import { uploadAttachment, deleteAttachment, readWrittenRecordId } from '../../../data'
+import { useFieldOpsAction } from '../../../contexts/fieldOpsAccessContext'
 
+// Must match the real, published domain slug -- see the same note in
+// DredgeChartTab.jsx (core.fnc_file_attach validates this against
+// core.cfg_domain_info_cache_b, it can't be a cosmetic label).
 const DOMAIN = 'jfb_report_photos'
 const SLOTS = [1, 2]
 
@@ -27,8 +31,9 @@ export default function PhotosTab({ project, report }) {
 
   const photoFor = (n) => photos.find((p) => p.photo_number === n) ?? null
 
+  const canRejectPhotos = useFieldOpsAction('reject_photos')
   const canEdit = !!project?.id && !!report?.id
-  const canReject = canEdit && report?.status === 'cqc_review'
+  const canReject = canEdit && canRejectPhotos && report?.status === 'cqc_review'
 
   async function handleUpload(slot, file, label) {
     if (!canEdit) return

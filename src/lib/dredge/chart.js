@@ -1,7 +1,7 @@
 import { makeGrid, coverageMask, rasterizePolys, maskToPolys, ringArea, component, open, dilate, distTransform, finalHeading } from './coverage'
 import { prismVolume } from './designVolume'
 
-const COL = { pass1: '#e0852a', pass2: '#8a8a2a', progress: '#c4d99a', band: '#16314b', paper: '#fff', map: '#9aa6ac' }
+const COL = { pass1: '#e0852a', pass2: '#8a8a2a', residual: '#b3b3b3', progress: '#c4d99a', band: '#16314b', paper: '#fff', map: '#9aa6ac' }
 const FONT = 'Arial, "Segoe UI", sans-serif'
 const MONTHS = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
@@ -360,6 +360,47 @@ function autoCenterlines(mask, G, minCells = 250) {
   return lines
 }
 
+// Group coverage rings into spatially-separated work areas and return one
+// framing window per area (world ft). Two rings join when their bounding
+// boxes come within gapFt; a "major move" leaves a gap far larger than what
+// a single day's coverage normally bridges, so genuine separate areas fall
+// into separate windows. Returns [] for a single contiguous area (nothing to
+// split). Windows sorted left->right.
+// @param {[number, number][][]} rings @param {number} [gapFt]
+// @returns {{minX: number, minY: number, maxX: number, maxY: number}[]}
+export function detectClusterWindows(rings, gapFt = 400) {
+  const boxes = rings
+    .filter((r) => r.length >= 3)
+    .map((r) => {
+      let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity
+      for (const [x, y] of r) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y }
+      return { x0, y0, x1, y1 }
+    })
+  if (boxes.length < 2) return []
+  // Union-find over boxes within gapFt of each other (expanded-box overlap).
+  const parent = boxes.map((_, i) => i)
+  const find = (a) => (parent[a] === a ? a : (parent[a] = find(parent[a])))
+  const near = (a, b) =>
+    a.x0 - gapFt <= b.x1 && b.x0 - gapFt <= a.x1 && a.y0 - gapFt <= b.y1 && b.y0 - gapFt <= a.y1
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = i + 1; j < boxes.length; j++) {
+      if (near(boxes[i], boxes[j])) parent[find(i)] = find(j)
+    }
+  }
+  const groups = new Map()
+  for (let i = 0; i < boxes.length; i++) {
+    const key = find(i), b = boxes[i], w = groups.get(key)
+    if (!w) groups.set(key, { minX: b.x0, minY: b.y0, maxX: b.x1, maxY: b.y1 })
+    else { w.minX = Math.min(w.minX, b.x0); w.minY = Math.min(w.minY, b.y0); w.maxX = Math.max(w.maxX, b.x1); w.maxY = Math.max(w.maxY, b.y1) }
+  }
+  const windows = [...groups.values()]
+  if (windows.length < 2) return []
+  const PAD = 60 // small breathing room; the renderer's aspect-fit adds the rest
+  for (const w of windows) { w.minX -= PAD; w.minY -= PAD; w.maxX += PAD; w.maxY += PAD }
+  windows.sort((a, b) => a.minX - b.minX)
+  return windows
+}
+
 export function renderChart(canvas, input) {
   const {
     todayPts, dateISO, config,
@@ -371,9 +412,20 @@ export function renderChart(canvas, input) {
     autoSecondPass = true,
     removedSeeds = [],
     overlapTolFt = 5,
+    completedCellLabels = [],
     advanceLines = [],
     autoAdvance = true,
     showAdvanceLine = true,
+    // Sweep-smoothing radius (ft) for the HYPACK point-track coverage mask --
+    // undefined lets coverageMask() fall back to its own PARAM.CLOSE_R default.
+    closeFt,
+    // CSC/DMU cells (config.cells): clip today's + prior coverage to the
+    // cells union by default (open-water/isopach projects have no cells, so
+    // this is a no-op there). PE-selected activeCellLabels further restricts
+    // TODAY's coverage to only the cells the crew says they worked --
+    // progress-to-date (prior) is never clipped by this one.
+    clipToCells = true,
+    activeCellLabels = [],
     // Volume: { mode: 'design-grade', ref, designElev, recoveryFactor? } for
     // HYPACK/cutter-suction projects, or { mode: 'surface-diff', prior, today,
     // recoveryFactor? } (SurfaceGrid pairs, see earthworks.js) for mechanical
@@ -397,13 +449,29 @@ export function renderChart(canvas, input) {
     // empty/failed RAW parse should still throw, not silently render a blank
     // preview-shaped chart.
     preview = false,
+    // Zoomed-view mode (one work area of a big-move day, from
+    // detectClusterWindows() below): frames directly to this window instead
+    // of the coverage-derived bbox, skipping the pad (the window already has
+    // its own). The aspect-ratio expansion below still runs.
+    viewWindow = null,
+    // Weekly rollup: this week's coverage, rendered like "today" (pass1
+    // orange) but sourced from saved jfb_dredge_progress rows instead of a
+    // live track -- used together with preview: true and priorRings.
+    highlightRings = [],
+    // Weekly rollup: overrides for the title band / big date in the header.
+    // Undefined falls back to the existing daily-report text.
+    titleText,
+    dateText,
   } = input
   if (!todayPts.length && !todayCoverageRings.length && !preview) {
     throw new Error('No dredging points found in the selected RAW files -- nothing to chart.')
   }
 
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
-  if (todayPts.length || todayCoverageRings.length) {
+  if (viewWindow) {
+    minX = Math.min(viewWindow.minX, viewWindow.maxX); maxX = Math.max(viewWindow.minX, viewWindow.maxX)
+    minY = Math.min(viewWindow.minY, viewWindow.maxY); maxY = Math.max(viewWindow.minY, viewWindow.maxY)
+  } else if (todayPts.length || todayCoverageRings.length) {
     for (const [x, y] of todayPts) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y }
     for (const ring of todayCoverageRings) {
       for (const [x, y] of ring) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y }
@@ -419,15 +487,17 @@ export function renderChart(canvas, input) {
       minX = Math.min(minX, f.wL, f.wR); maxX = Math.max(maxX, f.wL, f.wR)
       minY = Math.min(minY, f.wB, f.wT); maxY = Math.max(maxY, f.wB, f.wT)
     }
-    for (const ring of priorRings) {
+    for (const ring of [...priorRings, ...highlightRings]) {
       for (const [x, y] of ring) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y }
     }
     if (!Number.isFinite(minX)) {
       throw new Error('Nothing to frame yet -- add the isopach georeference and Save, then preview.')
     }
   }
-  const pad = 130
-  minX -= pad; maxX += pad; minY -= pad; maxY += pad
+  if (!viewWindow) {
+    const pad = 130
+    minX -= pad; maxX += pad; minY -= pad; maxY += pad
+  }
 
   const TARGET_MAP_ASPECT = 1.174
   {
@@ -446,13 +516,46 @@ export function renderChart(canvas, input) {
   const sx = (x) => ox + (x - minX) * sc
   const sy = (y) => oy + mapH - (y - minY) * sc
 
-  const G = makeGrid(minX, minY, maxX, maxY)
-  if (!Number.isFinite(G.nx * G.ny) || G.nx * G.ny > 50_000_000) {
+  let G = makeGrid(minX, minY, maxX, maxY)
+  const MAX_CELLS = 50_000_000
+  // A grid past MAX_CELLS coarsens (0.5 -> 1 -> 2 -> 4 ft) until it fits,
+  // instead of failing outright -- a legitimately large extent (a big dredge
+  // move, or a whole-lake preview) shouldn't lose the chart entirely. Mirrors
+  // the reference app's chart.ts.
+  {
+    let R = G.R
+    while (Number.isFinite(G.nx * G.ny) && G.nx * G.ny > MAX_CELLS && R < 4) {
+      R *= 2
+      G = makeGrid(minX, minY, maxX, maxY, R)
+    }
+  }
+  if (!Number.isFinite(G.nx * G.ny) || G.nx * G.ny > MAX_CELLS) {
     throw new Error(`Chart extent too large (${G.nx}x${G.ny} cells) -- coverage coordinates look out of range.`)
   }
   const toGrid = ([x, y]) => [Math.round((x - G.x0) / G.R), Math.round((y - G.y0) / G.R)]
 
-  const todayMask = todayCoverageRings.length ? rasterizePolys(todayCoverageRings, G) : coverageMask(todayPts, G)
+  // CSC/DMU cells in view (hoisted above the mask pipeline so clip-to-cells
+  // and the per-cell breakdown below can use it; the drawing pass further
+  // down reuses this same list instead of re-filtering).
+  //
+  // cellsReferenceOnly: when set (and the project has cells at all), skip
+  // cells out of the grid/clip/breakdown pipeline entirely -- allCells stays
+  // empty, so everything below that keys off it (clip-to-cells,
+  // activeCellLabels, the per-cell breakdown, the outline+label draw block)
+  // no-ops unchanged. refCells instead carries every parsed cell (labeled or
+  // not) for a separate, purely visual outline+number overlay -- no grid
+  // built, so a whole-project overview doesn't trip the chart-extent guard.
+  const rawCells = config.cells ?? []
+  const refOnly = !!config.cellsReferenceOnly && rawCells.length > 0
+  const allCells = refOnly ? [] : rawCells
+  const refCells = refOnly ? rawCells : []
+  const drawnCells = allCells.filter((c) => {
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
+    for (const [x, y] of c.ring) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y }
+    return x1 >= minX && x0 <= maxX && y1 >= minY && y0 <= maxY
+  })
+
+  const todayMask = todayCoverageRings.length ? rasterizePolys(todayCoverageRings, G) : coverageMask(todayPts, G, closeFt)
   if (excludeRings.length) { const ex = rasterizePolys(excludeRings, G); for (let i = 0; i < todayMask.length; i++) if (ex[i]) todayMask[i] = 0 }
   for (const seed of removedAreaSeeds) {
     const [sx0, sy0] = toGrid(seed)
@@ -460,6 +563,23 @@ export function renderChart(canvas, input) {
     for (let i = 0; i < comp.length; i++) if (comp[i]) todayMask[i] = 0
   }
   const priorMask = rasterizePolys(priorRings, G)
+  const highlightMask = rasterizePolys(highlightRings, G)
+
+  // Clip coverage to the cells union (only report area inside the cells).
+  // Guarded on allCells (does the PROJECT have cells at all), not drawnCells
+  // (cells in THIS view) -- a zoomed split-view window with zero cells in
+  // frame must still clip to nothing, not skip clipping outright.
+  const cellsUnion = allCells.length ? rasterizePolys(drawnCells.map((c) => c.ring), G) : null
+  if (cellsUnion && clipToCells) {
+    for (let i = 0; i < todayMask.length; i++) if (!cellsUnion[i]) { todayMask[i] = 0; priorMask[i] = 0 }
+  }
+  // PE-selected worked cells: TODAY's coverage counts only inside the DMUs
+  // the crew actually worked (progress-to-date is NOT clipped by this).
+  if (activeCellLabels.length && drawnCells.length) {
+    const sel = new Set(activeCellLabels)
+    const workedUnion = rasterizePolys(drawnCells.filter((c) => sel.has(c.label)).map((c) => c.ring), G)
+    for (let i = 0; i < todayMask.length; i++) if (!workedUnion[i]) todayMask[i] = 0
+  }
 
   const overlapMask = new Uint8Array(todayMask.length)
   for (let i = 0; i < overlapMask.length; i++) overlapMask[i] = (todayMask[i] && priorMask[i]) ? 1 : 0
@@ -470,19 +590,36 @@ export function renderChart(canvas, input) {
     const comp = component(candidateMask, G, gx, gy)
     for (let i = 0; i < comp.length; i++) if (comp[i]) candidateMask[i] = 0
   }
+  // RESIDUAL: any of today's coverage inside a CSC the PE flagged COMPLETE.
+  // A finished cell can't receive 1st or 2nd pass -- re-entry there is
+  // residual by definition. Uses rawCells -- ALL cells regardless of view
+  // framing AND regardless of cellsReferenceOnly mode (refOnly leaves
+  // allCells empty on purpose; residual still has to work there).
+  const completedSet = new Set(completedCellLabels)
+  const completedUnion = completedSet.size && rawCells.length
+    ? rasterizePolys(rawCells.filter((c) => completedSet.has(c.label)).map((c) => c.ring), G)
+    : null
+  const residualTodayMask = new Uint8Array(todayMask.length)
+  if (completedUnion) for (let i = 0; i < residualTodayMask.length; i++) residualTodayMask[i] = (todayMask[i] && completedUnion[i]) ? 1 : 0
   const manualMask = rasterizePolys(secondPassRings, G)
   const secondTodayMask = new Uint8Array(todayMask.length)
-  for (let i = 0; i < secondTodayMask.length; i++) secondTodayMask[i] = (todayMask[i] && (candidateMask[i] || manualMask[i])) ? 1 : 0
+  for (let i = 0; i < secondTodayMask.length; i++) secondTodayMask[i] = (todayMask[i] && (candidateMask[i] || manualMask[i]) && !residualTodayMask[i]) ? 1 : 0
   const firstMask = new Uint8Array(todayMask.length)
-  for (let i = 0; i < firstMask.length; i++) firstMask[i] = (todayMask[i] && !priorMask[i] && !secondTodayMask[i]) ? 1 : 0
+  for (let i = 0; i < firstMask.length; i++) firstMask[i] = (todayMask[i] && !priorMask[i] && !secondTodayMask[i] && !residualTodayMask[i]) ? 1 : 0
   const incidentalMask = new Uint8Array(todayMask.length)
-  for (let i = 0; i < incidentalMask.length; i++) incidentalMask[i] = (overlapMask[i] && !secondTodayMask[i]) ? 1 : 0
+  for (let i = 0; i < incidentalMask.length; i++) incidentalMask[i] = (overlapMask[i] && !secondTodayMask[i] && !residualTodayMask[i]) ? 1 : 0
 
   const rPix = gapFt / G.R
   const bridgeMask = new Uint8Array(todayMask.length)
-  {
+  // Bridge exists to close the seam between fresh coverage (today / weekly
+  // highlight) and the prior base. Skipped entirely when there's neither --
+  // a prior-only chart (weekly: a dredge with history but no work this
+  // week) must not run it, or the morphological close can merge separate
+  // prior blobs and round off their true boundaries.
+  const hasToday = todayPts.length > 0 || todayCoverageRings.length > 0
+  if (hasToday || highlightRings.length) {
     const allMask = new Uint8Array(todayMask.length)
-    for (let i = 0; i < allMask.length; i++) allMask[i] = (todayMask[i] || priorMask[i]) ? 1 : 0
+    for (let i = 0; i < allMask.length; i++) allMask[i] = (todayMask[i] || priorMask[i] || highlightMask[i]) ? 1 : 0
     const dtAll = distTransform(allMask, G)
     const notDilated = new Uint8Array(allMask.length)
     for (let i = 0; i < notDilated.length; i++) notDilated[i] = dtAll[i] <= rPix ? 0 : 1
@@ -496,6 +633,8 @@ export function renderChart(canvas, input) {
 
   const todayPolys = maskToPolys(firstMask, G)
   const secondPolys = maskToPolys(secondTodayMask, G)
+  const residualPolys = maskToPolys(residualTodayMask, G)
+  const highlightPolys = maskToPolys(highlightMask, G)
   const footprintPolys = maskToPolys(todayMask, G)
 
   const cellSqFt = G.R * G.R
@@ -535,6 +674,62 @@ export function renderChart(canvas, input) {
     adjustedCy = Math.round(gross * rf * 10) / 10
   }
 
+  // Per-CSC-cell coverage breakdown (cells touched by coverage). Only cells
+  // with any progress-to-date (prior or today) are reported -- an untouched
+  // cell adds nothing worth a row.
+  const cellBreakdown = []
+  for (const c of drawnCells) {
+    const cm = rasterizePolys([c.ring], G)
+    let cc = 0, tc = 0, uc = 0, fc = 0, sc2 = 0, cutFtC = 0
+    const cellFirstMask = volume?.mode === 'design-grade' ? new Uint8Array(cm.length) : null
+    const sampleSurf = volume?.mode === 'surface-diff'
+      ? (s, x, y) => {
+          const gx = Math.round(x - s.x0), gy = Math.round(y - s.y0)
+          if (gx < 0 || gx >= s.nx || gy < 0 || gy >= s.ny) return NaN
+          return s.val[gy * s.nx + gx]
+        }
+      : null
+    for (let i = 0; i < cm.length; i++) {
+      if (!cm[i]) continue
+      cc++
+      if (todayMask[i]) tc++
+      if (todayMask[i] || priorMask[i]) uc++
+      if (firstMask[i]) { fc++; if (cellFirstMask) cellFirstMask[i] = 1 }
+      if (secondTodayMask[i]) sc2++
+      if (sampleSurf && todayMask[i]) {
+        const gx = i % G.nx, gy = (i / G.nx) | 0
+        const wx = G.x0 + gx * G.R, wy = G.y0 + gy * G.R
+        const a = sampleSurf(volume.prior, wx, wy), b = sampleSurf(volume.today, wx, wy)
+        if (Number.isFinite(a) && Number.isFinite(b) && a > b) cutFtC += (a - b) * cellSqFt
+      }
+    }
+    const cellSqFtV = Math.round(cc * cellSqFt), cumSqFtV = Math.round(uc * cellSqFt)
+    if (cumSqFtV <= 0) continue
+    let grossCyC, adjustedCyC
+    if (cellFirstMask) {
+      const pv = prismVolume(cellFirstMask, G, volume.ref, volume.designElev, cellSqFt)
+      grossCyC = Math.round(pv.grossCy * 10) / 10
+      adjustedCyC = Math.round(pv.grossCy * rf * 10) / 10
+    } else if (sampleSurf) {
+      const grossC = cutFtC / 27
+      grossCyC = Math.round(grossC * 10) / 10
+      adjustedCyC = Math.round(grossC * rf * 10) / 10
+    }
+    cellBreakdown.push({
+      label: c.label,
+      cellSqFt: cellSqFtV,
+      todaySqFt: Math.round(tc * cellSqFt),
+      firstSqFt: Math.round(fc * cellSqFt),
+      secondSqFt: Math.round(sc2 * cellSqFt),
+      cumulativeSqFt: cumSqFtV,
+      pct: cellSqFtV > 0 ? Math.round((cumSqFtV / cellSqFtV) * 100) : 0,
+      workedToday: tc > 0,
+      grossCy: grossCyC,
+      adjustedCy: adjustedCyC,
+    })
+  }
+  cellBreakdown.sort((a, b) => b.todaySqFt - a.todaySqFt || a.label.localeCompare(b.label, undefined, { numeric: true }))
+
   const fillPolys = (polys, color) => {
     if (!polys.length) return
     g.fillStyle = color; g.beginPath()
@@ -573,16 +768,38 @@ export function renderChart(canvas, input) {
     g.drawImage(config.bgImage, sx(IMG.wL), sy(IMG.wT), (IMG.wR - IMG.wL) * sc, (IMG.wT - IMG.wB) * sc)
   }
   fillPolys(progressPolys, COL.progress)
+  // Weekly: this-week coverage in the 1st-pass orange over the prior base.
+  if (highlightPolys.length) fillPolys(highlightPolys, COL.pass1)
   fillPolys(todayPolys, COL.pass1)
   fillPolys(secondPolys, COL.pass2)
+  fillPolys(residualPolys, COL.residual)
 
   // CSC / DMU cells: outline + label at centroid, drawn over coverage, under
-  // the dredge icon. Pure overlay in this app -- clip-to-cells and residual
-  // classification are downstream gaps the reference has but this doesn't
-  // yet (DREDGE_FEATURE_GAPS.md), so `cells` here is display-only.
-  const cells = config.cells ?? []
-  if (cells.length) {
-    const inView = cells.filter((c) => {
+  // the dredge icon. drawnCells (in-view filtered) was computed above the
+  // mask pipeline, where clip-to-cells/activeCellLabels/the breakdown below
+  // also use it.
+  if (drawnCells.length) {
+    const cellPath = (c) => { g.beginPath(); g.moveTo(sx(c.ring[0][0]), sy(c.ring[0][1])); for (const v of c.ring.slice(1)) g.lineTo(sx(v[0]), sy(v[1])); g.closePath() }
+    g.strokeStyle = 'rgba(255,255,255,0.75)'; g.lineWidth = 2.5
+    for (const c of drawnCells) { cellPath(c); g.stroke() }
+    g.strokeStyle = 'rgba(20,20,20,0.7)'; g.lineWidth = 1
+    for (const c of drawnCells) { cellPath(c); g.stroke() }
+    g.font = `bold 12px ${FONT}`; g.textAlign = 'center'
+    for (const c of drawnCells) {
+      if (!c.label) continue
+      const [cx, cy] = ringCentroid(c.ring)
+      g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineWidth = 3; g.strokeText(c.label, sx(cx), sy(cy) + 4)
+      g.fillStyle = '#111'; g.fillText(c.label, sx(cx), sy(cy) + 4)
+    }
+    g.textAlign = 'left'
+  }
+
+  // Reference-only CSC cells (cellsReferenceOnly): outline + number overlay
+  // only -- no grid, no clipping, no breakdown, same draw style as the
+  // drawnCells block above. Draw only the cells that intersect the framed
+  // view (the canvas clips the rest).
+  if (refCells.length) {
+    const inView = refCells.filter((c) => {
       let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
       for (const [x, y] of c.ring) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y }
       return x1 >= minX && x0 <= maxX && y1 >= minY && y0 <= maxY
@@ -757,7 +974,7 @@ export function renderChart(canvas, input) {
 
   g.fillStyle = COL.band; g.fillRect(ox, oy, mapW, 22)
   g.fillStyle = '#fff'; g.font = `bold 14px ${FONT}`; g.textAlign = 'center'
-  g.fillText(`Daily Dredge Progress Chart - ${config.dredgeLabel}`, ox + mapW / 2, oy + 16)
+  g.fillText(titleText ?? `Daily Dredge Progress Chart - ${config.dredgeLabel}`, ox + mapW / 2, oy + 16)
   g.textAlign = 'left'
 
   if (config.logoImage) {
@@ -768,13 +985,15 @@ export function renderChart(canvas, input) {
   const [yr, mo, da] = dateISO.split('-')
   g.fillStyle = '#000'; g.font = `bold 16px ${FONT}`; g.fillText(`Project: ${config.projectTitle}`, side + 250, 36)
   g.font = `bold 24px ${FONT}`; g.textAlign = 'right'
-  g.fillText(`${MONTHS[+mo]} ${+da}${ordinal(+da)}, ${yr}`, W - side, 42)
+  g.fillText(dateText ?? `${MONTHS[+mo]} ${+da}${ordinal(+da)}, ${yr}`, W - side, 42)
   g.textAlign = 'left'
   g.font = `13px ${FONT}`
   g.fillText(config.stationText ? `Area: ${config.area}: ${config.stationText}` : `Area: ${config.area}`, side, 88)
-  g.fillText(`Material Encountered:  ${config.materials ?? ''}`, side, 106)
+  // Skipped entirely when there's no value -- weekly per-contract charts
+  // pass materials: undefined to keep the header clean.
+  if (config.materials) g.fillText(`Material Encountered:  ${config.materials}`, side, 106)
 
-  const leg = [['1st Pass Dredging', COL.pass1], ['2nd Pass Dredging', COL.pass2], ['Progress to Date', COL.progress]]
+  const leg = [['1st Pass Dredging', COL.pass1], ['2nd Pass Dredging', COL.pass2], ['Residual Dredging', COL.residual], ['Progress to Date', COL.progress]]
   const lx = side + 280, ly = 70, sw = 28, sh = 18
   g.font = `bold 14px ${FONT}`
   leg.forEach((d, k) => {
@@ -801,13 +1020,14 @@ export function renderChart(canvas, input) {
 
   const todaySqFt = Math.round(countArea(firstMask))
   const secondPassSqFt = Math.round(countArea(secondTodayMask))
+  const residualSqFt = Math.round(countArea(residualTodayMask))
   const incidentalSqFt = Math.round(countArea(incidentalMask))
   const priorSqFt = Math.round(countArea(priorMask))
   const priorTrueSqFt = Math.round(priorRings.reduce((s, r) => s + Math.abs(ringArea(r)), 0))
 
   return {
     stats: {
-      todaySqFt, secondPassSqFt, incidentalSqFt, priorSqFt,
+      todaySqFt, secondPassSqFt, residualSqFt, incidentalSqFt, priorSqFt,
       cumulativeSqFt: todaySqFt + priorTrueSqFt,
       advanceFt: Math.round(advanceFt),
       grossCy, adjustedCy, meanPrismFt, volumeNoDataSqFt,
@@ -816,9 +1036,49 @@ export function renderChart(canvas, input) {
     todayRings: todayPolys,
     secondRings: secondPolys,
     footprintRings: footprintPolys,
+    cellBreakdown,
     advanceLines: effAdvance,
     transform: { ox, oy, minX, minY, mapH, sc },
   }
+}
+
+// HYPACK/point-track variant: rasterizes today's coverage from the raw track
+// (same coverageMask() the chart render itself uses) so the DXF's 1st/2nd
+// pass split matches the on-screen chart exactly, trimming incidental
+// overlap with the prior baseline. Use buildProgressDxfFromRings() instead
+// for Earthworks/mechanical projects, whose coverage is already rings, not a
+// point track.
+export function buildProgressDxf(todayPts, priorRings = [], secondPassRings = [], closeFt) {
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
+  for (const [x, y] of todayPts) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y }
+  if (!isFinite(minX)) return '0\nSECTION\n2\nHEADER\n9\n$ACADVER\n1\nAC1009\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n0\nENDSEC\n0\nEOF\n'
+  minX -= 5; maxX += 5; minY -= 5; maxY += 5
+  const G = makeGrid(minX, minY, maxX, maxY)
+  const today = coverageMask(todayPts, G, closeFt), prior = rasterizePolys(priorRings, G), flagged = rasterizePolys(secondPassRings, G)
+  const first = new Uint8Array(today.length), second = new Uint8Array(today.length)
+  for (let i = 0; i < today.length; i++) {
+    if (!today[i]) continue
+    if (flagged[i]) second[i] = 1
+    else if (!prior[i]) first[i] = 1
+  }
+  const poly = (layer, ring) => {
+    let s = `0\nPOLYLINE\n8\n${layer}\n66\n1\n70\n1\n`
+    for (const [x, y] of ring) s += `0\nVERTEX\n8\n${layer}\n10\n${x.toFixed(3)}\n20\n${y.toFixed(3)}\n`
+    return s + `0\nSEQEND\n8\n${layer}\n`
+  }
+  let body = ''
+  for (const r of maskToPolys(today, G)) body += poly('PROGRESS_TODAY', r)
+  for (const r of maskToPolys(first, G)) body += poly('PASS_1ST', r)
+  for (const r of maskToPolys(second, G)) body += poly('PASS_2ND', r)
+  return `0\nSECTION\n2\nHEADER\n9\n$ACADVER\n1\nAC1009\n`
+    + `9\n$EXTMIN\n10\n${minX.toFixed(3)}\n20\n${minY.toFixed(3)}\n30\n0.0\n`
+    + `9\n$EXTMAX\n10\n${maxX.toFixed(3)}\n20\n${maxY.toFixed(3)}\n30\n0.0\n0\nENDSEC\n`
+    + `0\nSECTION\n2\nTABLES\n0\nTABLE\n2\nLAYER\n70\n4\n`
+    + `0\nLAYER\n2\n0\n70\n0\n62\n7\n6\nCONTINUOUS\n`
+    + `0\nLAYER\n2\nPROGRESS_TODAY\n70\n0\n62\n3\n6\nCONTINUOUS\n`
+    + `0\nLAYER\n2\nPASS_1ST\n70\n0\n62\n30\n6\nCONTINUOUS\n`
+    + `0\nLAYER\n2\nPASS_2ND\n70\n0\n62\n50\n6\nCONTINUOUS\n`
+    + `0\nENDTAB\n0\nENDSEC\n0\nSECTION\n2\nENTITIES\n${body}0\nENDSEC\n0\nEOF\n`
 }
 
 export function buildProgressDxfFromRings(firstRings, secondRings = []) {

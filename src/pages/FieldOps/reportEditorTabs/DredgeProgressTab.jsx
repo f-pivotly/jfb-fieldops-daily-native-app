@@ -1,16 +1,23 @@
 import { useRef, useState } from 'react'
-import { Box, Button, FileButton, Group, NumberInput, Stack, Text, TextInput } from '@mantine/core'
+import { Box, Button, Checkbox, Chip, FileButton, Group, NumberInput, Stack, Table, Text, TextInput } from '@mantine/core'
 import { useDomainData } from '../../../hooks/useDomainData'
 import { useProjectAreas } from '../../../hooks/useProjectAreas'
 import { useDredgeEquipmentConfig } from '../../../hooks/useDredgeEquipmentConfig'
+import { useConfirmDialog } from '../../../hooks/useConfirmDialog'
 import { useAppConfig } from '../../../contexts/appConfigContext'
 import { downloadAttachment, uploadAttachment } from '../../../data'
 import { readTrack } from '../../../lib/dredge/coverage'
-import { renderChart, buildProgressDxfFromRings, parseDredge, parseCells, parseReferenceLines } from '../../../lib/dredge/chart'
-import { decodeRefSurface, gunzipBytes, impliedThicknessFt } from '../../../lib/dredge/designVolume'
+import { renderChart, buildProgressDxf, buildProgressDxfFromRings, detectClusterWindows, parseDredge, parseCells, parseReferenceLines } from '../../../lib/dredge/chart'
+import { decodeRefSurface, gzipBytes, gunzipBytes, impliedThicknessFt } from '../../../lib/dredge/designVolume'
 import { loadAttachmentImage, loadPublicImage, loadTiles } from '../../../lib/dredge/imageLoaders'
 import { parseTrackDxf, looksLikeTrack, trackCoverage, TRACK_DEFAULTS } from '../../../lib/dredge/track'
-import { parseEarthworksCsv, coverageFromSurface } from '../../../lib/dredge/earthworks'
+import { parseEarthworksCsv, coverageFromSurface, diffSurfaces, filenameDateISO } from '../../../lib/dredge/earthworks'
+import { parseAlignmentDxf } from '../../../lib/dredge/alignment'
+
+// Must match the real, published domain slug -- see the same note in
+// DredgeChartTab.jsx (core.fnc_file_attach validates this against
+// core.cfg_domain_info_cache_b, it can't be a cosmetic label).
+const DREDGE_PROGRESS_DOMAIN = 'jfb_dredge_progress'
 
 function triggerDownload(blob, name) {
   const url = URL.createObjectURL(blob)
@@ -30,6 +37,30 @@ async function loadRefSurface(path, refSurfaceRef) {
   const blob = await downloadAttachment(path)
   const surface = decodeRefSurface(await gunzipBytes(blob))
   refSurfaceRef.current = { path, surface }
+  return surface
+}
+
+// The most recent banked full-surface export for this equipment BEFORE the
+// given date, or null. No new query -- progressRecords/reportDateById are
+// already fetched in this component for priorRings, so this is a plain
+// client-side filter+sort over data already in hand.
+function findLatestPriorSurfaceRow(progressRecords, reportDateById, equipmentId, beforeISO) {
+  return (progressRecords ?? [])
+    .filter((r) => r.equipment_id === equipmentId && r.surface_export_path)
+    .map((r) => ({ row: r, date: reportDateById.get(r.report_id) }))
+    .filter((c) => c.date && c.date < beforeISO)
+    .sort((a, b) => b.date.localeCompare(a.date))[0]?.row ?? null
+}
+
+// Downloads + gunzips + parses a banked surface export, caching it in
+// priorSurfaceRef by storage path so a re-generate doesn't re-fetch it.
+async function loadPriorSurface(path, priorSurfaceRef) {
+  if (!path) return null
+  if (priorSurfaceRef.current?.path === path) return priorSurfaceRef.current.surface
+  const blob = await downloadAttachment(path)
+  const text = new TextDecoder().decode(await gunzipBytes(blob))
+  const surface = parseEarthworksCsv(text)
+  priorSurfaceRef.current = { path, surface }
   return surface
 }
 
@@ -62,6 +93,17 @@ async function loadCells(path, cellsRef) {
   return cells
 }
 
+// Downloads + parses the project's hard-structure alignment DXF (sheet-pile
+// wall / bulkhead), caching it in alignmentRef by storage path.
+async function loadAlignment(path, alignmentRef) {
+  if (!path) return []
+  if (alignmentRef.current?.path === path) return alignmentRef.current.lines
+  const blob = await downloadAttachment(path)
+  const lines = parseAlignmentDxf(await blob.text())
+  alignmentRef.current = { path, lines }
+  return lines
+}
+
 // Downloads + parses the project's mile-marker/stationing DXF, caching it in
 // referenceLinesRef by storage path so a re-generate doesn't re-fetch it.
 async function loadReferenceLines(path, referenceLinesRef) {
@@ -83,10 +125,16 @@ async function loadReferenceLines(path, referenceLinesRef) {
 // alignment snap (alignment.ts -- a separate, still-unbuilt gap) and minus
 // full-surface day-over-day diffing (needs somewhere to bank each day's
 // surface for tomorrow -- jfb_dredge_progress has no field for that yet).
-async function resolveTodayCoverage(cfg, pickedFiles) {
+function dateMismatchWarning(file, reportDateISO) {
+  const nameDate = filenameDateISO(file.name)
+  if (!nameDate || !reportDateISO || nameDate === reportDateISO) return ''
+  return `Heads up: "${file.name}" looks dated ${nameDate} but this report is ${reportDateISO}. Using it anyway -- double-check you picked the right day's export.`
+}
+
+async function resolveTodayCoverage(cfg, pickedFiles, reportDateISO, onProgress, tuning = {}, priorSurface = null) {
   if (cfg.data_source !== 'earthworks') {
-    const track = await readTrack(pickedFiles)
-    return { pts: track.pts, headings: track.headings, todayCoverageRings: [], notice: '' }
+    const track = await readTrack(pickedFiles, onProgress)
+    return { pts: track.pts, headings: track.headings, todayCoverageRings: [], notice: '', dateWarning: '' }
   }
   if (cfg.water_elev_ft == null) {
     throw new Error('Water elevation is not set for this project -- a PM/Admin can add it under Project Settings -> Dredge Chart.')
@@ -94,6 +142,7 @@ async function resolveTodayCoverage(cfg, pickedFiles) {
   const dxfFile = pickedFiles.find((f) => /\.dxf$/i.test(f.name)) ?? null
   const csvFile = pickedFiles.find((f) => /\.(csv|asc|txt)$/i.test(f.name)) ?? null
   if (dxfFile) {
+    const dateWarning = dateMismatchWarning(dxfFile, reportDateISO)
     const cycles = parseTrackDxf(await dxfFile.text())
     if (!cycles.length) throw new Error('No machine track found in that DXF. Is it the daily Tracking export?')
     if (!looksLikeTrack(cycles)) {
@@ -105,31 +154,82 @@ async function resolveTodayCoverage(cfg, pickedFiles) {
       bedTolFt: cfg.track_bed_tolerance_ft ?? TRACK_DEFAULTS.bedTolFt,
       bed,
       maxDigElev: bed ? null : Number(cfg.water_elev_ft),
+      closeFt: tuning.closeFt,
+      minIslandSqFt: tuning.islandSqFt,
+      alignment: tuning.alignment,
+      alignmentSnapFt: cfg.alignment_snap_ft,
     })
     if (!cov.rings.length) {
       throw new Error(`No digging found in the track (${cov.cycles} cycles, ${cov.travelVertices} travel positions). If the bucket did dig, the bed tolerance may be too tight -- a PM can adjust it in Project Settings.`)
     }
     const notice = `Border from the machine track: ${cov.cycles} bucket cycles, ${cov.digVertices} digging positions (${cov.travelVertices} travel/swing positions ignored).`
       + (bed ? ' Volume needs a banked prior-day surface, not yet supported.' : ' No surface CSV uploaded, so no volume this time.')
-    return { pts: [], headings: [], todayCoverageRings: cov.rings, notice }
+      + (cov.alignmentAddedSqFt > 0 ? ` Extended ${Math.round(cov.alignmentAddedSqFt).toLocaleString()} sq ft to the alignment (wall snap).` : '')
+    return { pts: [], headings: [], todayCoverageRings: cov.rings, notice, dateWarning }
   }
   if (csvFile) {
-    const today = parseEarthworksCsv(await csvFile.text())
+    const dateWarning = dateMismatchWarning(csvFile, reportDateISO)
+    const csvText = await csvFile.text()
+    const today = parseEarthworksCsv(csvText)
     let design = null
-    if (cfg.design_path) {
-      try { design = parseEarthworksCsv(await (await downloadAttachment(cfg.design_path)).text()) } catch { /* optional */ }
+    if (cfg.earthworks_design_path) {
+      try { design = parseEarthworksCsv(await (await downloadAttachment(cfg.earthworks_design_path)).text()) } catch { /* optional */ }
     }
-    const cov = coverageFromSurface(today, { waterElev: Number(cfg.water_elev_ft), design })
+    const cov = coverageFromSurface(today, {
+      waterElev: Number(cfg.water_elev_ft),
+      design,
+      closeFt: tuning.closeFt,
+      minIslandSqFt: tuning.islandSqFt,
+    })
+    // Full-surface auto-detect (reference: generateFromEarthworks, cov.keptSqFt
+    // > 100_000 -- a day's digging is a few thousand sq ft, a whole-lake/site
+    // surface export is hundreds of thousands). Day-scoped: the export's
+    // cells ARE the day's bucket positions, charted directly (below).
+    // Full-surface: banked and diffed against the prior stored surface
+    // instead -- only full-surface exports are ever banked, a day-scoped
+    // file must never masquerade as one.
+    if (cov.keptSqFt > 100_000) {
+      if (!priorSurface) {
+        // Reference returns here with nothing rendered -- it can bank
+        // immediately, before any save. Native's uploadAttachment needs an
+        // existing jfb_dredge_progress row to attach to (see "save row,
+        // then attach" below), so there's no row to bank against until the
+        // PE actually saves. Rendering the surface's own footprint as
+        // today's coverage keeps the normal Generate -> Save flow working
+        // end to end instead of leaving a dead end with nothing to save.
+        return {
+          pts: [], headings: [], todayCoverageRings: cov.rings,
+          notice: `This is a full-surface export and no earlier surface was stored, so it will be saved as the starting reference for ${reportDateISO} when you save this report. Not an error -- the next full-surface upload will chart against it.`,
+          dateWarning,
+          bankableSurface: today,
+          bankableCsvText: csvText,
+        }
+      }
+      const diff = diffSurfaces(today, priorSurface.grid, {
+        waterElev: Number(cfg.water_elev_ft), design, closeFt: tuning.closeFt, minIslandSqFt: tuning.islandSqFt,
+      })
+      if (!diff.rings.length) {
+        throw new Error(`No dredging progress found vs the ${priorSurface.dateISO} surface (${diff.swingFilteredSqFt.toLocaleString()} sq ft of swing/dump readings filtered). If work WAS done, the two exports may not be the same surface product -- make sure Earthworks exports use the same surface selection every day.`)
+      }
+      return {
+        pts: [], headings: [], todayCoverageRings: diff.rings,
+        notice: `Full-surface export -- the day's progress was computed against the ${priorSurface.dateISO} surface.`,
+        dateWarning,
+        bankableSurface: today,
+        bankableCsvText: csvText,
+      }
+    }
     if (!cov.rings.length) {
       throw new Error(`No dredging found in this export (${cov.swingFilteredSqFt.toLocaleString()} sq ft of swing/dump readings were filtered out).`)
     }
-    const notice = `Border from the day's surface export (${cov.keptSqFt.toLocaleString()} sq ft kept, ${cov.swingFilteredSqFt.toLocaleString()} sq ft of swing/dump readings filtered). Volume needs a banked prior-day surface, not yet supported.`
-    return { pts: [], headings: [], todayCoverageRings: cov.rings, notice }
+    const notice = `Border from the day's surface export (${cov.keptSqFt.toLocaleString()} sq ft kept, ${cov.swingFilteredSqFt.toLocaleString()} sq ft of swing/dump readings filtered). Day-scoped exports don't carry a cross-day volume.`
+    return { pts: [], headings: [], todayCoverageRings: cov.rings, notice, dateWarning }
   }
   throw new Error('Choose the day’s Tracking .dxf and/or the surface .csv.')
 }
 
 const DEFAULT_GAP = 5, DEFAULT_TOL = 5
+const DEFAULT_CLOSE_FT = 2, DEFAULT_ISLAND_SQFT = 150
 
 const MODE_HINTS = {
   'add-second': (n) => `Click to outline a 2nd-pass area (${n} point${n === 1 ? '' : 's'}), then Done.`,
@@ -156,6 +256,19 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
   const [lastResult, setLastResult] = useState(null)
   const [error, setError] = useState(null)
   const [notice, setNotice] = useState('')
+  const [dateWarning, setDateWarning] = useState('')
+  const [progressMsg, setProgressMsg] = useState('')
+  // CSC/DMU cells loaded this generate, for the "worked today" chip picker --
+  // a plain array (not a ref) since the chips need to re-render from it.
+  const [cellsList, setCellsList] = useState([])
+  const [activeCellLabels, setActiveCellLabels] = useState([])
+  // Big-move day: separate work areas detected from this generate's coverage
+  // (detectClusterWindows), offering a per-area zoomed chart instead of one
+  // wide view. Preview-only state -- previewIdx never touches lastResult, so
+  // the saved stats always reflect the full day regardless of what's on screen.
+  const [clusterWindows, setClusterWindows] = useState([])
+  const [splitViews, setSplitViews] = useState(false)
+  const [previewIdx, setPreviewIdx] = useState(null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState(null)
@@ -163,6 +276,10 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
   const [mode, setMode] = useState('view')
   const [gapFt, setGapFt] = useState(DEFAULT_GAP)
   const [tolFt, setTolFt] = useState(DEFAULT_TOL)
+  const [autoAdvance, setAutoAdvance] = useState(true)
+  const [closeFt, setCloseFt] = useState(DEFAULT_CLOSE_FT)
+  const [islandSqFt, setIslandSqFt] = useState(DEFAULT_ISLAND_SQFT)
+  const [materialText, setMaterialText] = useState('')
   const [drawCount, setDrawCount] = useState(0)
   const [manualCount, setManualCount] = useState(0)
   const [removedCount, setRemovedCount] = useState(0)
@@ -201,6 +318,14 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
   const cellsRef = useRef(null)
   // Same idea, for the parsed mile-marker/stationing DXF.
   const referenceLinesRef = useRef(null)
+  // Same idea, for the parsed hard-structure alignment DXF.
+  const alignmentRef = useRef(null)
+  // Same idea, for the parsed prior banked surface (surface-diff volume).
+  const priorSurfaceRef = useRef(null)
+  // This generate's full-surface export (if any) + the prior surface it was
+  // diffed against, for handleSave to bank and runRender to build the
+  // surface-diff volume input from. Null on day-scoped exports/HYPACK days.
+  const surfaceDiffRef = useRef(null)
   const pendingCutterRef = useRef(null)
 
   const selected = equipment.find((e) => e.id === selectedEquipmentId)
@@ -210,6 +335,10 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
     useDomainData({ domain: 'jfb_dredge_config', system: 'core', projectId: project?.id })
   const { records: progressRecords, loading: progressLoading, create: createProgress, update: updateProgress, reload: reloadProgress } =
     useDomainData({ domain: 'jfb_dredge_progress', system: 'core', projectId: project?.id })
+  const { records: cellStatusRecords, create: createCellStatus, update: updateCellStatus, remove: removeCellStatus } =
+    useDomainData({ domain: 'jfb_dredge_cell_status', system: 'core', projectId: project?.id })
+  const { confirm, modal: confirmModal } = useConfirmDialog()
+  const [cellStatusBusy, setCellStatusBusy] = useState(false)
   const { areas } = useProjectAreas(project?.id)
   const areaNameById = new Map((areas ?? []).map((a) => [a.id, a.name]))
   const { equipmentConfigs } = useDredgeEquipmentConfig(project?.id)
@@ -253,16 +382,65 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
     return !!rowDate && !!report?.report_date && rowDate < report.report_date
   })
   const priorRings = priorProgressRows.flatMap((row) => row.footprint_rings ?? row.coverage_rings ?? [])
+  const priorAdvanceFt = priorProgressRows.reduce((sum, row) => sum + Number(row.advance_ft || 0), 0)
+  const latestPriorMaterialText = priorProgressRows
+    .slice()
+    .sort((a, b) => (reportDateById.get(b.report_id) || '').localeCompare(reportDateById.get(a.report_id) || ''))[0]
+    ?.material_text ?? ''
   const existingProgressRecord = (progressRecords ?? []).find(
     (row) => row.report_id === report?.id && row.equipment_id === selected?.id,
   )
+  // Same "derived, not synced via an effect" pattern as displayedRecovery
+  // above: materialText only tracks an explicit PE override for today.
+  const displayedMaterialText = materialText !== ''
+    ? materialText
+    : (existingProgressRecord?.material_text || latestPriorMaterialText || effectiveConfig?.default_material_note || '')
 
-  const runRender = () => {
+  // Completed-CSC flags (residual dredging): a cell can't take 1st/2nd pass
+  // once flagged -- re-entry there charts as residual (gray) from
+  // completed_on forward. "Effective" is gated on the report DATE being
+  // viewed, not just existence of the row, so an older released report
+  // keeps its original classification even after a later flag is added.
+  const cellStatusByLabel = new Map((cellStatusRecords ?? []).map((r) => [r.cell_label, r]))
+  const isCellEffectivelyComplete = (label) => {
+    const row = cellStatusByLabel.get(label)
+    return !!row && row.completed_on <= report.report_date
+  }
+  const toggleCellComplete = async (label) => {
+    const row = cellStatusByLabel.get(label)
+    const effective = isCellEffectivelyComplete(label)
+    if (effective) {
+      if (!(await confirm(
+        `Un-flag CSC ${label}?\n\nIt has been marked complete since ${row.completed_on.slice(0, 10)}. ` +
+        'Removing the flag makes work inside it chart as 1st/2nd pass again (not residual) on all charts from that date forward.',
+      ))) return
+      setCellStatusBusy(true)
+      try {
+        await removeCellStatus(row.id)
+      } finally {
+        setCellStatusBusy(false)
+      }
+      return
+    }
+    setCellStatusBusy(true)
+    try {
+      if (row) {
+        await updateCellStatus(row.id, { completed_on: report.report_date })
+      } else {
+        await createCellStatus({ project_id: project.id, cell_label: label, completed_on: report.report_date })
+      }
+    } finally {
+      setCellStatusBusy(false)
+    }
+  }
+
+  const runRender = (viewWindow = null, targetCanvas = canvasRef.current) => {
     const cfg = effectiveConfig
     const e = editRef.current
     const refSurface = (cfg.reference_surface_path && refSurfaceRef.current?.path === cfg.reference_surface_path)
       ? refSurfaceRef.current.surface
       : null
+    const surfaceDiff = surfaceDiffRef.current
     const volume = (cfg.volume_mode === 'design_grade' && refSurface && cfg.design_elev_ft != null)
       ? {
           mode: 'design-grade',
@@ -270,11 +448,18 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
           designElev: Number(cfg.design_elev_ft),
           recoveryFactor: recovery.trim() !== '' ? Number(recovery) : (cfg.volume_recovery_factor ?? 0.75),
         }
-      : undefined
+      : (cfg.volume_mode === 'surface_diff' && surfaceDiff?.today && surfaceDiff?.prior)
+        ? {
+            mode: 'surface-diff',
+            prior: surfaceDiff.prior,
+            today: surfaceDiff.today,
+            recoveryFactor: recovery.trim() !== '' ? Number(recovery) : (cfg.volume_recovery_factor ?? 0.75),
+          }
+        : undefined
     const dredgeShape = (equipmentConfig?.shape_path && dredgeShapeRef.current?.path === equipmentConfig.shape_path)
       ? dredgeShapeRef.current.shape
       : null
-    const result = renderChart(canvasRef.current, {
+    const result = renderChart(targetCanvas, {
       todayPts: todayPtsRef.current,
       headings: headingsRef.current,
       todayCoverageRings: todayCoverageRingsRef.current,
@@ -284,8 +469,9 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
         area: areaNameById.get(cfg.default_area_id) || '',
         stationText: cfg.require_stations && stationFrom.trim() && stationTo.trim()
           ? `${stationFrom.trim()} to ${stationTo.trim()}` : undefined,
-        materials: cfg.default_material_note || '',
+        materials: displayedMaterialText,
         dredgeLabel: equipmentConfig?.chart_label_override || selected?.name || 'Dredge',
+        cellsReferenceOnly: !!cfg.cells_reference_only,
         ...imagesRef.current,
       },
       priorRings,
@@ -295,14 +481,26 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
       removedAreaSeeds: e.removedAreaSeeds,
       secondPassRings: e.secondManual,
       removedSeeds: e.removedSeeds,
+      completedCellLabels: (cellStatusRecords ?? [])
+        .filter((r) => r.completed_on <= report.report_date)
+        .map((r) => r.cell_label),
       advanceLines: e.advanceLines,
+      autoAdvance,
+      closeFt,
+      activeCellLabels,
       volume,
       dredgeShape,
       override: e.override,
       flipShape: e.flipShape,
+      viewWindow,
     })
-    transformRef.current = result.transform
-    setLastResult({ ...result, trackPoints: todayPtsRef.current.length })
+    // Preview-only render (a zoomed work-area window): draw to the canvas but
+    // don't touch the "official" result -- lastResult/transform must always
+    // reflect the full day, since that's what gets saved.
+    if (!viewWindow) {
+      transformRef.current = result.transform
+      setLastResult({ ...result, trackPoints: todayPtsRef.current.length })
+    }
     return result
   }
 
@@ -326,13 +524,35 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
     setGenerating(true)
     setError(null)
     setNotice('')
+    setDateWarning('')
+    setProgressMsg('Reading files…')
     setSaved(false)
     setRefSurfaceError('')
     try {
       const cfg = effectiveConfig
       const needsRefSurface = cfg.volume_mode === 'design_grade' && !!cfg.reference_surface_path
+      // Loaded ahead of the Promise.all below (not alongside it) because
+      // resolveTodayCoverage -- itself one of that Promise.all's entries --
+      // needs the resolved alignment lines synchronously, not another promise.
+      const alignment = cfg.alignment_path ? await loadAlignment(cfg.alignment_path, alignmentRef).catch(() => []) : []
+      // Same reason: whether this upload turns out to be a full-surface
+      // export isn't known until it's parsed (inside resolveTodayCoverage),
+      // so the prior surface is always fetched ahead of time when this is an
+      // Earthworks project -- harmless overfetch on a day-scoped upload,
+      // where it's simply unused.
+      surfaceDiffRef.current = null
+      let priorSurface = null
+      if (cfg.data_source === 'earthworks' && selected?.id) {
+        const priorRow = findLatestPriorSurfaceRow(progressRecords, reportDateById, selected.id, report.report_date)
+        if (priorRow) {
+          try {
+            const grid = await loadPriorSurface(priorRow.surface_export_path, priorSurfaceRef)
+            priorSurface = { grid, dateISO: reportDateById.get(priorRow.report_id) }
+          } catch { /* missing/corrupt banked surface -- treat as no prior */ }
+        }
+      }
       const [today, bgImage, colorbarImage, aerialImage, northImage, logoImage, isopachTiles, aerialTiles, cells, referenceLines] = await Promise.all([
-        resolveTodayCoverage(cfg, files),
+        resolveTodayCoverage(cfg, files, report.report_date, (i, total) => setProgressMsg(`Reading file ${i}/${total}…`), { closeFt, islandSqFt, alignment }, priorSurface),
         loadAttachmentImage(cfg.bg_path),
         loadAttachmentImage(cfg.colorbar_path),
         loadAttachmentImage(cfg.aerial_path),
@@ -365,7 +585,11 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
       todayPtsRef.current = today.pts
       headingsRef.current = today.headings
       todayCoverageRingsRef.current = today.todayCoverageRings
+      surfaceDiffRef.current = today.bankableSurface
+        ? { today: today.bankableSurface, prior: priorSurface?.grid ?? null, csvText: today.bankableCsvText }
+        : null
       if (today.notice) setNotice(today.notice)
+      if (today.dateWarning) setDateWarning(today.dateWarning)
       imagesRef.current = {
         bgImage, bgGeoref: cfg.georef ?? null,
         aerialImage, aerialGeoref: cfg.aerial_georef ?? null,
@@ -380,12 +604,23 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
       pendingCutterRef.current = null
       drawRef.current = []
       setMode('view'); setDrawCount(0); setManualCount(0); setRemovedCount(0); setExcludeCount(0); setRemovedAreaCount(0); setAdvanceCount(0); setHasOverride(false)
-      runRender()
+      setCellsList(cells)
+      setActiveCellLabels([])
+      const result = runRender()
+      // Re-detect separate work areas so the split-views option reflects this
+      // day. The "large move" gap is per-project (Dredge Chart settings),
+      // defaulting to 400 ft.
+      const areaRings = result.footprintRings.length ? result.footprintRings : result.todayRings
+      const windows = detectClusterWindows(areaRings, cfg.split_gap_ft ?? 400)
+      setClusterWindows(windows)
+      if (windows.length < 2) setSplitViews(false)
+      setPreviewIdx(null)
       setGenerated(true)
     } catch (err) {
       setError(err.message)
     } finally {
       setGenerating(false)
+      setProgressMsg('')
     }
   }
 
@@ -408,6 +643,7 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
         adjusted_cy: lastResult.stats.adjustedCy ?? null,
         placement_override: editRef.current.override ?? null,
         generated_by_user_id: config?.user?.id ?? null,
+        material_text: displayedMaterialText || null,
       }
       let progressId
       if (existingProgressRecord) {
@@ -418,18 +654,54 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
         progressId = res?.data?.id
       }
 
-      // Upload the rendered chart to Pivotly file storage and record its
-      // path -- same uploadAttachment() flow every other dredge file already
-      // uses (DredgeChartTab.jsx's images/DXFs, the equipment shape). The
-      // canvas itself is never persisted, only this PNG export of it.
-      // Needs an existing record id first, same "save row, then attach"
+      // Upload the rendered chart(s) to Pivotly file storage and record their
+      // paths -- same uploadAttachment() flow every other dredge file already
+      // uses. Needs an existing record id first, same "save row, then attach"
       // ordering used everywhere else in this feature.
       if (progressId) {
-        const blob = await new Promise((res) => canvasRef.current?.toBlob(res, 'image/png'))
-        if (!blob) throw new Error('Could not export the chart image.')
-        const file = new File([blob], `dredge_progress_${report.report_date}.png`, { type: 'image/png' })
-        const uploadRes = await uploadAttachment({ coreRecordId: progressId, domain: 'jfb_dredge_progress', file })
-        await updateProgress(progressId, { chart_path: uploadRes.fileId })
+        // Big-move day: render one zoomed PNG per work area off-screen instead
+        // of the single wide view. The row above still stores the FULL day's
+        // coverage_rings/footprint_rings -- only the saved IMAGES are per-area,
+        // so progress is never divided or lost.
+        let blobs = []
+        if (splitViews && clusterWindows.length >= 2) {
+          const off = document.createElement('canvas')
+          for (const w of clusterWindows) {
+            runRender(w, off)
+            const b = await new Promise((res) => off.toBlob(res, 'image/png'))
+            if (b) blobs.push(b)
+          }
+        }
+        if (blobs.length < 2) {
+          const full = await new Promise((res) => canvasRef.current?.toBlob(res, 'image/png'))
+          if (!full) throw new Error('Could not export the chart image.')
+          blobs = [full]
+        }
+        const fileIds = []
+        for (let i = 0; i < blobs.length; i++) {
+          const file = new File([blobs[i]], `dredge_progress_${report.report_date}_${i + 1}.png`, { type: 'image/png' })
+          const uploadRes = await uploadAttachment({ coreRecordId: progressId, domain: DREDGE_PROGRESS_DOMAIN, file })
+          fileIds.push(uploadRes.fileId)
+        }
+        // Bank this day's full-surface export (if any -- surfaceDiffRef is
+        // null on day-scoped exports/HYPACK days) so the next full-surface
+        // upload for this equipment can diff against it. Same
+        // gzip-then-attach pattern the reference-survey upload already uses
+        // (designVolume.js's gzipBytes), just gzipping the raw CSV text
+        // instead of a pre-parsed binary grid -- keeps the banked file
+        // openable/diffable the same way a prior-day download is read back.
+        let surfaceExportPath
+        if (surfaceDiffRef.current?.csvText) {
+          const gz = await gzipBytes(new TextEncoder().encode(surfaceDiffRef.current.csvText))
+          const surfaceFile = new File([gz], `dredge_surface_${report.report_date}.csv.gz`, { type: 'application/gzip' })
+          const surfaceUploadRes = await uploadAttachment({ coreRecordId: progressId, domain: DREDGE_PROGRESS_DOMAIN, file: surfaceFile })
+          surfaceExportPath = surfaceUploadRes.fileId
+        }
+        await updateProgress(progressId, {
+          chart_path: fileIds[0],
+          chart_paths: fileIds.length > 1 ? fileIds : null,
+          ...(surfaceExportPath ? { surface_export_path: surfaceExportPath } : {}),
+        })
       }
 
       await reloadProgress()
@@ -437,13 +709,17 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
     } catch (err) {
       setSaveError(err.message)
     } finally {
+      runRender() // restore the full-day view on screen regardless of what was last previewed
+      setPreviewIdx(null)
       setSaving(false)
     }
   }
 
   const handleDownloadDxf = () => {
     if (!lastResult) return
-    const dxf = buildProgressDxfFromRings(lastResult.todayRings, lastResult.secondRings)
+    const dxf = effectiveConfig?.data_source === 'earthworks'
+      ? buildProgressDxfFromRings(lastResult.todayRings, lastResult.secondRings)
+      : buildProgressDxf(todayPtsRef.current, priorRings, lastResult.secondRings, closeFt)
     triggerDownload(new Blob([dxf], { type: 'application/dxf' }), `progress_${report.report_date}.dxf`)
   }
   const handleDownloadPng = () => {
@@ -513,6 +789,28 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
   const clearSecondEdits = () => { editRef.current.secondManual = []; editRef.current.removedSeeds = []; setManualCount(0); setRemovedCount(0); drawRef.current = []; setDrawCount(0); runRender() }
   const applyGap = () => runRender()
   const applyTol = () => runRender()
+  const applyAutoAdvance = () => runRender()
+  // Sweep-smoothing/stray-patch are baked into the initial coverage for
+  // mechanical (Earthworks) projects -- resolveTodayCoverage(), not
+  // renderChart() -- so applying them there means regenerating. For HYPACK
+  // (point-track) projects, closeFt only affects coverageMask() inside
+  // renderChart(), so a plain re-render is enough; islandSqFt has no effect
+  // there at all (its slider is hidden for that data source, see below).
+  const applyTuning = () => {
+    if (effectiveConfig?.data_source === 'earthworks') handleGenerate()
+    else runRender()
+  }
+  const applyActiveCells = () => runRender()
+  // Draws one zoomed work-area window (or the full day when idx is null) onto
+  // the on-screen canvas for preview. Display-only -- lastResult/transform are
+  // left untouched (see runRender), so Save always saves the full-day values.
+  const previewView = (idx) => {
+    if (idx === null) { runRender(); setPreviewIdx(null); return }
+    const w = clusterWindows[idx]
+    if (!w) return
+    runRender(w)
+    setPreviewIdx(idx)
+  }
   const resetPlacement = () => { editRef.current.override = null; setHasOverride(false); runRender() }
   const toggleFlip = () => {
     const next = !editRef.current.flipShape
@@ -529,6 +827,7 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
 
   return (
     <Stack gap="md">
+      {confirmModal}
       <Box p={16} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }}>
         <Text fw={600} size="sm" mb={4}>{selected ? selected.name : 'Select equipment'}</Text>
         <Text size="xs" c="dimmed" mb={12}>
@@ -552,7 +851,10 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
           <Button size="xs" disabled={!canGenerate} loading={generating} onClick={handleGenerate}>
             Generate chart
           </Button>
-          {effectiveConfig?.volume_mode === 'design_grade' && (
+          {generating && progressMsg && (
+            <Text size="xs" c="dimmed">{progressMsg}</Text>
+          )}
+          {(effectiveConfig?.volume_mode === 'design_grade' || effectiveConfig?.volume_mode === 'surface_diff') && (
             <NumberInput
               label="Volume recovery factor"
               size="xs" w={140} min={0} max={1} step={0.01}
@@ -560,6 +862,13 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
               onChange={(v) => setRecovery(v === '' || v == null ? '' : String(v))}
             />
           )}
+          <TextInput
+            label="Material encountered"
+            size="xs" w={200}
+            placeholder="e.g. Silts & Fine Sand"
+            value={displayedMaterialText}
+            onChange={(e) => setMaterialText(e.currentTarget.value)}
+          />
           {generated && (
             <Button size="xs" variant="light" disabled={saving} loading={saving} onClick={handleSave}>
               {existingProgressRecord ? 'Update saved progress' : 'Save to report'}
@@ -575,7 +884,9 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
         {lastResult && (
           <Text size="xs" c="dimmed" mt={10}>
             1st Pass Today: {lastResult.stats.todaySqFt.toLocaleString()} sq ft · 2nd Pass: {lastResult.stats.secondPassSqFt.toLocaleString()} sq ft ·
+            {lastResult.stats.residualSqFt > 0 && ` Residual: ${lastResult.stats.residualSqFt.toLocaleString()} sq ft ·`}
             {' '}Progress to Date: {lastResult.stats.cumulativeSqFt.toLocaleString()} sq ft · Advance: {lastResult.stats.advanceFt.toLocaleString()} ft ·
+            {' '}Cumulative Advance: {(priorAdvanceFt + lastResult.stats.advanceFt).toLocaleString()} ft ·
             {' '}Track points: {lastResult.trackPoints.toLocaleString()}
           </Text>
         )}
@@ -593,11 +904,45 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
         {refSurfaceError && (
           <Text size="xs" c="orange" mt={4}>Reference survey unavailable ({refSurfaceError}) — coverage rendered without a volume estimate.</Text>
         )}
+        {lastResult?.cellBreakdown?.length > 0 && (
+          <Box mt={10} style={{ maxWidth: 520 }}>
+            <Text size="xs" fw={600} mb={4}>Per-cell breakdown</Text>
+            <Table withTableBorder verticalSpacing={2} fz="10px">
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Cell</Table.Th>
+                  <Table.Th ta="right">Today</Table.Th>
+                  <Table.Th ta="right">1st</Table.Th>
+                  <Table.Th ta="right">2nd</Table.Th>
+                  <Table.Th ta="right">Cumulative</Table.Th>
+                  <Table.Th ta="right">%</Table.Th>
+                  {lastResult.cellBreakdown[0].adjustedCy != null && <Table.Th ta="right">CY</Table.Th>}
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {lastResult.cellBreakdown.map((c) => (
+                  <Table.Tr key={c.label}>
+                    <Table.Td>{c.label}</Table.Td>
+                    <Table.Td ta="right">{c.todaySqFt.toLocaleString()}</Table.Td>
+                    <Table.Td ta="right">{c.firstSqFt.toLocaleString()}</Table.Td>
+                    <Table.Td ta="right">{c.secondSqFt.toLocaleString()}</Table.Td>
+                    <Table.Td ta="right">{c.cumulativeSqFt.toLocaleString()}</Table.Td>
+                    <Table.Td ta="right">{c.pct}%</Table.Td>
+                    {c.adjustedCy != null && <Table.Td ta="right">{c.adjustedCy.toLocaleString()}</Table.Td>}
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          </Box>
+        )}
         {saved && (
           <Text size="xs" c="teal" mt={4}>Saved to this report.</Text>
         )}
         {notice && (
           <Text size="xs" c="dimmed" mt={4}>{notice}</Text>
+        )}
+        {dateWarning && (
+          <Text size="xs" c="orange" mt={4}>{dateWarning}</Text>
         )}
         {error && (
           <Text size="xs" c="red" mt={10}>{error}</Text>
@@ -636,7 +981,101 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
             <Button size="xs" variant="default" onClick={applyGap}>Apply</Button>
             <NumberInput label="Overlap tolerance (ft)" size="xs" w={140} min={0} max={30} value={tolFt} onChange={(v) => setTolFt(Number(v) || 0)} />
             <Button size="xs" variant="default" onClick={applyTol}>Apply</Button>
+            <Checkbox
+              label="Auto-detect advance line"
+              checked={autoAdvance}
+              onChange={(ev) => setAutoAdvance(ev.currentTarget.checked)}
+              mb={4}
+            />
+            <Button size="xs" variant="default" onClick={applyAutoAdvance}>Apply</Button>
           </Group>
+          <Group gap={16} align="flex-end" mt={12}>
+            <NumberInput
+              label="Sweep smoothing (ft)"
+              description="Closes small gaps within today's coverage"
+              size="xs" w={150} min={2} max={20}
+              value={closeFt}
+              onChange={(v) => setCloseFt(Number(v) || DEFAULT_CLOSE_FT)}
+            />
+            {effectiveConfig?.data_source === 'earthworks' && (
+              <NumberInput
+                label="Ignore stray patches under (sq ft)"
+                size="xs" w={180} min={0} max={500}
+                value={islandSqFt}
+                onChange={(v) => setIslandSqFt(Number(v) || 0)}
+              />
+            )}
+            <Button size="xs" variant="default" onClick={applyTuning}>
+              {effectiveConfig?.data_source === 'earthworks' ? 'Apply (regenerates)' : 'Apply'}
+            </Button>
+          </Group>
+          {cellsList.length > 0 && (
+            <Group gap={8} align="center" mt={12} wrap="wrap">
+              <Text size="xs" c="dimmed">Worked today (blank = all cells):</Text>
+              {cellsList.filter((c) => c.label).map((c) => (
+                <Chip
+                  key={c.label}
+                  size="xs"
+                  checked={activeCellLabels.includes(c.label)}
+                  onChange={(checked) => setActiveCellLabels((prev) => (
+                    checked ? [...prev, c.label] : prev.filter((l) => l !== c.label)
+                  ))}
+                >
+                  {c.label}
+                </Chip>
+              ))}
+              <Button size="xs" variant="default" onClick={applyActiveCells}>Apply</Button>
+              {activeCellLabels.length > 0 && (
+                <Button size="xs" variant="subtle" onClick={() => setActiveCellLabels([])}>clear (then Apply)</Button>
+              )}
+            </Group>
+          )}
+          {cellsList.length > 0 && effectiveConfig?.data_source !== 'earthworks' && (
+            <Group gap={8} align="center" mt={12} wrap="wrap">
+              <Text size="xs" c="dimmed">Completed CSCs (work there = residual):</Text>
+              {cellsList.filter((c) => c.label).map((c) => (
+                <Chip
+                  key={c.label}
+                  size="xs"
+                  disabled={cellStatusBusy}
+                  checked={isCellEffectivelyComplete(c.label)}
+                  onChange={() => toggleCellComplete(c.label)}
+                >
+                  {c.label}
+                </Chip>
+              ))}
+              <Text size="xs" c="dimmed">gray chip = complete as of this date; dredging inside it charts as residual, not 2nd pass</Text>
+            </Group>
+          )}
+          {clusterWindows.length >= 2 && (
+            <Box mt={12} p={10} style={{ background: '#fbf1dd', border: '1px solid #e6cb87', borderRadius: 6 }}>
+              <Checkbox
+                label={`Split into ${clusterWindows.length} focused views (large move detected)`}
+                checked={splitViews}
+                onChange={(ev) => {
+                  const checked = ev.currentTarget.checked
+                  setSplitViews(checked)
+                  if (!checked) previewView(null)
+                }}
+              />
+              <Text size="10px" c="dimmed" mt={4}>
+                The full day is saved either way — this only changes the saved chart to {clusterWindows.length} zoomed images, one per work area, instead of a single wide view.
+              </Text>
+              {splitViews && (
+                <Group gap={6} mt={8}>
+                  <Text size="10px" c="dimmed">Preview:</Text>
+                  {clusterWindows.map((_, i) => (
+                    <Button key={i} size="xs" variant={previewIdx === i ? 'filled' : 'default'} onClick={() => previewView(i)}>
+                      View {i + 1}
+                    </Button>
+                  ))}
+                  <Button size="xs" variant={previewIdx === null ? 'filled' : 'default'} onClick={() => previewView(null)}>
+                    Full day
+                  </Button>
+                </Group>
+              )}
+            </Box>
+          )}
           {hint && <Text size="xs" c="dimmed" mt={8}>{hint}</Text>}
         </Box>
       )}

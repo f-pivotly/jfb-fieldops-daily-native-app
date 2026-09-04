@@ -4,6 +4,7 @@ import { Box, ScrollArea, Group, Text, Badge, Table, Button, TextInput } from '@
 import { REPORT_STATUS_LABEL, REPORT_STATUS_COLOR } from '../../config/reportStatus'
 import { useProject } from '../../hooks/useProject'
 import { useReports } from '../../hooks/useReports'
+import { useFieldOpsAction } from '../../contexts/fieldOpsAccessContext'
 
 const DAY_LABEL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
@@ -17,6 +18,7 @@ export default function ReportListPage() {
   const navigate = useNavigate()
   const { project } = useProject(projectId)
   const { reports: reportRecords } = useReports(projectId)
+  const canManageSettings = useFieldOpsAction('manage_project_settings')
   const reports = reportRecords
     .map((r) => ({
       id: r.id,
@@ -55,9 +57,11 @@ export default function ReportListPage() {
                 <Button component={Link} to={`/projects/${projectId}/realized`} variant="default" size="xs">
                   Realized To-Date
                 </Button>
-                <Button component={Link} to={`/projects/${projectId}/settings`} variant="default" size="xs">
-                  Settings
-                </Button>
+                {canManageSettings && (
+                  <Button component={Link} to={`/projects/${projectId}/settings`} variant="default" size="xs">
+                    Settings
+                  </Button>
+                )}
               </>
             )}
           </Group>

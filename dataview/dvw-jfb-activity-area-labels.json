@@ -1,0 +1,20 @@
+{
+  "slug": "dvw-jfb-activity-area-labels",
+  "description": "Resolves jfb_daily_activities.area (a jsonb {area_id, sub_area_id, sub_sub_area_id}) to its three jfb_project_areas.name labels, for every activity in a project+date range. Replaces the client-side resolveArea()/areaNameById Map join in reportPdfData.js's buildDailyActivityByEquipmentParam -- same three-level lookup, done server-side. Also the id-to-label piece DREDGE_FEATURE_GAPS.md's Problem 2 flags as a real blocker for the eventual Production Stats combo computation (pass_number is the other one, not addressed here).",
+  "authoring_mode": "direct_sql",
+  "implementation": "function",
+  "direct_sql": "SELECT da.id AS activity_id, da.equipment_id, da.start_date_time, l1.name AS area_l1, l2.name AS area_l2, l3.name AS area_l3 FROM usdf.jfb_daily_activities da LEFT JOIN usdf.jfb_project_areas l1 ON l1.id = (da.area->>'area_id')::uuid LEFT JOIN usdf.jfb_project_areas l2 ON l2.id = (da.area->>'sub_area_id')::uuid LEFT JOIN usdf.jfb_project_areas l3 ON l3.id = (da.area->>'sub_sub_area_id')::uuid WHERE da.project_id = p_project_id AND da.start_date_time::date BETWEEN p_start_date AND p_end_date AND da.is_deleted IS NOT TRUE ORDER BY da.start_date_time",
+  "parameters": [
+    { "name": "p_project_id", "type": "uuid", "required": true, "description": "Project to scope the activities to." },
+    { "name": "p_start_date", "type": "date", "required": true, "description": "Inclusive start of the activity date range (compared against start_date_time::date)." },
+    { "name": "p_end_date", "type": "date", "required": true, "description": "Inclusive end of the activity date range." }
+  ],
+  "columns": [
+    { "name": "activity_id", "type": "uuid", "description": "jfb_daily_activities.id." },
+    { "name": "equipment_id", "type": "uuid", "description": "jfb_daily_activities.equipment_id." },
+    { "name": "start_date_time", "type": "timestamp with time zone", "description": "jfb_daily_activities.start_date_time." },
+    { "name": "area_l1", "type": "text", "description": "jfb_project_areas.name for area->>'area_id'; null when the activity has no area set." },
+    { "name": "area_l2", "type": "text", "description": "jfb_project_areas.name for area->>'sub_area_id'; null when not set." },
+    { "name": "area_l3", "type": "text", "description": "jfb_project_areas.name for area->>'sub_sub_area_id'; null when not set." }
+  ]
+}

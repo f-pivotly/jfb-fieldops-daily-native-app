@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { Box, Text, Group, Button, Table, Badge, Modal, TextInput, Select, PasswordInput } from "@mantine/core";
+import { Box, Text, Group, Button, Table, Badge, Modal, TextInput, Select, PasswordInput, Tabs } from "@mantine/core";
 import { IconPlus } from "@tabler/icons-react";
 import { USER_ROLES } from "../../data/adminSampleData";
+import AttachmentTestPanel from "./AttachmentTestPanel";
 
 const LIVE_PROJECTS_PLACEHOLDER = [];
 
@@ -48,11 +49,42 @@ export default function AdminUsersSection() {
 
   return (
     <Box>
+      <Text fw={700} size="lg" mb={12}>Users</Text>
+
+      <Tabs defaultValue="users" keepMounted={false}>
+        <Tabs.List mb={16}>
+          <Tabs.Tab value="users">Users</Tabs.Tab>
+          <Tabs.Tab value="attachment-test">Attachment Test</Tabs.Tab>
+        </Tabs.List>
+
+        <Tabs.Panel value="users">
+          <UsersTab
+            users={users}
+            openAdd={openAdd}
+            toggleActive={toggleActive}
+            modalOpen={modalOpen}
+            setModalOpen={setModalOpen}
+            form={form}
+            setField={setField}
+            passwordValid={passwordValid}
+            canSave={canSave}
+            handleSave={handleSave}
+          />
+        </Tabs.Panel>
+
+        <Tabs.Panel value="attachment-test">
+          <AttachmentTestPanel />
+        </Tabs.Panel>
+      </Tabs>
+    </Box>
+  );
+}
+
+function UsersTab({ users, openAdd, toggleActive, modalOpen, setModalOpen, form, setField, passwordValid, canSave, handleSave }) {
+  return (
+    <Box>
       <Group justify="space-between" mb={16}>
-        <Box>
-          <Text fw={700} size="lg">Users</Text>
-          <Text size="xs" c="dimmed">Not wired to a real domain yet</Text>
-        </Box>
+        <Text size="xs" c="dimmed">Not wired to a real domain yet</Text>
         <Button size="xs" leftSection={<IconPlus size={13} />} onClick={openAdd} style={{ background: "#0F2744", border: "none" }}>Add User</Button>
       </Group>
 

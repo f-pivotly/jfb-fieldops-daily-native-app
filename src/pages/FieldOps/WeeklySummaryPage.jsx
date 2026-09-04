@@ -25,12 +25,17 @@ import {
   buildNarrativeSectionsParam,
   buildPhotoAssetsParam,
 } from './lib/weeklySummary'
+import { buildWeeklyChartAssetsParam } from './lib/reportPdfData'
+import { fetchWeekCoverage } from '../../lib/dredge/weeklyChart'
 
 const REPORT_SLUG = 'rpt-jfb-weekly-summary'
 
 const SUMMARY_DEBOUNCE_MS = 1200
 const PHOTO_SLOTS = [1, 2]
 
+// Must match the real, published domain slug -- see the same note in
+// DredgeChartTab.jsx (core.fnc_file_attach validates this against
+// core.cfg_domain_info_cache_b, it can't be a cosmetic label).
 const PHOTO_DOMAIN = 'jfb_weekly_summary_photos'
 
 function withUniqueName(file, uniqueId) {
@@ -66,6 +71,11 @@ export default function WeeklySummaryPage() {
   const { reports, loading: reportsLoading, error: reportsError } = useReports(projectId)
   const { records: sections, loading: sectionsLoading, error: sectionsError } = useDomainData({
     domain: 'jfb_project_report_narratives',
+    system: 'core',
+    projectId,
+  })
+  const { records: dredgeConfigRecords } = useDomainData({
+    domain: 'jfb_dredge_config',
     system: 'core',
     projectId,
   })
@@ -194,15 +204,26 @@ export default function WeeklySummaryPage() {
     try {
       const narrativeSections = buildNarrativeSectionsParam(sections, summaries, weekStart)
       const weeklyPhotoAssets = await buildPhotoAssetsParam(photos, weekStart)
+      // Only rendered for dredge-configured projects -- buildWeeklyChartAssetsParam
+      // does 6+ fetches plus a canvas render per equipment, not worth paying for
+      // on every non-dredge project's weekly PDF. equipmentFilter is cheap and
+      // always passed, matching rpt-jfb-daily-report's own equipment loop, which
+      // is ungated -- equipment with nothing to show just gets the "No dredge
+      // progress chart generated" fallback page.
+      const weeklyChartAssets = dredgeConfigRecords.length > 0
+        ? await buildWeeklyChartAssetsParam({ appSlug: config.appSlug, projectId, weekStart, weekEnd })
+        : undefined
       const result = await executeReport(REPORT_SLUG, {
         parameters: {
           projectId,
           projectFilter: { id: projectId },
+          equipmentFilter: { project_id: projectId },
           weekStart,
           weekEnd,
           releasedCount: report.releasedCount,
           narrativeSections,
           weeklyPhotoAssets,
+          weeklyChartAssets,
           weeklyProduction: production.week && production.toDate
             ? {
                 weekCy: production.week.cy.toLocaleString(),
@@ -287,6 +308,27 @@ export default function WeeklySummaryPage() {
       })
     return () => { cancelled = true }
   }, [projectId, weekStart, weekEnd, project?.start_date])
+
+  // null = checking, N = dredges with coverage (week or prior) this range,
+  // 0 = none yet. Mirrors reference's progressDredgeCount -- cheap coverage
+  // fetch only, not the full chart render (that only runs at PDF-download
+  // time, in handleDownloadPdf below).
+  const [progressDredgeCount, setProgressDredgeCount] = useState(null)
+
+  useEffect(() => {
+    if (!projectId || dredgeConfigRecords.length === 0) return
+    let cancelled = false
+    setProgressDredgeCount(null)
+    fetchWeekCoverage({ appSlug: config.appSlug, projectId, weekStartISO: weekStart, weekEndISO: weekEnd })
+      .then((byEquipment) => {
+        if (cancelled) return
+        let n = 0
+        for (const cov of byEquipment.values()) if (cov.weekRings.length || cov.priorRings.length) n++
+        setProgressDredgeCount(n)
+      })
+      .catch(() => { if (!cancelled) setProgressDredgeCount(null) })
+    return () => { cancelled = true }
+  }, [projectId, weekStart, weekEnd, dredgeConfigRecords.length, config.appSlug])
 
   const projectDelayCodeById = new Map(projectDelayCodes.map((r) => [r.id, r]))
   const masterDelayCodeById = new Map(masterDelayCodes.map((m) => [m.id, m]))
@@ -396,6 +438,25 @@ export default function WeeklySummaryPage() {
                 />
               ))}
             </SimpleGrid>
+
+            {dredgeConfigRecords.length > 0 && (
+              <Box p={16} mb={20} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }}>
+                <Text size="sm">
+                  <Text span fw={600}>Weekly progress chart: </Text>
+                  {progressDredgeCount === null ? (
+                    <Text span c="dimmed">checking…</Text>
+                  ) : progressDredgeCount > 0 ? (
+                    <Text span c="teal">
+                      {progressDredgeCount} dredge{progressDredgeCount === 1 ? '' : 's'} with coverage — a chart page will be added to the PDF.
+                    </Text>
+                  ) : (
+                    <Text span c="dimmed">
+                      no saved dredge progress for this week's dates yet — no chart page will be added. (Charts come from daily progress saved in the Dredge Progress tab.)
+                    </Text>
+                  )}
+                </Text>
+              </Box>
+            )}
 
             <SimpleGrid cols={{ base: 1, sm: 2 }} mb={20}>
               <Box p={16} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }}>

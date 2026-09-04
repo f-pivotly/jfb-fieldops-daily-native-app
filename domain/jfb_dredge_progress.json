@@ -105,6 +105,27 @@
         },
         {
             "pii": false,
+            "name": "surface_export_path",
+            "slug": "surface_export_path",
+            "type": "text",
+            "label": "Surface Export Path",
+            "unique": false,
+            "indexed": false,
+            "masking": {
+                "masked": false
+            },
+            "nullable": true,
+            "required": false,
+            "data_type": "text",
+            "column_name": "surface_export_path",
+            "description": "This day's full-surface Earthworks export (gzipped CSV), banked so the next full-surface upload for this equipment can diff against it for cross-day CY. Null on day-scoped exports and on days nothing was saved.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
             "name": "coverage_rings",
             "slug": "coverage_rings",
             "type": "jsonb",

@@ -1,0 +1,41 @@
+{
+  "slug": "dvw-jfb-metric-efficiency",
+  "description": "Efficiency %: operating hours divided by (operating + delay) hours, times 100, using the same classification as dvw-jfb-metric-hours-op/-delay. Null when the range has no matching activities at all (zero denominator) rather than 0 or an error. Backs the 'Efficiency' auto metric on the cover-page Metrics tab. Uses one consistent formula for the Day, Week, and Total columns -- the non-native app's eventTotals.ts/autoMetricHistory.ts use two different formulas (shiftHours-based for Day, op/(op+delay)-based for Week/Total) that disagree with each other on unbalanced days; this app deliberately does not port that inconsistency.",
+  "authoring_mode": "direct_sql",
+  "implementation": "function",
+  "direct_sql": "SELECT CASE WHEN (op.hours + dl.hours) > 0 THEN (op.hours / (op.hours + dl.hours)) * 100 ELSE NULL END AS efficiency_pct FROM (SELECT COALESCE(SUM(EXTRACT(EPOCH FROM (da.end_date_time - da.start_date_time)) / 3600.0), 0) AS hours FROM usdf.jfb_daily_activities da WHERE da.project_id = p_project_id AND da.start_date_time::date BETWEEN p_start_date AND p_end_date AND (p_equipment_id IS NULL OR da.equipment_id = p_equipment_id) AND da.is_deleted IS NOT TRUE AND (da.category IN ('ACTIVE DREDGING', 'ACTIVE PLACEMENT') OR (da.category IS NULL AND da.delay_code_id IS NULL))) op, (SELECT COALESCE(SUM(EXTRACT(EPOCH FROM (da.end_date_time - da.start_date_time)) / 3600.0), 0) AS hours FROM usdf.jfb_daily_activities da WHERE da.project_id = p_project_id AND da.start_date_time::date BETWEEN p_start_date AND p_end_date AND (p_equipment_id IS NULL OR da.equipment_id = p_equipment_id) AND da.is_deleted IS NOT TRUE AND NOT (da.category IN ('ACTIVE DREDGING', 'ACTIVE PLACEMENT') OR (da.category IS NULL AND da.delay_code_id IS NULL))) dl",
+  "parameters": [
+    {
+      "name": "p_project_id",
+      "type": "uuid",
+      "required": true,
+      "description": "Project to scope the sum to."
+    },
+    {
+      "name": "p_start_date",
+      "type": "date",
+      "required": true,
+      "description": "Inclusive start of the report_date range -- today's date for Day, the week's start for Week, the project's start date for Total."
+    },
+    {
+      "name": "p_end_date",
+      "type": "date",
+      "required": true,
+      "description": "Inclusive end of the report_date range -- typically the report date being viewed."
+    },
+    {
+      "name": "p_equipment_id",
+      "type": "uuid",
+      "required": false,
+      "default": null,
+      "description": "Optional equipment filter. Null (the default) includes all equipment."
+    }
+  ],
+  "columns": [
+    {
+      "name": "efficiency_pct",
+      "type": "numeric",
+      "description": "Operating / (operating + delay) * 100; null when the range has zero matching activities."
+    }
+  ]
+}

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { fetchDomainRecords, createDomainRecord, updateDomainRecord, deleteDomainRecord } from '../data'
 import { useAppConfig } from '../contexts/appConfigContext'
 
-export function useDomainData({ domain, system, projectId }) {
+export function useDomainData({ domain, system, projectId, includeDeleted }) {
   const { config } = useAppConfig()
   const [records, setRecords] = useState([])
   const [loading, setLoading] = useState(true)
@@ -23,7 +23,7 @@ export function useDomainData({ domain, system, projectId }) {
       setError(null)
     }
     const filters = projectId ? { project_id: projectId } : undefined
-    return fetchDomainRecords({ domain, system, appSlug: config.appSlug, filters, limit: 1000 })
+    return fetchDomainRecords({ domain, system, appSlug: config.appSlug, filters, limit: 1000, includeDeleted })
       .then((res) => {
         if (isCurrent()) setRecords(Array.isArray(res) ? res : (res?.data ?? []))
       })
@@ -33,7 +33,7 @@ export function useDomainData({ domain, system, projectId }) {
       .finally(() => {
         if (isCurrent()) setLoading(false)
       })
-  }, [domain, system, config.appSlug, projectId])
+  }, [domain, system, config.appSlug, projectId, includeDeleted])
 
   useEffect(() => {
     load()

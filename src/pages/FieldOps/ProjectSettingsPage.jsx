@@ -1,11 +1,12 @@
 import { useParams, Link } from 'react-router-dom'
-import { Box, ScrollArea, Text, Group, Tabs, Table, TextInput, Button, Stack } from '@mantine/core'
+import { Box, ScrollArea, Text, Group, Tabs, TextInput, Button, Stack } from '@mantine/core'
 import { useProject } from '../../hooks/useProject'
 import { shouldShowDredgeProgress } from '../../config/dredgeProgress'
 import NarrativesTab from '../Admin/ProjectDetail/NarrativesTab'
 import DredgeChartTab from './projectSettingsTabs/DredgeChartTab'
 import AttachmentsTab from './projectSettingsTabs/AttachmentsTab'
 import SiteEquipmentTab from './projectSettingsTabs/SiteEquipmentTab'
+import CoverMetricsTab from './projectSettingsTabs/CoverMetricsTab'
 
 const PRODUCTION_PLAN_PLACEHOLDER = {
   expectedGohPerDay: '',
@@ -15,7 +16,6 @@ const PRODUCTION_PLAN_PLACEHOLDER = {
   primaryMeasure: '',
 }
 const SCHEDULED_OFF_DAYS_PLACEHOLDER = []
-const METRICS_CONFIG_PLACEHOLDER = []
 
 export default function ProjectSettingsPage() {
   const { projectId } = useParams()
@@ -69,10 +69,7 @@ export default function ProjectSettingsPage() {
             <NarrativesTab project={project} />
           </Tabs.Panel>
           <Tabs.Panel value="metrics">
-            <ConfigTable
-              rows={METRICS_CONFIG_PLACEHOLDER}
-              columns={[['label', 'Metric'], ['source', 'Source'], ['unit', 'Unit'], ['sortOrder', 'Order']]}
-            />
+            <CoverMetricsTab project={project} />
           </Tabs.Panel>
           <Tabs.Panel value="siteEquipment">
             <SiteEquipmentTab project={project} />
@@ -88,25 +85,6 @@ export default function ProjectSettingsPage() {
         </Tabs>
       </Box>
     </ScrollArea>
-  )
-}
-
-function ConfigTable({ rows, columns }) {
-  return (
-    <Table withTableBorder verticalSpacing="xs" fz="sm">
-      <Table.Thead>
-        <Table.Tr>
-          {columns.map(([, label]) => <Table.Th key={label}>{label}</Table.Th>)}
-        </Table.Tr>
-      </Table.Thead>
-      <Table.Tbody>
-        {rows.map((r, i) => (
-          <Table.Tr key={r.id ?? r.key ?? i}>
-            {columns.map(([field, label]) => <Table.Td key={label}>{String(r[field] ?? '—')}</Table.Td>)}
-          </Table.Tr>
-        ))}
-      </Table.Tbody>
-    </Table>
   )
 }
 

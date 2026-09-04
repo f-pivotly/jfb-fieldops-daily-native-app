@@ -1,62 +1,61 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useAppConfig } from '../contexts/appConfigContext'
-import { fetchPageDetails } from '../data'
+import { useFieldOpsAction, useFieldOpsAccessLoading } from '../contexts/fieldOpsAccessContext'
 import { useDomainData } from './useDomainData'
-
-const FIELDOPS_PAGE_SLUG = 'apg-jfb-fieldops'
-const CROSS_PROJECT_ACTION_KEY = 'manage_team'
+import { executeDataView } from '../data'
 
 // Cross-project roles (director/admin) see every active project. pe/pm only
-// see projects they're linked to in jfb_project_members, matched by the
-// logged-in user's token email (the client has no other way to resolve its
-// own Pivotly user id — see PIVOTLY_IAM_FINDINGS discussion).
+// see projects they're linked to in jfb_project_members, resolved server-side
+// by dvw-jfb-visible-projects (joins jfb_projects to jfb_project_members and
+// filters by the logged-in user's token email — the client has no other way
+// to resolve its own Pivotly user id — see PIVOTLY_IAM_FINDINGS discussion).
+// Previously this fetched every jfb_project_members row client-side and
+// filtered in JS; the data view does that join+filter in SQL instead, so a
+// pe/pm's browser never sees other users' project assignments.
 export function useVisibleProjects() {
-  const { config, ready } = useAppConfig()
-  const [isCrossProject, setIsCrossProject] = useState(null) // null = still resolving
-  const mountedRef = useRef(true)
-  useEffect(() => () => { mountedRef.current = false }, [])
-
-  const resolveAccess = useCallback(() => {
-    if (!ready || !config.appSlug) return Promise.resolve()
-    return fetchPageDetails(config.appSlug, FIELDOPS_PAGE_SLUG)
-      .then((res) => {
-        const actions = res?.data?.actions ?? []
-        const match = actions.find((a) => a.action_key === CROSS_PROJECT_ACTION_KEY)
-        if (mountedRef.current) setIsCrossProject(!!match?.enabled)
-      })
-      .catch(() => {
-        // Fail closed to project-scoped (the more restrictive behavior) rather
-        // than accidentally showing every project on a transient error.
-        if (mountedRef.current) setIsCrossProject(false)
-      })
-  }, [ready, config.appSlug])
-
-  useEffect(() => {
-    resolveAccess()
-  }, [resolveAccess])
+  const { config } = useAppConfig()
+  const isCrossProject = useFieldOpsAction('manage_team')
+  const accessLoading = useFieldOpsAccessLoading()
+  const myEmail = (config.user?.email || '').trim().toLowerCase()
 
   const { records: allProjects, loading: projectsLoading, error: projectsError, reload: reloadProjects } =
     useDomainData({ domain: 'jfb_projects', system: 'core' })
-  const { records: members, loading: membersLoading, error: membersError } =
-    useDomainData({ domain: 'jfb_project_members', system: 'core' })
 
-  const loading = isCrossProject === null || projectsLoading || (!isCrossProject && membersLoading)
-  const error = projectsError || membersError
+  const [myProjects, setMyProjects] = useState([])
+  const [myProjectsLoading, setMyProjectsLoading] = useState(true)
+  const [myProjectsError, setMyProjectsError] = useState(null)
+  const [reloadTick, setReloadTick] = useState(0)
+
+  useEffect(() => {
+    if (accessLoading || isCrossProject || !myEmail) return
+    let cancelled = false
+    setMyProjectsLoading(true)
+    setMyProjectsError(null)
+    executeDataView('dvw-jfb-visible-projects', { p_email: myEmail })
+      .then((rows) => {
+        if (!cancelled) setMyProjects(rows)
+      })
+      .catch((err) => {
+        if (!cancelled) setMyProjectsError(err.message)
+      })
+      .finally(() => {
+        if (!cancelled) setMyProjectsLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [accessLoading, isCrossProject, myEmail, reloadTick])
+
+  const loading = accessLoading || projectsLoading || (!isCrossProject && myProjectsLoading)
+  const error = projectsError || (!isCrossProject ? myProjectsError : null)
 
   let visibleProjects = []
   if (!loading) {
-    if (isCrossProject) {
-      visibleProjects = allProjects
-    } else {
-      const myEmail = (config.user?.email || '').trim().toLowerCase()
-      const myProjectIds = new Set(
-        members
-          .filter((m) => m.is_active !== false && (m.email || '').trim().toLowerCase() === myEmail)
-          .map((m) => m.project_id)
-      )
-      visibleProjects = allProjects.filter((p) => myProjectIds.has(p.id))
-    }
+    visibleProjects = isCrossProject ? allProjects : myProjects
   }
 
-  return { projects: visibleProjects, loading, error, reload: reloadProjects, isCrossProject }
+  function reload() {
+    reloadProjects()
+    setReloadTick((t) => t + 1)
+  }
+
+  return { projects: visibleProjects, loading, error, reload, isCrossProject }
 }

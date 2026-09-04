@@ -47,6 +47,48 @@
         "code": "lww"
       },
       "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "work_type",
+      "slug": "work_type",
+      "type": "text",
+      "label": "Work Type",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "work_type",
+      "description": "Pins this unit's discipline independent of the project's own work_type. NULL (the default, and every pre-existing row) means inherit jfb_projects.work_type. Set only on projects that run two disciplines on different machines at once (matches the non-native app's project_equipment.work_type, added for Torch Lake 152601: a mechanical dredge and a mechanical placement excavator on the same project at the same time). One of 'Hydraulic Dredging', 'Mechanical Dredging', 'Hydraulic Capping', 'Mechanical Capping' when set -- not enforced by a domain-level constraint here, matching this app's convention of validating in application code rather than a DB CHECK.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "work_type_from",
+      "slug": "work_type_from",
+      "type": "date",
+      "label": "Work Type From",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "date",
+      "column_name": "work_type_from",
+      "description": "First report date work_type applies from. NULL (the default) means the pin applies to every date. Set only when ONE machine changes discipline mid-job (matches the non-native app's project_equipment.work_type_from), so earlier dailies for that equipment still render under its prior discipline. Meaningless without work_type also set.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
     }
   ],
   "archive": true,

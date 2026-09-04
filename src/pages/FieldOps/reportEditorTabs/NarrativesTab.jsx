@@ -1,14 +1,16 @@
-import { Box, Text, Textarea, Stack, Group, Button, Modal, TextInput, Switch } from '@mantine/core'
+import { Box, Text, Textarea, Stack, Group, Button, Modal, TextInput, Switch, Grid } from '@mantine/core'
 import { useEffect, useRef, useState } from 'react'
 import { IconSettings, IconTrash, IconRefresh } from '@tabler/icons-react'
 import { useDomainData } from '../../../hooks/useDomainData'
 import { useConfirmDialog } from '../../../hooks/useConfirmDialog'
+import { useFieldOpsDomainAccess } from '../../../contexts/fieldOpsAccessContext'
 import LoadingSpinner from '../../../components/LoadingSpinner'
 import SafeError from '../../../components/SafeError'
+import NarrativeContextPanel from './NarrativeContextPanel'
 
 const DEBOUNCE_MS = 1500
 
-export default function NarrativesTab({ project, report }) {
+export default function NarrativesTab({ project, report, equipment = [] }) {
   const hasProject = !!project?.id
   const hasReport = !!report?.id
 
@@ -22,6 +24,8 @@ export default function NarrativesTab({ project, report }) {
     system: 'core',
     projectId: project?.id,
   })
+  const { canCreate: canAddSections, canUpdate: canEditSections } = useFieldOpsDomainAccess('jfb_project_report_narratives')
+  const canManageSections = canAddSections || canEditSections
   const [managerOpen, setManagerOpen] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
 
@@ -58,52 +62,62 @@ export default function NarrativesTab({ project, report }) {
 
   return (
     <Box>
-      <Group justify="flex-end" gap={8} mb={12}>
-        <Button
-          size="xs"
-          variant="default"
-          leftSection={<IconRefresh size={12} />}
-          onClick={() => void handleRefresh()}
-          loading={refreshing}
-        >
-          Refresh
-        </Button>
-        <Button
-          size="xs"
-          variant="default"
-          leftSection={<IconSettings size={12} />}
-          onClick={() => setManagerOpen(true)}
-          disabled={!hasProject}
-        >
-          Manage sections
-        </Button>
-      </Group>
+      <Grid gutter="lg">
+        <Grid.Col span={{ base: 12, md: 4 }}>
+          <NarrativeContextPanel project={project} report={report} equipment={equipment} />
+        </Grid.Col>
 
-      {loading && <LoadingSpinner py={16} />}
-      {!loading && <SafeError message={error} />}
-      {!loading && !error && !hasProject && (
-        <Text size="xs" c="dimmed">Select a project to see its narrative sections.</Text>
-      )}
-      {!loading && !error && hasProject && sections.length === 0 && (
-        <Text size="xs" c="dimmed">No narrative sections configured for this project yet. Use "Manage sections" to add one.</Text>
-      )}
+        <Grid.Col span={{ base: 12, md: 8 }}>
+          <Group justify="flex-end" gap={8} mb={12}>
+            <Button
+              size="xs"
+              variant="default"
+              leftSection={<IconRefresh size={12} />}
+              onClick={() => void handleRefresh()}
+              loading={refreshing}
+            >
+              Refresh
+            </Button>
+            {canManageSections && (
+              <Button
+                size="xs"
+                variant="default"
+                leftSection={<IconSettings size={12} />}
+                onClick={() => setManagerOpen(true)}
+                disabled={!hasProject}
+              >
+                Manage sections
+              </Button>
+            )}
+          </Group>
 
-      <Stack gap="md">
-        {sections.map((s) => {
-          const contentRow = hasReport
-            ? contentRows.find((c) => c.report_id === report.id && c.narrative_label === s.narrative_label)
-            : null
-          return (
-            <NarrativeSectionCard
-              key={s.id}
-              label={s.narrative_label}
-              contentRow={contentRow}
-              disabled={!hasReport}
-              onSave={(text) => handleSave(contentRow, s.narrative_label, text)}
-            />
-          )
-        })}
-      </Stack>
+          {loading && <LoadingSpinner py={16} />}
+          {!loading && <SafeError message={error} />}
+          {!loading && !error && !hasProject && (
+            <Text size="xs" c="dimmed">Select a project to see its narrative sections.</Text>
+          )}
+          {!loading && !error && hasProject && sections.length === 0 && (
+            <Text size="xs" c="dimmed">No narrative sections configured for this project yet. Use "Manage sections" to add one.</Text>
+          )}
+
+          <Stack gap="md">
+            {sections.map((s) => {
+              const contentRow = hasReport
+                ? contentRows.find((c) => c.report_id === report.id && c.narrative_label === s.narrative_label)
+                : null
+              return (
+                <NarrativeSectionCard
+                  key={s.id}
+                  label={s.narrative_label}
+                  contentRow={contentRow}
+                  disabled={!hasReport}
+                  onSave={(text) => handleSave(contentRow, s.narrative_label, text)}
+                />
+              )
+            })}
+          </Stack>
+        </Grid.Col>
+      </Grid>
 
       <SectionsManagerDialog
         opened={managerOpen}

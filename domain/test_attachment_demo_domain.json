@@ -1,0 +1,65 @@
+{
+  "schema": [
+    {
+      "name": "name",
+      "unique": false,
+      "indexed": false,
+      "nullable": false,
+      "data_type": "text",
+      "column_name": "name",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "name": "description",
+      "unique": false,
+      "indexed": false,
+      "nullable": true,
+      "data_type": "text",
+      "column_name": "description",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "name": "status",
+      "unique": false,
+      "indexed": false,
+      "nullable": true,
+      "data_type": "text",
+      "column_name": "status",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    }
+  ],
+  "archive": true,
+  "contact": {
+    "name": "System Administrator"
+  },
+  "multi_tenant": false,
+  "xref_enabled": true,
+  "access_control": {
+    "model": "all_systems",
+    "read_access": true,
+    "delete_access": true,
+    "insert_access": true,
+    "update_access": true,
+    "hard_delete_allowed": true,
+    "direct_write_enabled": true
+  },
+  "archive_policy": {
+    "retention_days": 365,
+    "max_record_versions": 10000
+  },
+  "track_versions": true,
+  "domain_table_name": "test_attachment_demos",
+  "domain_name_singular": "Test Attachment Demo",
+  "default_conflict_resolution": {
+    "code": "lww"
+  }
+}

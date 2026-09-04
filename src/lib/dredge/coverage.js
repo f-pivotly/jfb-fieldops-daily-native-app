@@ -77,8 +77,8 @@ export function finalHeading(headings) {
   const t = headings.slice(-200).sort((a, b) => a - b); return t[t.length >> 1];
 }
 
-export function makeGrid(minX, minY, maxX, maxY) {
-  const R = PARAM.RES;
+export function makeGrid(minX, minY, maxX, maxY, res) {
+  const R = res ?? PARAM.RES;
   const gx0 = Math.floor(minX / R) * R, gy0 = Math.floor(minY / R) * R;
   const nx = Math.ceil((maxX - gx0) / R) + 1, ny = Math.ceil((maxY - gy0) / R) + 1;
   return { x0: gx0, y0: gy0, nx, ny, R };
@@ -160,8 +160,8 @@ export function fillHoles(mask, G) {
   while (st.length) { const i = st.pop(), x = i % G.nx, y = (i / G.nx) | 0; push(x + 1, y); push(x - 1, y); push(x, y + 1); push(x, y - 1); }
   const out = Uint8Array.from(mask); for (let i = 0; i < out.length; i++) if (!out[i] && !bg[i]) out[i] = 1; return out;
 }
-export function coverageMask(pts, G) {
-  return fillHoles(close(rasterize(pts, G), PARAM.CLOSE_R, G), G);
+export function coverageMask(pts, G, closeFt) {
+  return fillHoles(close(rasterize(pts, G), closeFt ?? PARAM.CLOSE_R, G), G);
 }
 
 function traceMask(mask, G) {

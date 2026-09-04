@@ -15,6 +15,9 @@ import Forbidden from "./pages/Forbidden";
 import NotFound from "./pages/NotFound";
 import { useAppConfig } from "./contexts/appConfigContext";
 import { fetchPageDetails } from "./data";
+import { FieldOpsAccessProvider } from "./contexts/FieldOpsAccessProvider";
+import RequireFieldOpsAction from "./components/RequireFieldOpsAction";
+import RequireProjectAccess from "./components/RequireProjectAccess";
 
 // The Admin page's own required_claims gate (apg-jfb-admin.view) — pe lacks
 // it, pm/director/admin have it. Reused here so the launcher never offers a
@@ -78,29 +81,68 @@ export default function App() {
 
   if (mode === "fieldops") {
     return (
-      <Box
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          height: "100vh",
-          overflow: "hidden",
-          fontFamily: "'Inter', -apple-system, sans-serif",
-          fontSize: 13,
-        }}
-      >
-        <AppHeader />
-        <Routes>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/projects/:projectId/reports" element={<ReportListPage />} />
-          <Route path="/projects/:projectId/reports/:date" element={<ReportEditorPage />} />
-          <Route path="/projects/:projectId/realized" element={<RealizedToDatePage />} />
-          <Route path="/projects/:projectId/weekly" element={<WeeklySummaryPage />} />
-          <Route path="/projects/:projectId/settings" element={<ProjectSettingsPage />} />
-          <Route path="/admin/operators" element={<OperatorHoursPage />} />
-          <Route path="/forbidden" element={<Forbidden />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </Box>
+      <FieldOpsAccessProvider>
+        <Box
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            height: "100vh",
+            overflow: "hidden",
+            fontFamily: "'Inter', -apple-system, sans-serif",
+            fontSize: 13,
+          }}
+        >
+          <AppHeader />
+          <Routes>
+            <Route path="/" element={<DashboardPage />} />
+            <Route
+              path="/projects/:projectId/reports"
+              element={
+                <RequireProjectAccess>
+                  <ReportListPage />
+                </RequireProjectAccess>
+              }
+            />
+            <Route path="/projects/:projectId/reports/:date" element={<ReportEditorPage />} />
+            <Route
+              path="/projects/:projectId/realized"
+              element={
+                <RequireProjectAccess>
+                  <RealizedToDatePage />
+                </RequireProjectAccess>
+              }
+            />
+            <Route
+              path="/projects/:projectId/weekly"
+              element={
+                <RequireProjectAccess>
+                  <WeeklySummaryPage />
+                </RequireProjectAccess>
+              }
+            />
+            <Route
+              path="/projects/:projectId/settings"
+              element={
+                <RequireFieldOpsAction action="manage_project_settings">
+                  <RequireProjectAccess>
+                    <ProjectSettingsPage />
+                  </RequireProjectAccess>
+                </RequireFieldOpsAction>
+              }
+            />
+            <Route
+              path="/admin/operators"
+              element={
+                <RequireFieldOpsAction action="view_operator_hours">
+                  <OperatorHoursPage />
+                </RequireFieldOpsAction>
+              }
+            />
+            <Route path="/forbidden" element={<Forbidden />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Box>
+      </FieldOpsAccessProvider>
     );
   }
 

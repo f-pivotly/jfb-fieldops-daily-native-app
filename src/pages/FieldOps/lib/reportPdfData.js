@@ -1,4 +1,5 @@
-import { fetchDomainRecords, fetchPicklistValues, downloadAttachment } from '../../../data'
+import { fetchDomainRecords, fetchPicklistValues, downloadAttachment, executeDataView } from '../../../data'
+import { renderWeeklyProgressCharts } from '../../../lib/dredge/weeklyChart'
 
 function blobToDataUri(blob) {
   return new Promise((resolve, reject) => {
@@ -24,6 +25,36 @@ export async function buildPhotoAssetsParam({ appSlug, reportId }) {
     }),
   )
   return Object.fromEntries(entries)
+}
+
+// Keyed by equipment_id, matching how the report template looks up
+// dailyActivityByEquipment -- `{{#with (lookup ../parameters.dredgeChartAssets this.id)}}`
+// inside its {{#each equipment}} loop.
+export async function buildDredgeChartAssetsParam({ appSlug, reportId }) {
+  const progressRes = await fetchDomainRecords({
+    domain: 'jfb_dredge_progress', system: 'core', appSlug,
+    filters: { report_id: reportId }, limit: 50,
+  })
+  const rows = (progressRes?.data ?? []).filter((r) => r.chart_path)
+
+  const entries = await Promise.all(
+    rows.map(async (r) => {
+      const blob = await downloadAttachment(r.chart_path)
+      const dataUri = await blobToDataUri(blob)
+      return [String(r.equipment_id), { dataUri }]
+    }),
+  )
+  return Object.fromEntries(entries)
+}
+
+// Keyed by equipment_id, same lookup convention as buildDredgeChartAssetsParam
+// -- `{{#with (lookup ../parameters.weeklyChartAssets this.id)}}` inside the
+// weekly report's own {{#each equipment}} loop. Unlike the daily chart (which
+// re-serves the PE's saved chart_path attachment for that one day), the
+// weekly chart is a fresh client-side render every time -- "this week
+// highlighted over prior" can't be reconstructed from any single stored PNG.
+export async function buildWeeklyChartAssetsParam({ appSlug, projectId, weekStart, weekEnd }) {
+  return renderWeeklyProgressCharts({ appSlug, projectId, weekStartISO: weekStart, weekEndISO: weekEnd })
 }
 
 export async function buildNarrativeSectionsParam({ appSlug, projectId, reportId }) {
@@ -56,7 +87,7 @@ function durationMinutes(startISO, endISO) {
   return Math.round(ms / 60000)
 }
 
-function sameCalendarDay(iso, dateISO, timeZone) {
+export function sameCalendarDay(iso, dateISO, timeZone) {
   if (!iso || !dateISO) return false
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return false
@@ -64,15 +95,6 @@ function sameCalendarDay(iso, dateISO, timeZone) {
     ? new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d)
     : `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
   return local === dateISO
-}
-
-function resolveArea(area, areaNameById) {
-  if (!area) return '—'
-  const parts = [area.area_id, area.sub_area_id, area.sub_sub_area_id]
-    .filter(Boolean)
-    .map((id) => areaNameById.get(id))
-    .filter(Boolean)
-  return parts.length ? parts.join(' / ') : '—'
 }
 
 function resolveDelayCode(delayCodeId, projectDelayCodeById, masterDelayCodeById) {
@@ -83,7 +105,7 @@ function resolveDelayCode(delayCodeId, projectDelayCodeById, masterDelayCodeById
   return (master ? master.code : row.code) || '—'
 }
 
-function utcDayRange(dateISO) {
+export function utcDayRange(dateISO) {
   const start = new Date(`${dateISO}T00:00:00.000Z`)
   const gte = new Date(start.getTime() - 24 * 60 * 60 * 1000).toISOString()
   const lt = new Date(start.getTime() + 48 * 60 * 60 * 1000).toISOString()
@@ -93,19 +115,29 @@ function utcDayRange(dateISO) {
 export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, dateISO }) {
   const { gte, lt } = utcDayRange(dateISO)
 
-  const [activityRes, areaRes, projectDelayRes, masterDelayRes, passTypeRows] = await Promise.all([
+  const [activityRes, areaLabelRows, projectDelayRes, masterDelayRes, passTypeRows] = await Promise.all([
     fetchDomainRecords({
       domain: 'jfb_daily_activities', system: 'core', appSlug,
       filters: { project_id: projectId, start_date_time: { gte, lt } },
       limit: 1000,
     }),
-    fetchDomainRecords({ domain: 'jfb_project_areas', system: 'core', appSlug, filters: { project_id: projectId }, limit: 1000 }),
+    // Server-side equivalent of the old resolveArea()/areaNameById join --
+    // resolves area/sub_area/sub_sub_area uuids to jfb_project_areas.name
+    // in one query. Date range padded the same as the activity fetch above
+    // so it covers every row sameCalendarDay() might keep after filtering.
+    executeDataView('dvw-jfb-activity-area-labels', {
+      p_project_id: projectId,
+      p_start_date: gte.slice(0, 10),
+      p_end_date: lt.slice(0, 10),
+    }),
     fetchDomainRecords({ domain: 'jfb_project_delay_codes', system: 'core', appSlug, filters: { project_id: projectId }, limit: 1000 }),
     fetchDomainRecords({ domain: 'jfb_delay_codes', system: 'core', appSlug, limit: 1000 }),
     fetchPicklistValues('pkl-jfb-pass-type'),
   ])
 
-  const areaNameById = new Map((areaRes?.data ?? []).map((a) => [a.id, a.name]))
+  const areaLabelByActivityId = new Map(
+    (areaLabelRows ?? []).map((r) => [r.activity_id, [r.area_l1, r.area_l2, r.area_l3].filter(Boolean).join(' / ') || '—']),
+  )
   const projectDelayCodeById = new Map((projectDelayRes?.data ?? []).map((r) => [r.id, r]))
   const masterDelayCodeById = new Map((masterDelayRes?.data ?? []).map((r) => [r.id, r]))
   const passTypeLabels = Object.fromEntries(
@@ -128,9 +160,13 @@ export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, d
       from: hhmm(a.start_date_time),
       to: hhmm(a.end_date_time),
       minutes: durationMinutes(a.start_date_time, a.end_date_time) ?? '—',
-      area: resolveArea(a.area, areaNameById),
+      area: areaLabelByActivityId.get(a.id) ?? '—',
       pass: a.pass_type ? (passTypeLabels[a.pass_type] ?? a.pass_type) : '—',
-      event: resolveDelayCode(a.delay_code_id, projectDelayCodeById, masterDelayCodeById),
+      // Prefer the persisted category (the productive-tile label or delay
+      // code text, set at save time by the operator/admin apps); fall back
+      // to resolving delay_code_id directly for rows saved before category
+      // existed.
+      event: a.category || resolveDelayCode(a.delay_code_id, projectDelayCodeById, masterDelayCodeById),
       notes: a.notes || '',
     }))
   }

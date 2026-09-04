@@ -1,0 +1,41 @@
+{
+  "slug": "dvw-jfb-metric-hours-delay",
+  "description": "Delay Hours: same filters and duration calc as dvw-jfb-metric-hours-op, but sums the complementary set -- activities whose category is a delay-code label (anything other than 'ACTIVE DREDGING'/'ACTIVE PLACEMENT'), or legacy rows with no category and a delay_code_id set. Backs the 'Delay Hours' auto metric on the cover-page Metrics tab. Companion to dvw-jfb-metric-hours-op; every matched activity falls into exactly one of the two views.",
+  "authoring_mode": "direct_sql",
+  "implementation": "function",
+  "direct_sql": "SELECT COALESCE(SUM(EXTRACT(EPOCH FROM (da.end_date_time - da.start_date_time)) / 3600.0), 0) AS delay_hours FROM usdf.jfb_daily_activities da WHERE da.project_id = p_project_id AND da.start_date_time::date BETWEEN p_start_date AND p_end_date AND (p_equipment_id IS NULL OR da.equipment_id = p_equipment_id) AND da.is_deleted IS NOT TRUE AND NOT (da.category IN ('ACTIVE DREDGING', 'ACTIVE PLACEMENT') OR (da.category IS NULL AND da.delay_code_id IS NULL))",
+  "parameters": [
+    {
+      "name": "p_project_id",
+      "type": "uuid",
+      "required": true,
+      "description": "Project to scope the sum to."
+    },
+    {
+      "name": "p_start_date",
+      "type": "date",
+      "required": true,
+      "description": "Inclusive start of the report_date range -- today's date for Day, the week's start for Week, the project's start date for Total."
+    },
+    {
+      "name": "p_end_date",
+      "type": "date",
+      "required": true,
+      "description": "Inclusive end of the report_date range -- typically the report date being viewed."
+    },
+    {
+      "name": "p_equipment_id",
+      "type": "uuid",
+      "required": false,
+      "default": null,
+      "description": "Optional equipment filter. Null (the default) includes all equipment."
+    }
+  ],
+  "columns": [
+    {
+      "name": "delay_hours",
+      "type": "numeric",
+      "description": "Summed duration (hours) of matched activities classified as delay; 0 when none match."
+    }
+  ]
+}

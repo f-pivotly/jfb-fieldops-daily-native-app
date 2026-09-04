@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Box, Text, Table, Group, Button, Modal, TextInput, Select } from '@mantine/core'
+import { Box, Text, Table, Group, Button, Modal, TextInput, Select, Switch, Badge } from '@mantine/core'
 import { IconPlus, IconPencil, IconTrash, IconAlertTriangle } from '@tabler/icons-react'
 import { useEvents } from './hooks/useEvents'
+import { useFieldOpsAction } from '../../../contexts/fieldOpsAccessContext'
 import { useOperators } from '../../../hooks/useOperators'
 import { useProjectAreas } from '../../../hooks/useProjectAreas'
 import { usePicklist } from '../../../hooks/usePicklist'
@@ -9,6 +10,8 @@ import { useDelayCodes } from '../../../hooks/useDelayCodes'
 import { useProjectDelayCodes } from '../../../hooks/useProjectDelayCodes'
 import { useProjectAttachments } from '../../../hooks/useProjectAttachments'
 import { useProjectLayers } from '../../../hooks/useProjectLayers'
+import { useWorkTypes } from '../../../hooks/useWorkTypes'
+import { equipmentWorkType, activeCategoryLabel } from '../lib/workType'
 
 const SAMPLE = '(sampleData)'
 
@@ -124,7 +127,11 @@ function payloadFromForm(f) {
 
 export default function EventLogTab({ project, report, equipment = [], selectedEquipmentId }) {
   const eventDate = report?.report_date
-  const { events, create, update, remove } = useEvents(project?.id, eventDate)
+  const canViewDeletedEvents = useFieldOpsAction('view_deleted_events')
+  const [showDeleted, setShowDeleted] = useState(false)
+  const { events, create, update, remove } = useEvents(project?.id, eventDate, {
+    includeDeleted: showDeleted && canViewDeletedEvents,
+  })
   const { operators } = useOperators(project?.id)
   const { areas } = useProjectAreas(project?.id)
   const { labels: passTypeLabels, values: passTypeValues } = usePicklist('pkl-jfb-pass-type')
@@ -132,10 +139,32 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
   const { projectDelayCodes } = useProjectDelayCodes(project?.id)
   const { attachments } = useProjectAttachments(project?.id)
   const { layers } = useProjectLayers(project?.id)
+  const { workTypes } = useWorkTypes()
 
   const areaNameById = new Map(areas.map((a) => [a.id, a.name]))
   const masterDelayCodeById = new Map(masterDelayCodes.map((m) => [m.id, m]))
   const projectDelayCodeById = new Map(projectDelayCodes.map((r) => [r.id, r]))
+
+  // Work type in effect for the selected equipment on this report's date --
+  // mirrors the non-native app's EventLogTab.tsx, so the delay-code list
+  // below matches this unit's discipline (a project running two disciplines
+  // at once, e.g. a dredge and a placement excavator, must not let either
+  // log get tagged with the other's codes).
+  const selectedEquipment = equipment.find((e) => e.id === selectedEquipmentId) ?? null
+  const workType = equipmentWorkType(project, selectedEquipment, eventDate)
+  const workTypeId = workTypes.find((w) => w.name === workType)?.id ?? null
+
+  function effectiveDelayWorkTypeId(r) {
+    const master = r.delay_code_id ? masterDelayCodeById.get(r.delay_code_id) : null
+    return (master ? master.work_type_id : r.work_type_id) ?? null
+  }
+
+  function resolveCategoryForForm(f) {
+    if (f.delayCodeId && f.delayCodeId !== '__operational__') {
+      return resolveDelayCode(f.delayCodeId, projectDelayCodeById, masterDelayCodeById)?.code ?? null
+    }
+    return activeCategoryLabel(project, selectedEquipment, eventDate)
+  }
 
   const l1Areas = areas.filter((a) => !a.parent_id)
   const l2AreasFor = (l1Id) => areas.filter((a) => a.parent_id === l1Id)
@@ -147,6 +176,14 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
       group: 'Delay',
       items: projectDelayCodes
         .filter((r) => r.active !== false)
+        // A null work_type_id is a project-custom code with no master match
+        // and is always offered, matching the non-native app's
+        // fetchProjectDelayCodes() -- otherwise only codes matching this
+        // equipment's current discipline are shown.
+        .filter((r) => {
+          const wtId = effectiveDelayWorkTypeId(r)
+          return wtId == null || wtId === workTypeId
+        })
         .map((r) => {
           const resolved = resolveDelayCode(r.id, projectDelayCodeById, masterDelayCodeById)
           return { value: r.id, label: resolved?.code ?? '(unnamed)' }
@@ -156,10 +193,14 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
 
   const multiLayer = layers.length > 1
 
-  const sorted = events
-    .filter((e) => e.equipment_id === selectedEquipmentId)
+  const equipmentEvents = events.filter((e) => e.equipment_id === selectedEquipmentId)
+  const activeSorted = equipmentEvents
+    .filter((e) => !e.is_deleted)
     .sort((a, b) => new Date(a.start_date_time) - new Date(b.start_date_time))
-  const gaps = findGaps(sorted)
+  const sorted = (showDeleted && canViewDeletedEvents ? equipmentEvents : activeSorted)
+    .slice()
+    .sort((a, b) => new Date(a.start_date_time) - new Date(b.start_date_time))
+  const gaps = findGaps(activeSorted)
   const equipmentName = equipment.find((e) => e.id === selectedEquipmentId)?.name
 
   const [insertOpen, setInsertOpen] = useState(false)
@@ -202,6 +243,7 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
       equipment_id: selectedEquipmentId,
       start_date_time: start,
       end_date_time: end,
+      category: resolveCategoryForForm(form),
       ...payloadFromForm(form),
     })
     setInsertOpen(false)
@@ -227,7 +269,12 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
   async function handleSaveEdit() {
     if (!editRow || !eventDate) return
     const { start, end } = eventTimestamps(eventDate, form.from, form.to)
-    await update(editRow.id, { start_date_time: start, end_date_time: end, ...payloadFromForm(form) })
+    await update(editRow.id, {
+      start_date_time: start,
+      end_date_time: end,
+      category: resolveCategoryForForm(form),
+      ...payloadFromForm(form),
+    })
     setEditRow(null)
   }
 
@@ -351,9 +398,19 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
       ))}
 
       <Group justify="space-between" mb={8}>
-        <Text size="xs" c="dimmed">
-          {sorted.length} events{equipmentName ? ` · ${equipmentName}` : ''}
-        </Text>
+        <Group gap={12}>
+          <Text size="xs" c="dimmed">
+            {activeSorted.length} events{equipmentName ? ` · ${equipmentName}` : ''}
+          </Text>
+          {canViewDeletedEvents && (
+            <Switch
+              size="xs"
+              label="Show deleted"
+              checked={showDeleted}
+              onChange={(ev) => setShowDeleted(ev.currentTarget.checked)}
+            />
+          )}
+        </Group>
         <Button size="xs" leftSection={<IconPlus size={12} />} onClick={openInsertNext} style={{ background: '#0F2744', border: 'none' }}>
           Insert event
         </Button>
@@ -387,12 +444,12 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
           {sorted.map((e, i) => {
             const delayCode = resolveDelayCode(e.delay_code_id, projectDelayCodeById, masterDelayCodeById)
             return (
-            <Table.Tr key={e.id}>
+            <Table.Tr key={e.id} style={e.is_deleted ? { opacity: 0.5 } : undefined}>
               <Table.Td>{i + 1}</Table.Td>
               <Table.Td>{hhmm(e.start_date_time)}</Table.Td>
               <Table.Td>{hhmm(e.end_date_time)}</Table.Td>
               <Table.Td>{fmtDuration(e.start_date_time, e.end_date_time)}</Table.Td>
-              <Table.Td>{delayCode?.code ?? '—'}</Table.Td>
+              <Table.Td>{e.category || delayCode?.code || '—'}</Table.Td>
               <Table.Td>{resolveArea(e.area, areaNameById)}</Table.Td>
               <Table.Td>{e.pass_type ? (passTypeLabels[e.pass_type] ?? e.pass_type) : '—'}</Table.Td>
               <Table.Td>{tscaLabel(e.tsca)}</Table.Td>
@@ -400,14 +457,18 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
               <Table.Td>{e.notes || '—'}</Table.Td>
               <Table.Td c="dimmed">{SAMPLE}</Table.Td>
               <Table.Td>
-                <Group gap={6} wrap="nowrap">
-                  <Box onClick={() => openEdit(e)} style={{ cursor: 'pointer', color: '#888', display: 'flex' }} title="Edit">
-                    <IconPencil size={13} />
-                  </Box>
-                  <Box onClick={() => setDeleteRow(e)} style={{ cursor: 'pointer', color: '#ef4444', display: 'flex' }} title="Delete">
-                    <IconTrash size={13} />
-                  </Box>
-                </Group>
+                {e.is_deleted ? (
+                  <Badge size="xs" color="gray">Deleted</Badge>
+                ) : (
+                  <Group gap={6} wrap="nowrap">
+                    <Box onClick={() => openEdit(e)} style={{ cursor: 'pointer', color: '#888', display: 'flex' }} title="Edit">
+                      <IconPencil size={13} />
+                    </Box>
+                    <Box onClick={() => setDeleteRow(e)} style={{ cursor: 'pointer', color: '#ef4444', display: 'flex' }} title="Delete">
+                      <IconTrash size={13} />
+                    </Box>
+                  </Group>
+                )}
               </Table.Td>
             </Table.Tr>
             )

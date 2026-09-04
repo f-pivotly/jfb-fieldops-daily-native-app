@@ -1,436 +1,1009 @@
 {
-    "slug": "jfb_dredge_config",
-    "schema": [
-        {
-            "pii": false,
-            "name": "project_id",
-            "slug": "project_id",
-            "type": "uuid",
-            "label": "Project Id",
-            "unique": false,
-            "indexed": true,
-            "masking": {
-                "masked": false
-            },
-            "nullable": false,
-            "required": true,
-            "data_type": "uuid",
-            "fk_config": {
-                "required": true,
-                "target_attr": "id",
-                "target_domain": "jfb_projects",
-                "resolution_policy": "lookup_only"
-            },
-            "column_name": "project_id",
-            "description": "One row per project. The project this dredge chart config belongs to.",
-            "conflict_resolution": {
-                "code": "lww"
-            },
-            "triggers_version_change": true
-        },
-        {
-            "pii": false,
-            "name": "bg_path",
-            "slug": "bg_path",
-            "type": "text",
-            "label": "Background Image Path",
-            "unique": false,
-            "indexed": false,
-            "masking": {
-                "masked": false
-            },
-            "nullable": true,
-            "required": false,
-            "data_type": "text",
-            "column_name": "bg_path",
-            "description": "Isopach/background image shown under the chart.",
-            "conflict_resolution": {
-                "code": "lww"
-            },
-            "triggers_version_change": true
-        },
-        {
-            "pii": false,
-            "name": "colorbar_path",
-            "slug": "colorbar_path",
-            "type": "text",
-            "label": "Colorbar Path",
-            "unique": false,
-            "indexed": false,
-            "masking": {
-                "masked": false
-            },
-            "nullable": true,
-            "required": false,
-            "data_type": "text",
-            "column_name": "colorbar_path",
-            "description": "Legend/color-scale image overlaid on the chart.",
-            "conflict_resolution": {
-                "code": "lww"
-            },
-            "triggers_version_change": true
-        },
-        {
-            "pii": false,
-            "name": "georef",
-            "slug": "georef",
-            "type": "jsonb",
-            "label": "Georeference",
-            "unique": false,
-            "indexed": false,
-            "masking": {
-                "masked": false
-            },
-            "nullable": true,
-            "required": false,
-            "data_type": "jsonb",
-            "column_name": "georef",
-            "description": "{wL, wR, wT, wB} real-world coordinates the background image is pinned to.",
-            "conflict_resolution": {
-                "code": "lww"
-            },
-            "triggers_version_change": true
-        },
-        {
-            "pii": false,
-            "name": "area",
-            "slug": "area",
-            "type": "text",
-            "label": "Area",
-            "unique": false,
-            "indexed": false,
-            "masking": {
-                "masked": false
-            },
-            "nullable": true,
-            "required": false,
-            "data_type": "text",
-            "column_name": "area",
-            "description": "Free-text area/reach name printed on the chart, e.g. 'Bancroft Bay'.",
-            "conflict_resolution": {
-                "code": "lww"
-            },
-            "triggers_version_change": true
-        },
-        {
-            "pii": false,
-            "name": "materials",
-            "slug": "materials",
-            "type": "text",
-            "label": "Materials",
-            "unique": false,
-            "indexed": false,
-            "masking": {
-                "masked": false
-            },
-            "nullable": true,
-            "required": false,
-            "data_type": "text",
-            "column_name": "materials",
-            "description": "Default materials description printed on the chart.",
-            "conflict_resolution": {
-                "code": "lww"
-            },
-            "triggers_version_change": true
-        },
-        {
-            "pii": false,
-            "name": "title",
-            "slug": "title",
-            "type": "text",
-            "label": "Chart Title",
-            "unique": false,
-            "indexed": false,
-            "masking": {
-                "masked": false
-            },
-            "nullable": true,
-            "required": false,
-            "data_type": "text",
-            "column_name": "title",
-            "description": "Chart title text override.",
-            "conflict_resolution": {
-                "code": "lww"
-            },
-            "triggers_version_change": true
-        },
-        {
-            "pii": false,
-            "name": "cells_path",
-            "slug": "cells_path",
-            "type": "text",
-            "label": "Cell Grid Path",
-            "unique": false,
-            "indexed": false,
-            "masking": {
-                "masked": false
-            },
-            "nullable": true,
-            "required": false,
-            "data_type": "text",
-            "column_name": "cells_path",
-            "description": "Path to the grid-cells definition file (Kalamazoo-style CSC projects).",
-            "conflict_resolution": {
-                "code": "lww"
-            },
-            "triggers_version_change": true
-        },
-        {
-            "pii": false,
-            "name": "aerial_path",
-            "slug": "aerial_path",
-            "type": "text",
-            "label": "Aerial Image Path",
-            "unique": false,
-            "indexed": false,
-            "masking": {
-                "masked": false
-            },
-            "nullable": true,
-            "required": false,
-            "data_type": "text",
-            "column_name": "aerial_path",
-            "description": "Optional aerial photo, used as an alternate background layer.",
-            "conflict_resolution": {
-                "code": "lww"
-            },
-            "triggers_version_change": true
-        },
-        {
-            "pii": false,
-            "name": "aerial_georef",
-            "slug": "aerial_georef",
-            "type": "jsonb",
-            "label": "Aerial Georeference",
-            "unique": false,
-            "indexed": false,
-            "masking": {
-                "masked": false
-            },
-            "nullable": true,
-            "required": false,
-            "data_type": "jsonb",
-            "column_name": "aerial_georef",
-            "description": "{wL, wR, wT, wB} real-world coordinates the aerial photo is pinned to.",
-            "conflict_resolution": {
-                "code": "lww"
-            },
-            "triggers_version_change": true
-        },
-        {
-            "pii": false,
-            "name": "crs_proj4",
-            "slug": "crs_proj4",
-            "type": "text",
-            "label": "Coordinate Reference System",
-            "unique": false,
-            "indexed": false,
-            "masking": {
-                "masked": false
-            },
-            "nullable": true,
-            "required": false,
-            "data_type": "text",
-            "column_name": "crs_proj4",
-            "description": "Coordinate reference system (WKID or proj4/.prj WKT) the project's survey data is in.",
-            "conflict_resolution": {
-                "code": "lww"
-            },
-            "triggers_version_change": true
-        },
-        {
-            "pii": false,
-            "name": "aerial_tiles",
-            "slug": "aerial_tiles",
-            "type": "jsonb",
-            "label": "Aerial Tiles",
-            "unique": false,
-            "indexed": false,
-            "masking": {
-                "masked": false
-            },
-            "nullable": true,
-            "required": false,
-            "data_type": "jsonb",
-            "column_name": "aerial_tiles",
-            "description": "Array of {path, georef} for tiled aerial imagery.",
-            "conflict_resolution": {
-                "code": "lww"
-            },
-            "triggers_version_change": true
-        },
-        {
-            "pii": false,
-            "name": "data_source",
-            "slug": "data_source",
-            "type": "text",
-            "label": "Data Source",
-            "unique": false,
-            "indexed": false,
-            "masking": {
-                "masked": false
-            },
-            "nullable": false,
-            "required": true,
-            "data_type": "text",
-            "column_name": "data_source",
-            "description": "Which upload format this project uses: 'hypack' (hydraulic) or 'earthworks' (mechanical). Defaults to 'hypack'.",
-            "conflict_resolution": {
-                "code": "lww"
-            },
-            "triggers_version_change": true
-        },
-        {
-            "pii": false,
-            "name": "water_elev",
-            "slug": "water_elev",
-            "type": "numeric",
-            "label": "Water Elevation",
-            "unique": false,
-            "indexed": false,
-            "masking": {
-                "masked": false
-            },
-            "nullable": true,
-            "required": false,
-            "data_type": "numeric",
-            "column_name": "water_elev",
-            "description": "Water elevation, used to filter out noise/non-digging points. Required in practice for earthworks projects.",
-            "conflict_resolution": {
-                "code": "lww"
-            },
-            "triggers_version_change": true
-        },
-        {
-            "pii": false,
-            "name": "design_path",
-            "slug": "design_path",
-            "type": "text",
-            "label": "Design Surface Path",
-            "unique": false,
-            "indexed": false,
-            "masking": {
-                "masked": false
-            },
-            "nullable": true,
-            "required": false,
-            "data_type": "text",
-            "column_name": "design_path",
-            "description": "Design or reference survey surface, used to estimate volume (CY) removed.",
-            "conflict_resolution": {
-                "code": "lww"
-            },
-            "triggers_version_change": true
-        },
-        {
-            "pii": false,
-            "name": "require_stations",
-            "slug": "require_stations",
-            "type": "boolean",
-            "label": "Require Stations",
-            "unique": false,
-            "indexed": false,
-            "masking": {
-                "masked": false
-            },
-            "nullable": false,
-            "required": true,
-            "data_type": "boolean",
-            "column_name": "require_stations",
-            "description": "Whether this project requires station/chainage entry before generating the daily chart (river/channel-style projects). Defaults to false.",
-            "conflict_resolution": {
-                "code": "lww"
-            },
-            "triggers_version_change": true
-        },
-        {
-            "pii": false,
-            "name": "reference_lines_path",
-            "slug": "reference_lines_path",
-            "type": "text",
-            "label": "Mile Markers / Stationing DXF Path",
-            "unique": false,
-            "indexed": false,
-            "masking": {
-                "masked": false
-            },
-            "nullable": true,
-            "required": false,
-            "data_type": "text",
-            "column_name": "reference_lines_path",
-            "description": "Mile markers / stationing DXF -- open line segments and text labels drawn as a thin reference overlay (e.g. tenth-mile lines with river-mile numbers). Purely visual; not used in any calculation. Referenced in the web app's code but not present on the live dredge_config table there (schema drift) -- added here for forward parity.",
-            "conflict_resolution": {
-                "code": "lww"
-            },
-            "triggers_version_change": true
-        },
-        {
-            "pii": false,
-            "name": "alignment_path",
-            "slug": "alignment_path",
-            "type": "text",
-            "label": "Hard-Structure Alignment DXF Path",
-            "unique": false,
-            "indexed": false,
-            "masking": {
-                "masked": false
-            },
-            "nullable": true,
-            "required": false,
-            "data_type": "text",
-            "column_name": "alignment_path",
-            "description": "Hard-structure alignment DXF (sheet-pile wall / bulkhead), for earthworks/mechanical projects -- coverage that stops just short of it gets carried to it, within the wall-snap distance. Same schema-drift note as reference_lines_path.",
-            "conflict_resolution": {
-                "code": "lww"
-            },
-            "triggers_version_change": true
-        },
-        {
-            "pii": false,
-            "name": "reference_surface_path",
-            "slug": "reference_surface_path",
-            "type": "text",
-            "label": "Reference Survey Surface Path",
-            "unique": false,
-            "indexed": false,
-            "masking": {
-                "masked": false
-            },
-            "nullable": true,
-            "required": false,
-            "data_type": "text",
-            "column_name": "reference_surface_path",
-            "description": "Latest QA pay survey (gridded 1x1 .xyz), used for hydraulic design-grade volume estimation. Same schema-drift note as reference_lines_path.",
-            "conflict_resolution": {
-                "code": "lww"
-            },
-            "triggers_version_change": true
-        }
-    ],
-    "archive": true,
-    "contact": {
-        "name": "System Administrator"
+  "schema": [
+    {
+      "pii": false,
+      "name": "project_id",
+      "slug": "project_id",
+      "type": "uuid",
+      "label": "Project Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": true,
+        "target_attr": "id",
+        "target_domain": "jfb_projects",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "project_id",
+      "description": "One row per project. The project this dredge chart config belongs to.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
     },
-    "multi_tenant": false,
-    "xref_enabled": true,
-    "access_control": {
-        "model": "all_systems",
-        "read_access": true,
-        "delete_access": true,
-        "insert_access": true,
-        "update_access": true,
-        "hard_delete_allowed": true,
-        "direct_write_enabled": true
+    {
+      "pii": false,
+      "name": "bg_path",
+      "slug": "bg_path",
+      "type": "text",
+      "label": "Background Image Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "bg_path",
+      "description": "Isopach/background image shown under the chart.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
     },
-    "archive_policy": {
-        "retention_days": 365,
-        "max_record_versions": 10000
+    {
+      "pii": false,
+      "name": "colorbar_path",
+      "slug": "colorbar_path",
+      "type": "text",
+      "label": "Colorbar Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "colorbar_path",
+      "description": "Legend/color-scale image overlaid on the chart.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
     },
-    "track_versions": true,
-    "domain_table_name": "jfb_dredge_config",
-    "domain_name_singular": "jfb_dredge_config",
-    "default_conflict_resolution": {
-        "code": "lww",
-        "human_readable": "Last Write Wins"
+    {
+      "pii": false,
+      "name": "georef",
+      "slug": "georef",
+      "type": "jsonb",
+      "label": "Georeference",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "jsonb",
+      "column_name": "georef",
+      "description": "{wL, wR, wT, wB} real-world coordinates the background image is pinned to.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "default_area_id",
+      "slug": "default_area_id",
+      "type": "uuid",
+      "label": "Default Area",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": false,
+        "target_attr": "id",
+        "target_domain": "jfb_project_areas",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "default_area_id",
+      "description": "Identifies the default project area displayed on the dredge chart.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "default_material_note",
+      "slug": "default_material_note",
+      "type": "text",
+      "label": "Default Material Note",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "default_material_note",
+      "description": "Supplies the default material-encountered description for new charts.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "chart_title_override",
+      "slug": "chart_title_override",
+      "type": "text",
+      "label": "Chart Title Override",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "chart_title_override",
+      "description": "Optional chart title used instead of the project name.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "cells_path",
+      "slug": "cells_path",
+      "type": "text",
+      "label": "Cell Grid Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "cells_path",
+      "description": "Path to the grid-cells definition file (Kalamazoo-style CSC projects).",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "aerial_path",
+      "slug": "aerial_path",
+      "type": "text",
+      "label": "Aerial Image Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "aerial_path",
+      "description": "Optional aerial photo, used as an alternate background layer.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "aerial_georef",
+      "slug": "aerial_georef",
+      "type": "jsonb",
+      "label": "Aerial Georeference",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "jsonb",
+      "column_name": "aerial_georef",
+      "description": "{wL, wR, wT, wB} real-world coordinates the aerial photo is pinned to.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "crs_definition",
+      "slug": "crs_definition",
+      "type": "text",
+      "label": "CRS Definition",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "crs_definition",
+      "description": "Stores the project coordinate system as WKID, EPSG, or WKT.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "aerial_tiles",
+      "slug": "aerial_tiles",
+      "type": "jsonb",
+      "label": "Aerial Tiles",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "jsonb",
+      "column_name": "aerial_tiles",
+      "description": "Array of {path, georef} for tiled aerial imagery.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "data_source",
+      "slug": "data_source",
+      "type": "text",
+      "label": "Data Source",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "text",
+      "column_name": "data_source",
+      "description": "Which upload format this project uses: 'hypack' (hydraulic) or 'earthworks' (mechanical). Defaults to 'hypack'.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "water_elev_ft",
+      "slug": "water_elev_ft",
+      "type": "numeric",
+      "label": "Water Elevation (ft)",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "water_elev_ft",
+      "description": "Stores the water elevation used to filter Earthworks observations.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "earthworks_design_path",
+      "slug": "earthworks_design_path",
+      "type": "text",
+      "label": "Earthworks Design Surface Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "earthworks_design_path",
+      "description": "Stores the file path of the Earthworks design surface.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "require_stations",
+      "slug": "require_stations",
+      "type": "boolean",
+      "label": "Require Stations",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "boolean",
+      "column_name": "require_stations",
+      "description": "Whether this project requires station/chainage entry before generating the daily chart (river/channel-style projects). Defaults to false.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "reference_lines_path",
+      "slug": "reference_lines_path",
+      "type": "text",
+      "label": "Mile Markers / Stationing DXF Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "reference_lines_path",
+      "description": "Mile markers / stationing DXF -- open line segments and text labels drawn as a thin reference overlay (e.g. tenth-mile lines with river-mile numbers). Purely visual; not used in any calculation. Referenced in the web app's code but not present on the live dredge_config table there (schema drift) -- added here for forward parity.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "alignment_path",
+      "slug": "alignment_path",
+      "type": "text",
+      "label": "Hard-Structure Alignment DXF Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "alignment_path",
+      "description": "Hard-structure alignment DXF (sheet-pile wall / bulkhead), for earthworks/mechanical projects -- coverage that stops just short of it gets carried to it, within the wall-snap distance. Same schema-drift note as reference_lines_path.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "reference_surface_path",
+      "slug": "reference_surface_path",
+      "type": "text",
+      "label": "Reference Survey Surface Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "reference_surface_path",
+      "description": "Latest QA pay survey (gridded 1x1 .xyz), used for hydraulic design-grade volume estimation. Same schema-drift note as reference_lines_path.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "split_gap_ft",
+      "slug": "split_gap_ft",
+      "type": "integer",
+      "label": "Split Gap (ft)",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "integer",
+      "column_name": "split_gap_ft",
+      "description": "Gap (ft) between coverage footprints above which the daily offers to split the chart into zoomed per-area pages. Null = app default (400).",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "isopach_tiles",
+      "slug": "isopach_tiles",
+      "type": "jsonb",
+      "label": "Isopach Tiles",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "jsonb",
+      "column_name": "isopach_tiles",
+      "description": "Array of {path, georef:{wL,wR,wT,wB}} for tiled isopach/difference imagery, when one image cannot cover the whole project.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "cells_reference_only",
+      "slug": "cells_reference_only",
+      "type": "boolean",
+      "label": "Cells Reference Only",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "boolean",
+      "column_name": "cells_reference_only",
+      "description": "When true, the cells DXF is drawn as outlines + numbers only (a reference layer), with no coverage grid, clipping, or per-cell breakdown.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "bucket_width_ft",
+      "slug": "bucket_width_ft",
+      "type": "numeric",
+      "label": "Bucket Width (ft)",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "bucket_width_ft",
+      "description": "PM-confirmed mechanical dredging bucket width (stamp diameter), used by the machine-track engine.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "track_bed_tolerance_ft",
+      "slug": "track_bed_tolerance_ft",
+      "type": "numeric",
+      "label": "Track Bed Tolerance (ft)",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "track_bed_tolerance_ft",
+      "description": "How close the machine-track teeth must be to the local bed to count as an active digging point.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "alignment_snap_ft",
+      "slug": "alignment_snap_ft",
+      "type": "numeric",
+      "label": "Alignment Snap (ft)",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "alignment_snap_ft",
+      "description": "Max gap (ft) the hard-structure alignment snap will close -- only gaps this narrow, and only where the bucket already worked.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "volume_mode",
+      "slug": "volume_mode",
+      "type": "text",
+      "label": "Volume Mode",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "volume_mode",
+      "description": "How the daily CY is measured. Null = off (no volume). 'surface_diff' = prior-vs-today surface drop (mechanical). 'design_grade' = remaining prism above design_elev_ft over first-touch coverage (hypack).",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "design_elev_ft",
+      "slug": "design_elev_ft",
+      "type": "numeric",
+      "label": "Design Grade Elevation (ft)",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "design_elev_ft",
+      "description": "Design grade elevation in project datum ft, used by design_grade volume mode.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "reference_surface_date",
+      "slug": "reference_surface_date",
+      "type": "date",
+      "label": "Reference Surface Date",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "date",
+      "column_name": "reference_surface_date",
+      "description": "Date of the QA pay survey stored in reference_surface_path, shown to the PE so a stale reference is visible.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "reference_cell_ft",
+      "slug": "reference_cell_ft",
+      "type": "numeric",
+      "label": "Reference Cell Size (ft)",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "reference_cell_ft",
+      "description": "Cell size (ft) the reference survey was downsampled to. Null = app default (2 ft).",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "volume_recovery_factor",
+      "slug": "volume_recovery_factor",
+      "type": "numeric",
+      "label": "Volume Recovery Factor",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "volume_recovery_factor",
+      "description": "Factor applied to gross calculated/measured volume to get the reportable volume (the bucket/cut always exceeds what reaches the barge).",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "bg_original_name",
+      "slug": "bg_original_name",
+      "type": "text",
+      "label": "Background Image Original Filename",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "bg_original_name",
+      "description": "Original filename of the uploaded isopach/background image, as picked by the user (the bg_path field stores the crd_files_b file id, not a human-readable name).",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "bg_storage_path",
+      "slug": "bg_storage_path",
+      "type": "text",
+      "label": "Background Image Storage Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "bg_storage_path",
+      "description": "Physical storage path/key of the uploaded isopach/background image file, as returned by the file-storage backend.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "colorbar_original_name",
+      "slug": "colorbar_original_name",
+      "type": "text",
+      "label": "Colorbar Original Filename",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "colorbar_original_name",
+      "description": "Original filename of the uploaded colorbar/legend image, as picked by the user (the colorbar_path field stores the crd_files_b file id, not a human-readable name).",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "colorbar_storage_path",
+      "slug": "colorbar_storage_path",
+      "type": "text",
+      "label": "Colorbar Storage Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "colorbar_storage_path",
+      "description": "Physical storage path/key of the uploaded colorbar/legend image file, as returned by the file-storage backend.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "cells_original_name",
+      "slug": "cells_original_name",
+      "type": "text",
+      "label": "Cell Grid Original Filename",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "cells_original_name",
+      "description": "Original filename of the uploaded cell-grid definition DXF, as picked by the user (the cells_path field stores the crd_files_b file id, not a human-readable name).",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "cells_storage_path",
+      "slug": "cells_storage_path",
+      "type": "text",
+      "label": "Cell Grid Storage Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "cells_storage_path",
+      "description": "Physical storage path/key of the uploaded cell-grid definition DXF file, as returned by the file-storage backend.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "aerial_original_name",
+      "slug": "aerial_original_name",
+      "type": "text",
+      "label": "Aerial Image Original Filename",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "aerial_original_name",
+      "description": "Original filename of the uploaded aerial base-layer image, as picked by the user (the aerial_path field stores the crd_files_b file id, not a human-readable name).",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "aerial_storage_path",
+      "slug": "aerial_storage_path",
+      "type": "text",
+      "label": "Aerial Image Storage Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "aerial_storage_path",
+      "description": "Physical storage path/key of the uploaded aerial base-layer image file, as returned by the file-storage backend.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "earthworks_design_original_name",
+      "slug": "earthworks_design_original_name",
+      "type": "text",
+      "label": "Earthworks Design Surface Original Filename",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "earthworks_design_original_name",
+      "description": "Original filename of the uploaded Earthworks design-grade surface CSV, as picked by the user (the earthworks_design_path field stores the crd_files_b file id, not a human-readable name).",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "earthworks_design_storage_path",
+      "slug": "earthworks_design_storage_path",
+      "type": "text",
+      "label": "Earthworks Design Surface Storage Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "earthworks_design_storage_path",
+      "description": "Physical storage path/key of the uploaded Earthworks design-grade surface CSV file, as returned by the file-storage backend.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "reference_lines_original_name",
+      "slug": "reference_lines_original_name",
+      "type": "text",
+      "label": "Mile Markers / Stationing Original Filename",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "reference_lines_original_name",
+      "description": "Original filename of the uploaded mile-marker/stationing DXF, as picked by the user (the reference_lines_path field stores the crd_files_b file id, not a human-readable name).",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "reference_lines_storage_path",
+      "slug": "reference_lines_storage_path",
+      "type": "text",
+      "label": "Mile Markers / Stationing Storage Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "reference_lines_storage_path",
+      "description": "Physical storage path/key of the uploaded mile-marker/stationing DXF file, as returned by the file-storage backend.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "alignment_original_name",
+      "slug": "alignment_original_name",
+      "type": "text",
+      "label": "Hard-Structure Alignment Original Filename",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "alignment_original_name",
+      "description": "Original filename of the uploaded hard-structure alignment DXF, as picked by the user (the alignment_path field stores the crd_files_b file id, not a human-readable name).",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "alignment_storage_path",
+      "slug": "alignment_storage_path",
+      "type": "text",
+      "label": "Hard-Structure Alignment Storage Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "alignment_storage_path",
+      "description": "Physical storage path/key of the uploaded hard-structure alignment DXF file, as returned by the file-storage backend.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "reference_surface_original_name",
+      "slug": "reference_surface_original_name",
+      "type": "text",
+      "label": "Reference Survey Surface Original Filename",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "reference_surface_original_name",
+      "description": "Original filename of the uploaded QA pay survey .xyz file, as picked by the user (the reference_surface_path field stores the crd_files_b file id, not a human-readable name).",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "reference_surface_storage_path",
+      "slug": "reference_surface_storage_path",
+      "type": "text",
+      "label": "Reference Survey Surface Storage Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "reference_surface_storage_path",
+      "description": "Physical storage path/key of the uploaded QA pay survey .xyz file file, as returned by the file-storage backend.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
     }
+  ],
+  "archive": true,
+  "contact": {
+    "name": "System Administrator"
+  },
+  "multi_tenant": false,
+  "xref_enabled": true,
+  "access_control": {
+    "model": "all_systems",
+    "read_access": true,
+    "delete_access": true,
+    "insert_access": true,
+    "update_access": true,
+    "hard_delete_allowed": true,
+    "direct_write_enabled": true
+  },
+  "archive_policy": {
+    "retention_days": 365,
+    "max_record_versions": 10000
+  },
+  "track_versions": true,
+  "domain_table_name": "jfb_dredge_config",
+  "slug": "jfb_dredge_config",
+  "domain_name_singular": "jfb_dredge_config",
+  "default_conflict_resolution": {
+    "code": "lww",
+    "human_readable": "Last Write Wins"
+  }
 }

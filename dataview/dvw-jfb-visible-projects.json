@@ -1,0 +1,27 @@
+{
+  "slug": "dvw-jfb-visible-projects",
+  "description": "Projects a pe/pm is scoped to, resolved server-side instead of the client fetching every jfb_project_members row and filtering in JS. Joins jfb_projects to jfb_project_members and returns the projects where an active membership row's email matches p_email (case/whitespace-insensitive). Cross-project roles (director/admin) don't use this view -- they still read jfb_projects directly for the full list.",
+  "authoring_mode": "direct_sql",
+  "implementation": "function",
+  "direct_sql": "SELECT DISTINCT p.id, p.name, p.project_code, p.client_name, p.work_type, p.is_active, p.start_date, p.end_date, p.volume_goal, p.primary_measure, p.site_city, p.site_state, p.is_tsca_zone_tracking, p.is_soil_type, p.is_pipe_tracking FROM usdf.jfb_projects p JOIN usdf.jfb_project_members m ON m.project_id = p.id WHERE m.is_active IS NOT FALSE AND lower(trim(m.email)) = lower(trim(p_email)) ORDER BY p.name",
+  "parameters": [
+    { "name": "p_email", "type": "text", "required": true, "description": "The logged-in pe/pm's token email, matched against jfb_project_members.email." }
+  ],
+  "columns": [
+    { "name": "id", "type": "uuid", "description": "jfb_projects.id." },
+    { "name": "name", "type": "text", "description": "Project name." },
+    { "name": "project_code", "type": "text", "description": "Project number shown on the dashboard card (e.g. #182601)." },
+    { "name": "client_name", "type": "text", "description": "Owner/client name." },
+    { "name": "work_type", "type": "text", "description": "Work type label, e.g. 'Hydraulic Dredging'." },
+    { "name": "is_active", "type": "boolean", "description": "Whether the project itself is active." },
+    { "name": "start_date", "type": "date", "description": "Project start date." },
+    { "name": "end_date", "type": "date", "description": "Project end date." },
+    { "name": "volume_goal", "type": "numeric", "description": "Volume goal for the project." },
+    { "name": "primary_measure", "type": "text", "description": "Primary measure used for progress tracking." },
+    { "name": "site_city", "type": "text", "description": "Site city." },
+    { "name": "site_state", "type": "text", "description": "Site state." },
+    { "name": "is_tsca_zone_tracking", "type": "boolean", "description": "Whether TSCA zone tracking is enabled for this project." },
+    { "name": "is_soil_type", "type": "boolean", "description": "Whether soil type tracking is enabled for this project." },
+    { "name": "is_pipe_tracking", "type": "boolean", "description": "Whether pipe tracking is enabled for this project." }
+  ]
+}

@@ -131,7 +131,7 @@ export async function fetchCurrentUser() {
   return data?.data ?? data
 }
 
-export async function fetchDomainRecords({ domain, system, appSlug, limit = 25, offset = 0, filters, sortCol, sortDir, countMode, forceMeta }) {
+export async function fetchDomainRecords({ domain, system, appSlug, limit = 25, offset = 0, filters, sortCol, sortDir, countMode, forceMeta, includeDeleted }) {
   const { data } = await api.post('/core-data-read', {
     parameters: {
       domain, system, app_slug: appSlug, limit, offset,
@@ -140,6 +140,7 @@ export async function fetchDomainRecords({ domain, system, appSlug, limit = 25, 
       ...(sortDir ? { sort_dir: sortDir } : {}),
       ...(countMode ? { count_mode: countMode } : {}),
       ...(forceMeta ? { force_meta: forceMeta } : {}),
+      ...(includeDeleted ? { include_deleted_records: true } : {}),
     },
   })
   return data
@@ -207,13 +208,38 @@ export async function deleteDomainRecord({ domain, system, appSlug, recordId }) 
   return data
 }
 
+// The backend stores the uploaded filename as-is in a column with a
+// uniqueness constraint scoped per attachment domain -- two uploads of a
+// same-named file (even for different projects/records) collide. Suffixing
+// a short random id keeps the name recognizable while guaranteeing
+// uniqueness; callers that need the true original name should save it
+// themselves (e.g. in a domain's own *_original_name column) since the
+// server only ever sees this suffixed one.
+function uniqueFileName(name) {
+  const dot = name.lastIndexOf('.')
+  const base = dot > 0 ? name.slice(0, dot) : name
+  const ext = dot > 0 ? name.slice(dot) : ''
+  return `${base}-${crypto.randomUUID().slice(0, 8)}${ext}`
+}
+
 export async function uploadAttachment({ coreRecordId, domain, file }) {
   const form = new FormData()
-  form.append('file', file, file.name)
+  form.append('file', file, uniqueFileName(file.name))
   const { data } = await api.post(`/attachments/${coreRecordId}/${domain}/save`, form, {
     headers: { 'Content-Type': undefined },
   })
   return data?.data ?? data
+}
+
+// Lists attachments for a core record in a domain -- used right after
+// uploadAttachment to read back the storage_path the server assigned
+// (uploadAttachment's response only returns the new fileId).
+export async function getAttachments({ coreRecordId, domain, pageSize = 50 }) {
+  const { data } = await api.get(`/attachments/${domain}/${coreRecordId}`, {
+    params: { page: 0, pageSize },
+  })
+  const result = data?.data ?? data
+  return result?.rows ?? []
 }
 
 export async function fetchPublicAsset(url) {

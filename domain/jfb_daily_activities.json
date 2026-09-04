@@ -305,6 +305,27 @@
     },
     {
       "pii": false,
+      "name": "category",
+      "slug": "category",
+      "type": "text",
+      "label": "Category",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "category",
+      "description": "Human-readable label for what kind of time this activity represents -- the productive-tile label (e.g. \"ACTIVE DREDGING\") when delay_code_id is null, or the delay code's own text when set. Matches the non-native app's daily_events.category free-text field; written by the app at save time, not derived by a stored computation.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
       "name": "layer_id",
       "slug": "layer_id",
       "type": "uuid",

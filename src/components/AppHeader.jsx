@@ -1,9 +1,11 @@
 import { Link } from 'react-router-dom'
 import { Box, Group, Avatar, Text } from '@mantine/core'
 import { useAppConfig } from '../contexts/appConfigContext'
+import { useFieldOpsAction } from '../contexts/fieldOpsAccessContext'
 
 export default function AppHeader() {
   const { config } = useAppConfig()
+  const canViewOperatorHours = useFieldOpsAction('view_operator_hours')
   const user = config.user ?? { initials: '?', name: '' }
   return (
     <Box
@@ -27,21 +29,23 @@ export default function AppHeader() {
       </Box>
 
       <Group gap={10} ml="auto" style={{ flexShrink: 0 }}>
-        <Box
-          component={Link}
-          to="/admin/operators"
-          style={{
-            color: '#fff',
-            fontSize: 12,
-            padding: '4px 10px',
-            border: '1px solid rgba(255,255,255,0.3)',
-            borderRadius: 4,
-            textDecoration: 'none',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          Operators
-        </Box>
+        {canViewOperatorHours && (
+          <Box
+            component={Link}
+            to="/admin/operators"
+            style={{
+              color: '#fff',
+              fontSize: 12,
+              padding: '4px 10px',
+              border: '1px solid rgba(255,255,255,0.3)',
+              borderRadius: 4,
+              textDecoration: 'none',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Operators
+          </Box>
+        )}
         <Avatar size={28} title={user.name} style={{ background: '#1A5CA8', color: '#fff', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
           {user.initials}
         </Avatar>

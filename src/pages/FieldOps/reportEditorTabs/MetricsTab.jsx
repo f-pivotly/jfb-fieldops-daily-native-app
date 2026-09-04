@@ -1,5 +1,5 @@
 import { Table, TextInput, Text, Badge, Box, Group, Button, Modal, Select, Stack, Switch, Loader } from '@mantine/core'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { IconSettings, IconTrash } from '@tabler/icons-react'
 import { useMetricSources } from '../../../hooks/useMetricSources'
 import { useMetricDefaults } from '../../../hooks/useMetricDefaults'
@@ -9,6 +9,7 @@ import { useReportMetricValues } from '../../../hooks/useReportMetricValues'
 import { useManualMetricValues } from '../../../hooks/useManualMetricValues'
 import { useAutoMetricValues } from '../../../hooks/useAutoMetricValues'
 import { formatMetricValue } from '../../../config/metricAutoSources'
+import { useFieldOpsDomainAccess, useFieldOpsAction } from '../../../contexts/fieldOpsAccessContext'
 
 function slugify(label) {
   const trimmed = label.trim().toLowerCase()
@@ -69,11 +70,41 @@ function defaultsToRows(metricDefaults) {
     }))
 }
 
-export default function MetricsTab({ project, report, equipment = [] }) {
+function useSeededMetricRows({ metrics, metricDefaults, metricsLoading, defaultsLoading }) {
   const [rows, setRows] = useState([])
+  const seededRef = useRef(false)
+  const mountedRef = useRef(true)
+  useEffect(() => () => { mountedRef.current = false }, [])
+
+  const seed = useCallback(() => {
+    if (seededRef.current || rows.length > 0 || metricsLoading || defaultsLoading) return
+    if (metrics.length > 0) {
+      if (mountedRef.current) setRows(metricsToRows(metrics))
+      seededRef.current = true
+    } else if (metricDefaults.length > 0) {
+      if (mountedRef.current) setRows(defaultsToRows(metricDefaults))
+      seededRef.current = true
+    }
+  }, [rows.length, metricsLoading, defaultsLoading, metrics, metricDefaults])
+
+  useEffect(() => {
+    seed()
+  }, [seed])
+
+  const resetSeeded = useCallback(() => {
+    seededRef.current = false
+  }, [])
+
+  return [rows, setRows, resetSeeded]
+}
+
+export default function MetricsTab({ project, report, equipment = [] }) {
   const [managerOpen, setManagerOpen] = useState(false)
   const [saving, setSaving] = useState(false)
-  const visible = rows.filter((r) => !r.hidden)
+
+  const { canCreate, canUpdate, canDelete } = useFieldOpsDomainAccess('jfb_metrics')
+  const canManageSourceType = useFieldOpsAction('manage_metric_source_type')
+  const canManageMetrics = canCreate || canUpdate
 
   const { metricSources } = useMetricSources()
   const activeSources = metricSources.filter((m) => m.active !== false)
@@ -81,6 +112,8 @@ export default function MetricsTab({ project, report, equipment = [] }) {
   const sourceLabels = Object.fromEntries(activeSources.map((m) => [m.value, m.label ?? m.value]))
   const { metricDefaults, loading: defaultsLoading } = useMetricDefaults()
   const { metrics, loading: metricsLoading, create, update, remove, reload } = useMetrics(project?.id)
+  const [rows, setRows, resetSeeded] = useSeededMetricRows({ metrics, metricDefaults, metricsLoading, defaultsLoading })
+  const visible = rows.filter((r) => !r.hidden)
   const { reports } = useReports(project?.id)
   const {
     reportMetricValues,
@@ -92,18 +125,6 @@ export default function MetricsTab({ project, report, equipment = [] }) {
     project, report, reports, reportMetricValues,
     create: createValue, update: updateValue, reload: reloadValues,
   })
-
-  const seededRef = useRef(false)
-  useEffect(() => {
-    if (seededRef.current || rows.length > 0 || metricsLoading || defaultsLoading) return
-    if (metrics.length > 0) {
-      setRows(metricsToRows(metrics))
-      seededRef.current = true
-    } else if (metricDefaults.length > 0) {
-      setRows(defaultsToRows(metricDefaults))
-      seededRef.current = true
-    }
-  }, [rows.length, metricsLoading, defaultsLoading, metrics, metricDefaults])
 
   const totalStartDate = project?.start_date ? project.start_date.slice(0, 10) : '1900-01-01'
   const autoValues = useAutoMetricValues(rows, {
@@ -139,7 +160,7 @@ export default function MetricsTab({ project, report, equipment = [] }) {
           }),
         ...removedIds.map((id) => remove(id)),
       ])
-      seededRef.current = false
+      resetSeeded()
       setRows([])
       await reload()
     } finally {
@@ -153,9 +174,18 @@ export default function MetricsTab({ project, report, equipment = [] }) {
         {usingDefaults ? (
           <Text size="xs" c="orange">Using default metrics — not yet saved for this project.</Text>
         ) : <Box />}
-        <Button size="xs" variant="default" leftSection={<IconSettings size={12} />} onClick={() => setManagerOpen(true)}>
-          Manage metrics
-        </Button>
+        {canManageMetrics && (
+          <Button
+            size="xs"
+            variant="default"
+            leftSection={<IconSettings size={12} />}
+            onClick={() => setManagerOpen(true)}
+            disabled={usingDefaults && !canCreate}
+            title={usingDefaults && !canCreate ? 'A director or admin must set up metrics for this project first.' : undefined}
+          >
+            Manage metrics
+          </Button>
+        )}
       </Group>
 
       <Table withTableBorder verticalSpacing="xs" fz="sm">
@@ -205,6 +235,9 @@ export default function MetricsTab({ project, report, equipment = [] }) {
         equipment={equipment}
         onSave={handleSaveMetrics}
         saving={saving}
+        canCreate={canCreate}
+        canDelete={canDelete}
+        canManageSourceType={canManageSourceType}
       />
     </Box>
   )
@@ -253,7 +286,7 @@ function SourceLabel({ r, sourceLabels }) {
   return sourceLabels[r.autoKind] ?? r.autoKind
 }
 
-function MetricsManagerDialog({ opened, onClose, rows, setRows, sourceValues, sourceLabels, metricSources, equipment, onSave, saving }) {
+function MetricsManagerDialog({ opened, onClose, rows, setRows, sourceValues, sourceLabels, metricSources, equipment, onSave, saving, canCreate, canDelete, canManageSourceType }) {
   const [newLabel, setNewLabel] = useState('')
 
   function update(key, patch) {
@@ -319,24 +352,29 @@ function MetricsManagerDialog({ opened, onClose, rows, setRows, sourceValues, so
                 data={sourceOptions}
                 value={r.source === 'Manual' ? 'manual' : r.autoKind}
                 onChange={(v) => setSource(r.key, v)}
+                disabled={!canManageSourceType}
+                description={canManageSourceType ? undefined : 'Director/admin only'}
                 style={{ flex: 1.3 }}
               />
               <TextInput size="xs" label="Unit" value={r.unit} onChange={(e) => update(r.key, { unit: e.currentTarget.value })} w={70} />
               <Switch size="xs" mb={6} checked={!r.hidden} onChange={() => update(r.key, { hidden: !r.hidden })} label="Visible" />
               <Button size="xs" variant="subtle" onClick={() => move(i, -1)} disabled={i === 0}>↑</Button>
               <Button size="xs" variant="subtle" onClick={() => move(i, 1)} disabled={i === rows.length - 1}>↓</Button>
-              <Box onClick={() => remove(r.key)} style={{ cursor: 'pointer', color: '#ef4444', display: 'flex', paddingBottom: 8 }}>
-                <IconTrash size={13} />
-              </Box>
+              {canDelete && (
+                <Box onClick={() => remove(r.key)} style={{ cursor: 'pointer', color: '#ef4444', display: 'flex', paddingBottom: 8 }}>
+                  <IconTrash size={13} />
+                </Box>
+              )}
             </Group>
             {r.source === 'Auto' && (
               <Select
                 size="xs"
                 label="Equipment"
-                description="Which unit this Auto metric sums. Leave as All equipment for a project-wide total."
+                description={canManageSourceType ? 'Which unit this Auto metric sums. Leave as All equipment for a project-wide total.' : 'Director/admin only'}
                 data={equipmentOptions}
                 value={r.equipmentId ?? ''}
                 onChange={(v) => update(r.key, { equipmentId: v || null })}
+                disabled={!canManageSourceType}
                 mt={8}
                 w={260}
               />
@@ -344,10 +382,12 @@ function MetricsManagerDialog({ opened, onClose, rows, setRows, sourceValues, so
           </Box>
         ))}
       </Stack>
-      <Group gap={8}>
-        <TextInput size="xs" placeholder="New metric label" value={newLabel} onChange={(e) => setNewLabel(e.currentTarget.value)} style={{ flex: 1 }} />
-        <Button size="xs" onClick={addMetric} disabled={!newLabel.trim()} style={{ background: '#0F2744', border: 'none' }}>Add</Button>
-      </Group>
+      {canCreate && (
+        <Group gap={8}>
+          <TextInput size="xs" placeholder="New metric label" value={newLabel} onChange={(e) => setNewLabel(e.currentTarget.value)} style={{ flex: 1 }} />
+          <Button size="xs" onClick={addMetric} disabled={!newLabel.trim()} style={{ background: '#0F2744', border: 'none' }}>Add</Button>
+        </Group>
+      )}
       <Group justify="flex-end" gap={8} mt={16}>
         <Button size="xs" variant="default" onClick={onClose} disabled={saving}>Cancel</Button>
         <Button size="xs" onClick={handleSave} loading={saving} style={{ background: '#0F2744', border: 'none' }}>Save metrics</Button>

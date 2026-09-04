@@ -94,7 +94,7 @@ export function diffSurfaces(today, prior, opts) {
       if (genuine) { mask[(gy + GRID_PAD) * G.nx + (gx + GRID_PAD)] = 1; cut++ } else swing++
     }
   }
-  const closeR = Math.max(1, Math.round(PARAM.CLOSE_R / G.R))
+  const closeR = Math.max(1, Math.round((opts.closeFt ?? PARAM.CLOSE_R) / G.R))
   const minIsland = opts.minIslandSqFt ?? EARTHWORKS_DEFAULTS.minIslandSqFt
   let m = fillHoles(close(mask, closeR, G), G)
   if (minIsland > 0) m = dropSmallIslands(m, G, Math.round(minIsland / (G.R * G.R)))
@@ -127,7 +127,7 @@ export function coverageFromSurface(today, opts) {
       if (genuine) { mask[(gy + GRID_PAD) * G.nx + (gx + GRID_PAD)] = 1; kept++ } else swing++
     }
   }
-  const closeR = Math.max(1, Math.round(PARAM.CLOSE_R / G.R))
+  const closeR = Math.max(1, Math.round((opts.closeFt ?? PARAM.CLOSE_R) / G.R))
   const minIsland = opts.minIslandSqFt ?? EARTHWORKS_DEFAULTS.minIslandSqFt
   let m = kept ? fillHoles(close(mask, closeR, G), G) : mask
   if (kept && minIsland > 0) m = dropSmallIslands(m, G, Math.round(minIsland / (G.R * G.R)))
@@ -145,4 +145,70 @@ export function filenameDateISO(name) {
   const mo = parseInt(mm, 10), da = parseInt(dd, 10)
   if (mo < 1 || mo > 12 || da < 1 || da > 31) return null
   return `20${yy}-${mm}-${dd}`
+}
+
+// --- Isopach / difference-chart rendering from a CSV grid export -----------
+// The team re-exports the isopach as dredging progresses; accepting the raw
+// X,Y,DIFF grid here (instead of requiring a pre-rendered image) makes that a
+// one-file upload with the georeference computed from the data itself.
+
+/** Depth-difference color bins -- the team's OGS matrix convention (recovered
+ *  from the Torch Lake isopach DXF: grays = at/over design, greens < 1 ft,
+ *  cyan/blues 1-5 ft, yellows/orange 5-8 ft, pink/red 8-10+ ft remaining). */
+const ISO_BINS = [
+  { max: -1.5, rgb: [38, 0, 0] },
+  { max: -1.0, rgb: [0, 0, 0] },
+  { max: -0.5, rgb: [101, 101, 101] },
+  { max: -0.25, rgb: [128, 128, 128] },
+  { max: 0, rgb: [192, 192, 192] },
+  { max: 0.25, rgb: [0, 165, 0] },
+  { max: 0.5, rgb: [0, 76, 0] },
+  { max: 1, rgb: [0, 38, 0] },
+  { max: 2, rgb: [127, 255, 255] },
+  { max: 3, rgb: [127, 159, 255] },
+  { max: 4, rgb: [82, 82, 165] },
+  { max: 5, rgb: [0, 0, 76] },
+  { max: 6, rgb: [255, 255, 127] },
+  { max: 7, rgb: [255, 223, 127] },
+  { max: 8, rgb: [255, 127, 0] },
+  { max: 9, rgb: [204, 204, 204] },
+  { max: 10, rgb: [255, 127, 191] },
+]
+/** @param {number} v @returns {[number, number, number]} */
+export function isopachColor(v) {
+  // strict < : a value exactly on an edge takes the UPPER bin (e.g. 2.0 -> the
+  // 2-3 ft color) -- verified 99.2% pixel-identical to the team's own
+  // rendering of the real Torch Lake isopach.
+  for (const b of ISO_BINS) if (v < b.max) return b.rgb
+  return [255, 0, 0] // 10+ ft
+}
+
+/** Render an isopach/difference CSV grid (X,Y,DIFF) to a colored PNG File
+ *  (1 px per cell, transparent where no data) + its georeference, ready for
+ *  the standard config-asset upload path. Browser-only (canvas).
+ * @param {string} text
+ * @returns {Promise<{file: File, georef: {wL: number, wR: number, wT: number, wB: number}}>} */
+export async function isopachCsvToImage(text) {
+  const s = parseEarthworksCsv(text)
+  const canvas = document.createElement('canvas')
+  canvas.width = s.nx; canvas.height = s.ny
+  const g = canvas.getContext('2d')
+  if (!g) throw new Error('Could not create a canvas to render the isopach.')
+  const img = g.createImageData(s.nx, s.ny)
+  for (let gy = 0; gy < s.ny; gy++) {
+    for (let gx = 0; gx < s.nx; gx++) {
+      const v = s.val[gy * s.nx + gx]
+      if (Number.isNaN(v)) continue
+      const [r, gr, b] = isopachColor(v)
+      const o = ((s.ny - 1 - gy) * s.nx + gx) * 4 // image row 0 = north (max Y)
+      img.data[o] = r; img.data[o + 1] = gr; img.data[o + 2] = b; img.data[o + 3] = 255
+    }
+  }
+  g.putImageData(img, 0, 0)
+  const blob = await new Promise((res) => canvas.toBlob(res, 'image/png'))
+  if (!blob) throw new Error('Could not render the isopach image.')
+  return {
+    file: new File([blob], 'isopach.png', { type: 'image/png' }),
+    georef: { wL: s.x0 - 0.5, wR: s.x0 + s.nx - 0.5, wT: s.y0 + s.ny - 0.5, wB: s.y0 - 0.5 },
+  }
 }

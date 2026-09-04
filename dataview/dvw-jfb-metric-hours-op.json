@@ -1,0 +1,41 @@
+{
+  "slug": "dvw-jfb-metric-hours-op",
+  "description": "Operating Hours: sums jfb_daily_activities duration for a project across an inclusive report-date range, optionally scoped to one equipment unit. An activity counts as operating when its category is a productive label ('ACTIVE DREDGING' or 'ACTIVE PLACEMENT', the two values workType.js writes) or, for legacy rows saved before the category column existed, when category is null and delay_code_id is also null. Backs the 'Operating Hours' auto metric on the cover-page Metrics tab, matching the non-native app's category-based classification in eventTotals.ts.",
+  "authoring_mode": "direct_sql",
+  "implementation": "function",
+  "direct_sql": "SELECT COALESCE(SUM(EXTRACT(EPOCH FROM (da.end_date_time - da.start_date_time)) / 3600.0), 0) AS op_hours FROM usdf.jfb_daily_activities da WHERE da.project_id = p_project_id AND da.start_date_time::date BETWEEN p_start_date AND p_end_date AND (p_equipment_id IS NULL OR da.equipment_id = p_equipment_id) AND da.is_deleted IS NOT TRUE AND (da.category IN ('ACTIVE DREDGING', 'ACTIVE PLACEMENT') OR (da.category IS NULL AND da.delay_code_id IS NULL))",
+  "parameters": [
+    {
+      "name": "p_project_id",
+      "type": "uuid",
+      "required": true,
+      "description": "Project to scope the sum to."
+    },
+    {
+      "name": "p_start_date",
+      "type": "date",
+      "required": true,
+      "description": "Inclusive start of the report_date range -- today's date for Day, the week's start for Week, the project's start date for Total."
+    },
+    {
+      "name": "p_end_date",
+      "type": "date",
+      "required": true,
+      "description": "Inclusive end of the report_date range -- typically the report date being viewed."
+    },
+    {
+      "name": "p_equipment_id",
+      "type": "uuid",
+      "required": false,
+      "default": null,
+      "description": "Optional equipment filter. Null (the default) includes all equipment."
+    }
+  ],
+  "columns": [
+    {
+      "name": "op_hours",
+      "type": "numeric",
+      "description": "Summed duration (hours) of matched activities classified as operating; 0 when none match."
+    }
+  ]
+}
