@@ -1,5 +1,6 @@
 import { fetchDomainRecords, fetchPicklistValues, downloadAttachment, executeDataView } from '../../../data'
 import { renderWeeklyProgressCharts } from '../../../lib/dredge/weeklyChart'
+import { mondayStartISO } from './realizedToDate'
 
 function blobToDataUri(blob) {
   return new Promise((resolve, reject) => {
@@ -158,13 +159,41 @@ function buildDelaySummary(activities, projectDelayCodeById, masterDelayCodeById
     .sort((a, b) => b.minutes - a.minutes)
 }
 
-// Returns { activitiesByEquipment, delaySummaryByEquipment }, both keyed by
-// equipment_id -- the report template looks up each the same way, e.g.
-// `{{#with (lookup ../parameters.dailyActivityByEquipment this.id)}}`.
+// Dominant operator (most logged minutes that day) + shift bounds (earliest
+// start / latest end) for one equipment's activities. Free byproduct of the
+// activity rows buildDailyActivityByEquipmentParam already fetches -- no
+// extra data view needed, just an operator id -> name map.
+function summarizeOperatorShift(rows, operatorNameById) {
+  if (rows.length === 0) return { operator: '—', shiftFrom: '—', shiftTo: '—' }
+  const minutesByOperator = new Map()
+  let earliest = rows[0].start_date_time
+  let latest = rows[0].end_date_time
+  for (const a of rows) {
+    if (a.start_date_time < earliest) earliest = a.start_date_time
+    if (a.end_date_time && a.end_date_time > (latest ?? '')) latest = a.end_date_time
+    if (!a.operator_id) continue
+    const minutes = durationMinutes(a.start_date_time, a.end_date_time) ?? 0
+    minutesByOperator.set(a.operator_id, (minutesByOperator.get(a.operator_id) ?? 0) + minutes)
+  }
+  let dominantId = null
+  let dominantMinutes = -1
+  for (const [id, minutes] of minutesByOperator) {
+    if (minutes > dominantMinutes) { dominantId = id; dominantMinutes = minutes }
+  }
+  return {
+    operator: dominantId ? (operatorNameById.get(dominantId) ?? '—') : '—',
+    shiftFrom: hhmm(earliest),
+    shiftTo: latest ? hhmm(latest) : '—',
+  }
+}
+
+// Returns { activitiesByEquipment, delaySummaryByEquipment, opSummaryByEquipment },
+// all keyed by equipment_id -- the report template looks up each the same way,
+// e.g. `{{#with (lookup ../parameters.dailyActivityByEquipment this.id)}}`.
 export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, dateISO }) {
   const { gte, lt } = utcDayRange(dateISO)
 
-  const [activityRes, areaLabelRows, projectDelayRes, masterDelayRes, passTypeRows] = await Promise.all([
+  const [activityRes, areaLabelRows, projectDelayRes, masterDelayRes, passTypeRows, operatorRes] = await Promise.all([
     fetchDomainRecords({
       domain: 'jfb_daily_activities', system: 'core', appSlug,
       filters: { project_id: projectId, start_date_time: { gte, lt } },
@@ -182,6 +211,7 @@ export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, d
     fetchDomainRecords({ domain: 'jfb_project_delay_codes', system: 'core', appSlug, filters: { project_id: projectId }, limit: 1000 }),
     fetchDomainRecords({ domain: 'jfb_delay_codes', system: 'core', appSlug, limit: 1000 }),
     fetchPicklistValues('pkl-jfb-pass-type'),
+    fetchDomainRecords({ domain: 'jfb_operators', system: 'core', appSlug, limit: 500 }),
   ])
 
   const areaLabelByActivityId = new Map(
@@ -192,6 +222,7 @@ export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, d
   const passTypeLabels = Object.fromEntries(
     (passTypeRows || []).filter((r) => r.is_active !== false).map((r) => [r.value, r.label ?? r.value]),
   )
+  const operatorNameById = new Map((operatorRes?.data ?? []).map((o) => [o.id, o.name]))
 
   const activities = (activityRes?.data ?? []).filter((a) => sameCalendarDay(a.start_date_time, dateISO, a.timezone))
 
@@ -203,6 +234,7 @@ export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, d
 
   const activitiesByEquipment = {}
   const delaySummaryByEquipment = {}
+  const opSummaryByEquipment = {}
   for (const [equipmentId, rows] of byEquipment) {
     const sorted = rows.slice().sort((x, y) => new Date(x.start_date_time) - new Date(y.start_date_time))
     activitiesByEquipment[equipmentId] = sorted.map((a, i) => ({
@@ -220,8 +252,105 @@ export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, d
       notes: a.notes || '',
     }))
     delaySummaryByEquipment[equipmentId] = buildDelaySummary(rows, projectDelayCodeById, masterDelayCodeById)
+    opSummaryByEquipment[equipmentId] = summarizeOperatorShift(sorted, operatorNameById)
   }
-  return { activitiesByEquipment, delaySummaryByEquipment }
+  return { activitiesByEquipment, delaySummaryByEquipment, opSummaryByEquipment }
+}
+
+function fmtHrs(n) {
+  return (n ?? 0).toFixed(2)
+}
+function fmtPct(n) {
+  return n == null ? '—' : `${Math.round(n)}%`
+}
+function fmtNum(n) {
+  return Math.round(n ?? 0).toLocaleString()
+}
+
+// One equipment's GOH/NOH/Delay/Efficiency/Area/Volume for one date range,
+// via the already-published per-project/per-equipment metric data views
+// (same ones the on-screen Metrics tab uses) -- no new SQL needed.
+//
+// Deliberately does NOT call dvw-jfb-goh: its optional area/pass_type/tsca/
+// attachment_id filters use `IS NOT DISTINCT FROM`, which (unlike
+// p_equipment_id's `IS NULL OR ...`) treats an omitted/NULL filter as "match
+// only rows where this field is ALSO NULL" rather than "don't filter on
+// this" -- confirmed by testing against real data: every real activity has a
+// non-null area/pass_type/tsca/attachment_id, so an unscoped call silently
+// returned 0. dvw-jfb-goh is built for the combo-scoped drill-down (a
+// specific area/pass/tsca/attachment combination), not a plain equipment
+// total. GOH (every activity, productive or not) is instead derived as
+// noh + delay, which are exhaustive and mutually exclusive by construction
+// (dvw-jfb-metric-hours-op/-delay split on the same category check, no
+// third bucket) and have no such extra-filter footgun.
+async function fetchEquipmentMetrics({ projectId, equipmentId, startDate, endDate }) {
+  const p = { p_project_id: projectId, p_start_date: startDate, p_end_date: endDate, p_equipment_id: equipmentId }
+  const [noh, delay, efficiency, cy, sf] = await Promise.all([
+    executeDataView('dvw-jfb-metric-hours-op', p),
+    executeDataView('dvw-jfb-metric-hours-delay', p),
+    executeDataView('dvw-jfb-metric-efficiency', p),
+    executeDataView('dvw-jfb-metric-cy', p),
+    executeDataView('dvw-jfb-metric-sf', p),
+  ])
+  const nohHours = Number(noh?.[0]?.op_hours ?? 0)
+  const delayHours = Number(delay?.[0]?.delay_hours ?? 0)
+  return {
+    goh: fmtHrs(nohHours + delayHours),
+    noh: fmtHrs(nohHours),
+    delay: fmtHrs(delayHours),
+    efficiency: fmtPct(efficiency?.[0]?.efficiency_pct != null ? Number(efficiency[0].efficiency_pct) : null),
+    area: fmtNum(Number(sf?.[0]?.total_area ?? 0)),
+    volume: fmtNum(Number(cy?.[0]?.total_volume ?? 0)),
+  }
+}
+
+// Day/Week/Project-Total GOH/NOH/Delay/Efficiency/Area/Volume per equipment,
+// keyed by equipment_id -- fills in the Production Report sheet's "Daily
+// Production Totals by Activity" box, which previously shipped as hardcoded
+// em-dashes despite these exact metric views already existing (built for the
+// on-screen Metrics tab, never wired into this PDF). Week = Monday of this
+// report's week through the report date (running total, not the full
+// Mon-Sun span); Project = the project's production/start date through the
+// report date -- same "to-date" floor convention as Realized To-Date and
+// Weekly Summary.
+export async function buildProductionStatsByEquipmentParam({ projectId, project, dateISO, equipmentIds }) {
+  const weekStart = mondayStartISO(dateISO)
+  const projectStart = project?.production_start_date || (project?.start_date ? project.start_date.slice(0, 10) : '2000-01-01')
+
+  const entries = await Promise.all(
+    equipmentIds.map(async (equipmentId) => {
+      const [day, week, project_] = await Promise.all([
+        fetchEquipmentMetrics({ projectId, equipmentId, startDate: dateISO, endDate: dateISO }),
+        fetchEquipmentMetrics({ projectId, equipmentId, startDate: weekStart, endDate: dateISO }),
+        fetchEquipmentMetrics({ projectId, equipmentId, startDate: projectStart, endDate: dateISO }),
+      ])
+      return [equipmentId, { day, week, project: project_ }]
+    }),
+  )
+  return Object.fromEntries(entries)
+}
+
+// Whole-project (all equipment) Day/Week/Project-Total production volume,
+// via the same dvw-jfb-metric-cy view -- fills the cover page's "Project
+// Production Table" Week/Project Total columns, which previously shipped
+// hardcoded. Per-pass-value breakdowns for Week/Project aren't available
+// without a new grouped-by-pass data view (out of scope here), so this adds
+// one honest "Total (All Passes)" row rather than fabricating per-row totals.
+export async function buildCoverProductionTotalsParam({ projectId, project, dateISO }) {
+  const weekStart = mondayStartISO(dateISO)
+  const projectStart = project?.production_start_date || (project?.start_date ? project.start_date.slice(0, 10) : '2000-01-01')
+  const p = (startDate) => ({ p_project_id: projectId, p_start_date: startDate, p_end_date: dateISO, p_equipment_id: null })
+
+  const [day, week, proj] = await Promise.all([
+    executeDataView('dvw-jfb-metric-cy', p(dateISO)),
+    executeDataView('dvw-jfb-metric-cy', p(weekStart)),
+    executeDataView('dvw-jfb-metric-cy', p(projectStart)),
+  ])
+  return {
+    day: fmtNum(Number(day?.[0]?.total_volume ?? 0)),
+    week: fmtNum(Number(week?.[0]?.total_volume ?? 0)),
+    project: fmtNum(Number(proj?.[0]?.total_volume ?? 0)),
+  }
 }
 
 // Ported from the non-native app's validateForPdf: blocks PDF generation

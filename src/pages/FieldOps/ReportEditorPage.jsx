@@ -15,6 +15,8 @@ import {
   buildPhotoAssetsParam,
   buildDredgeChartAssetsParam,
   buildSafetyPageDataParam,
+  buildProductionStatsByEquipmentParam,
+  buildCoverProductionTotalsParam,
   buildCompletionChecklist,
   validatePdfIssues,
 } from './lib/reportPdfData'
@@ -127,13 +129,16 @@ export default function ReportEditorPage() {
         return
       }
 
-      const [dailyActivityData, photoAssets, dredgeChartAssets, safetyPageData] = await Promise.all([
+      const equipmentIds = equipment.map((eq) => eq.id)
+      const [dailyActivityData, photoAssets, dredgeChartAssets, safetyPageData, productionStatsByEquipment, productionTotals] = await Promise.all([
         buildDailyActivityByEquipmentParam({ appSlug: config.appSlug, projectId, dateISO: date }),
         buildPhotoAssetsParam({ appSlug: config.appSlug, reportId }),
         buildDredgeChartAssetsParam({ appSlug: config.appSlug, reportId }),
         buildSafetyPageDataParam({ appSlug: config.appSlug, projectId, reportId, dateISO: date, project }),
+        buildProductionStatsByEquipmentParam({ projectId, project, dateISO: date, equipmentIds }),
+        buildCoverProductionTotalsParam({ projectId, project, dateISO: date }),
       ])
-      const { activitiesByEquipment: dailyActivityByEquipment, delaySummaryByEquipment } = dailyActivityData
+      const { activitiesByEquipment: dailyActivityByEquipment, delaySummaryByEquipment, opSummaryByEquipment } = dailyActivityData
       const result = await executeReport('rpt-jfb-daily-report', {
         parameters: {
           projectId,
@@ -145,16 +150,20 @@ export default function ReportEditorPage() {
           narrativeSections,
           dailyActivityByEquipment,
           delaySummaryByEquipment,
+          opSummaryByEquipment,
           photoAssets,
           dredgeChartAssets,
           safetyPageData,
+          productionStatsByEquipment,
+          productionTotals,
         },
       })
       const fileRes = await api.get(result.downloadUrl, { responseType: 'blob' })
       const blobUrl = URL.createObjectURL(new Blob([fileRes.data], { type: 'application/pdf' }))
       const link = document.createElement('a')
       link.href = blobUrl
-      link.download = `${date} ${project?.name ?? 'Daily Report'}.pdf`
+      const yymmdd = date.replaceAll('-', '').slice(2)
+      link.download = `${yymmdd} ${project?.name ?? 'Daily Report'} Daily Report.pdf`
       document.body.appendChild(link)
       link.click()
       link.remove()
