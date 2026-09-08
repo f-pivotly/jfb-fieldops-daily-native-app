@@ -487,15 +487,3 @@ export function buildRealizedReport(project, days, delayRows, excluded, reasons,
     forecast,
   }
 }
-
-/** Whether the two planning inputs are set so the forecast can run. */
-export function isForecastEnabled(project, measure) {
-  const bidRate = measure ? measure.bidRate : project.cy_goh_goal ?? 0
-  return (
-    project.expected_goh_per_day != null &&
-    project.expected_goh_per_day > 0 &&
-    project.production_days_per_week != null &&
-    project.production_days_per_week > 0 &&
-    bidRate > 0
-  )
-}

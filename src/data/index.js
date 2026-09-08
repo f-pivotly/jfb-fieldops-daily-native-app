@@ -35,8 +35,6 @@ function resolveApiBase() {
 }
 
 export const API_BASE_URL = resolveApiBase()
-export const FILE_BASE_URL =
-  import.meta.env.VITE_FILE_BASE_URL || 'http://localhost:3000/files'
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
