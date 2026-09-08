@@ -293,6 +293,174 @@
         "code": "lww"
       },
       "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "show_ssho_field",
+      "slug": "show_ssho_field",
+      "type": "boolean",
+      "label": "Show SSHO Field",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "boolean",
+      "column_name": "show_ssho_field",
+      "description": "When true, the Safety tab's Sign-off section shows a second 'Project SSHO' name + signature block alongside the report preparer's. Matches the non-native app's projects.show_ssho_field (currently only set for one project, Torch Lake).",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "show_next_day_summary",
+      "slug": "show_next_day_summary",
+      "type": "boolean",
+      "label": "Show Next Day Summary",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "boolean",
+      "column_name": "show_next_day_summary",
+      "description": "When true, the Safety tab's Daily Safety Updates section shows an 8th row, 'Summary of Next Day's Expected Work'. Matches the non-native app's projects.show_next_day_summary (currently only set for one project, Torch Lake).",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "latitude",
+      "slug": "latitude",
+      "type": "numeric",
+      "label": "Latitude",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "latitude",
+      "description": "Project site latitude, used to fetch weather conditions for the Safety tab's Climate Summary. Matches the non-native app's projects.latitude.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "longitude",
+      "slug": "longitude",
+      "type": "numeric",
+      "label": "Longitude",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "longitude",
+      "description": "Project site longitude, used to fetch weather conditions for the Safety tab's Climate Summary. Matches the non-native app's projects.longitude.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "cy_goh_goal",
+      "slug": "cy_goh_goal",
+      "type": "numeric",
+      "label": "CY/GOH Goal",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "cy_goh_goal",
+      "description": "Bid/target production rate (quantity per Gross Operating Hour), used by the Realized To-Date report as the plan/pace baseline and as the fallback rate when a projection window has no matching activity. Matches the non-native app's projects.cy_goh_goal. Not editable in-app on either app -- set once during project setup.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "expected_goh_per_day",
+      "slug": "expected_goh_per_day",
+      "type": "numeric",
+      "label": "Expected GOH per Day",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "expected_goh_per_day",
+      "description": "Planned Gross Operating Hours per production day, edited from Project Settings. Combined with the projection-window rate to turn remaining quantity into a work-days-remaining estimate on the Realized To-Date report. Matches the non-native app's projects.expected_goh_per_day. Null (unset) means the report's forecast/projection block is disabled, not zero.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "production_days_per_week",
+      "slug": "production_days_per_week",
+      "type": "numeric",
+      "label": "Production Days per Week",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "production_days_per_week",
+      "description": "Planned work days per calendar week, edited from Project Settings. Used with expected_goh_per_day to convert a work-days-remaining estimate into a calendar finish date on the Realized To-Date report. Matches the non-native app's projects.production_days_per_week.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "production_start_date",
+      "slug": "production_start_date",
+      "type": "date",
+      "label": "Production Start Date",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "date",
+      "column_name": "production_start_date",
+      "description": "Anchor date the Realized To-Date report's project-week counter (Monday-of-week 1) is calculated from -- separate from start_date, since mobilization and first production rarely land on the same day. Matches the non-native app's projects.production_start_date.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
     }
   ],
   "archive": true,

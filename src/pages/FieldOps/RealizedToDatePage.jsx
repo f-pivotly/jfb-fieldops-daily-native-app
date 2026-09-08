@@ -1,163 +1,271 @@
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Box, ScrollArea, Grid, Text, Table, Group, Button, Stack } from '@mantine/core'
+import { Box, ScrollArea, Grid, Text, Table, Group, Button, Stack, TextInput, UnstyledButton } from '@mantine/core'
+import { api, executeDataView, executeReport, fetchCurrentUser, fetchFileById, createDomainRecord } from '../../data'
+import { useAppConfig } from '../../contexts/appConfigContext'
+import { useProject } from '../../hooks/useProject'
+import { useRealizedExcludedDays } from '../../hooks/useRealizedExcludedDays'
+import { useProductionWeekBreaks } from '../../hooks/useProductionWeekBreaks'
+import ReasonDialog from '../../components/ReasonDialog'
+import ScheduledOffDaysCard from '../../components/ScheduledOffDaysCard'
+import { buildRealizedReport, todayISO, prettyDate, addDaysISO, mondayStartISO } from './lib/realizedToDate'
+import { buildRealizedReportParams } from './lib/realizedPdfData'
 
-const REALIZED_SUMMARY_PLACEHOLDER = {
-  projectName: '',
-  unit: '',
-  goal: 0,
-  toDate: 0,
-  plannedToDate: 0,
-  cyAheadOfPace: 0,
-  remaining: 0,
-  pctComplete: 0,
-  bidRate: 0,
-  currentRate: 0,
-  anticipatedDailyProduction: 0,
-  daysAheadBehind: 0,
+function fmtRate(n) {
+  return (n ?? 0).toLocaleString(undefined, { maximumFractionDigits: 1 })
 }
-const PROJECTIONS_PLACEHOLDER = []
-const DELAY_SUMMARY_PLACEHOLDER = []
-const WEEKLY_LOG_PLACEHOLDER = []
-const SHUTDOWN_PERIODS_PLACEHOLDER = []
+function fmtNum(n) {
+  return Math.round(n ?? 0).toLocaleString()
+}
+function fmtHours(n) {
+  return (n ?? 0).toFixed(2)
+}
 
 export default function RealizedToDatePage() {
   const { projectId } = useParams()
-  const s = REALIZED_SUMMARY_PLACEHOLDER
+  const { config } = useAppConfig()
+  const { project, loading: projectLoading } = useProject(projectId)
+  const {
+    excludedDays, create: createExcluded, remove: removeExcluded,
+  } = useRealizedExcludedDays(projectId)
+  const {
+    breaks, creating: addingBreak, create: createBreak, remove: removeBreak,
+  } = useProductionWeekBreaks(projectId)
+
+  const today = todayISO()
+  const currentWeekStart = addDaysISO(mondayStartISO(today), -7)
+  const currentWeekEnd = addDaysISO(currentWeekStart, 6)
+
+  const [dailyTotals, setDailyTotals] = useState(null)
+  const [dailyTotalsError, setDailyTotalsError] = useState(null)
+  useEffect(() => {
+    if (!project?.id) return
+    let cancelled = false
+    const startDate = project.production_start_date || (project.start_date ? project.start_date.slice(0, 10) : '2000-01-01')
+    executeDataView('dvw-jfb-realized-daily-totals', { p_project_id: project.id, p_start_date: startDate })
+      .then((rows) => { if (!cancelled) setDailyTotals(rows) })
+      .catch((err) => { if (!cancelled) setDailyTotalsError(err.message) })
+    return () => { cancelled = true }
+  }, [project?.id, project?.production_start_date, project?.start_date])
+
+  const [delayRows, setDelayRows] = useState([])
+  useEffect(() => {
+    if (!project?.id) return
+    let cancelled = false
+    executeDataView('dvw-jfb-realized-delay-summary', {
+      p_project_id: project.id, p_start_date: currentWeekStart, p_end_date: currentWeekEnd,
+    })
+      .then((rows) => { if (!cancelled) setDelayRows(rows) })
+      .catch(() => { if (!cancelled) setDelayRows([]) })
+    return () => { cancelled = true }
+  }, [project?.id, currentWeekStart, currentWeekEnd])
+
+  const report = useMemo(() => {
+    if (!project || !dailyTotals) return null
+    const excludedSet = new Set(excludedDays.map((e) => e.exclude_date))
+    const reasons = new Map(excludedDays.map((e) => [e.exclude_date, e.reason]))
+    return buildRealizedReport(project, dailyTotals, delayRows, excludedSet, reasons, breaks, today)
+  }, [project, dailyTotals, delayRows, excludedDays, breaks, today])
+
+  const [excludeTarget, setExcludeTarget] = useState(null)
+  const [savingExclude, setSavingExclude] = useState(false)
+  const [actionError, setActionError] = useState(null)
+
+  async function confirmExclude(reason) {
+    if (!projectId || !excludeTarget) return
+    setSavingExclude(true)
+    try {
+      await createExcluded({
+        project_id: projectId, exclude_date: excludeTarget, reason,
+      })
+      setExcludeTarget(null)
+    } catch (e) {
+      setActionError(e.message)
+    } finally {
+      setSavingExclude(false)
+    }
+  }
+
+  async function includeDay(date) {
+    const row = excludedDays.find((e) => e.exclude_date === date)
+    if (!row) return
+    try {
+      await removeExcluded(row.id)
+    } catch (e) {
+      setActionError(e.message)
+    }
+  }
+
+  const [pdfBusy, setPdfBusy] = useState(false)
+  async function handleDownloadPdf() {
+    if (!report || !project) return
+    setPdfBusy(true)
+    try {
+      const generatedISO = todayISO()
+      const params = buildRealizedReportParams({ report, project, projectCode: project.project_code, generatedISO })
+      const result = await executeReport('rpt-jfb-realized-to-date', { parameters: params })
+      const fileRes = await api.get(result.downloadUrl, { responseType: 'blob' })
+      const blobUrl = URL.createObjectURL(new Blob([fileRes.data], { type: 'application/pdf' }))
+      const link = document.createElement('a')
+      link.href = blobUrl
+      link.download = `${generatedISO.replace(/-/g, '')}_${project.project_code}_RealizedToDate.pdf`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(blobUrl)
+
+      try {
+        const [me, file] = await Promise.all([
+          fetchCurrentUser(),
+          result.fileKey ? fetchFileById(result.fileKey) : Promise.resolve(null),
+        ])
+        await createDomainRecord({
+          domain: 'jfb_report_generations',
+          system: 'core',
+          appSlug: config.appSlug,
+          recordData: {
+            project_id: projectId,
+            report_slug: 'rpt-jfb-realized-to-date',
+            generated_at: new Date().toISOString(),
+            generated_by_user_id: me.id,
+            generated_by_email: me.email,
+            file_id: result.fileKey ?? null,
+            file_name: file?.logicalName ?? null,
+            file_path: file?.storagePath ?? null,
+            download_url: result.downloadUrl,
+          },
+        })
+      } catch (logErr) {
+        console.error('Failed to log report generation:', logErr.message)
+      }
+    } catch (e) {
+      setActionError(e.message)
+    } finally {
+      setPdfBusy(false)
+    }
+  }
+
+  const loading = projectLoading || (!!project?.id && dailyTotals === null)
 
   return (
     <ScrollArea flex={1} style={{ minHeight: 0 }}>
       <Box p={24} maw={1200} mx="auto">
         <Group justify="space-between" mb={4}>
           <Text fw={700} size="lg">Realized To-Date</Text>
-          <Link to={`/projects/${projectId}/reports`} style={{ fontSize: 13 }}>← Reports</Link>
+          <Group gap="md">
+            {report && report.weeks.length > 0 && (
+              <Button size="xs" variant="outline" loading={pdfBusy} onClick={handleDownloadPdf}>
+                {pdfBusy ? 'Generating…' : 'Download PDF'}
+              </Button>
+            )}
+            <Link to={`/projects/${projectId}/reports`} style={{ fontSize: 13 }}>← Reports</Link>
+          </Group>
         </Group>
         <Text size="sm" c="dimmed" mb={20}>
           Cumulative production vs goal and completion forecast. Internal report — not client-facing.
         </Text>
 
-        <Grid gutter="lg">
-          <Grid.Col span={{ base: 12, lg: 4 }}>
-            <Stack gap="md">
-              <Card title={s.projectName}>
-                <StatRow label="Goal" value={`${fmt(s.goal)} ${s.unit}`} />
-                <StatRow label={`${s.unit} to date`} value={`${fmt(s.toDate)} ${s.unit}`} />
-                <StatRow label="Planned to date" value={`${fmt(s.plannedToDate)} ${s.unit}`} />
-                <StatRow label={`${s.unit} ahead of pace`} value={`+${fmt(s.cyAheadOfPace)} ${s.unit}`} color="green" />
-                <StatRow label="Remaining to goal" value={`${fmt(s.remaining)} ${s.unit}`} />
-                <StatRow label="Percent complete" value={`${(s.pctComplete * 100).toFixed(1)}%`} />
-                <StatRow label="Bid goal rate" value={`${s.bidRate} ${s.unit}/GOH`} />
-                <StatRow label="Current rate" value={`${s.currentRate} ${s.unit}/GOH`} />
-                <StatRow label="Pace" value={`${s.daysAheadBehind} days ahead`} color="green" />
-              </Card>
+        {(dailyTotalsError || actionError) && (
+          <Box mb={16} p={12} style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6 }}>
+            <Text size="sm" c="#b91c1c">{dailyTotalsError || actionError}</Text>
+          </Box>
+        )}
+        {loading && <Text size="sm" c="dimmed">Loading…</Text>}
 
-              <Card title="Projected completion">
-                <Table fz="sm" withRowBorders={false}>
-                  <Table.Thead>
-                    <Table.Tr><Table.Th>Scenario</Table.Th><Table.Th ta="right">Rate</Table.Th><Table.Th ta="right">Days left</Table.Th><Table.Th ta="right">Finish</Table.Th></Table.Tr>
-                  </Table.Thead>
-                  <Table.Tbody>
-                    {PROJECTIONS_PLACEHOLDER.map((p) => (
-                      <Table.Tr key={p.key}>
-                        <Table.Td>{p.label}</Table.Td>
-                        <Table.Td ta="right">{p.rate}</Table.Td>
-                        <Table.Td ta="right">{p.daysLeft}</Table.Td>
-                        <Table.Td ta="right">{p.estFinish}</Table.Td>
-                      </Table.Tr>
-                    ))}
-                  </Table.Tbody>
-                </Table>
-              </Card>
+        {!loading && report && project && (
+          <>
+            {!report.summary.planEnabled && (
+              <Box mb={16} p={12} style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6 }}>
+                <Text size="sm" c="#92400e">
+                  Forecast disabled — set <Text span fw={700} fs="normal">Expected GOH/day</Text> and{' '}
+                  <Text span fw={700} fs="normal">Production days/week</Text> on the{' '}
+                  <Link to={`/projects/${projectId}/settings`} style={{ textDecoration: 'underline', fontWeight: 600 }}>
+                    Project Settings
+                  </Link>{' '}
+                  page to enable completion projections.
+                </Text>
+              </Box>
+            )}
 
-              <Card title="Delay summary · this week">
-                <Table fz="sm" withRowBorders={false}>
-                  <Table.Thead>
-                    <Table.Tr><Table.Th>Description</Table.Th><Table.Th ta="right">Hours</Table.Th><Table.Th ta="right">%</Table.Th></Table.Tr>
-                  </Table.Thead>
-                  <Table.Tbody>
-                    {DELAY_SUMMARY_PLACEHOLDER.map((d) => (
-                      <Table.Tr key={d.description}>
-                        <Table.Td>{d.description}</Table.Td>
-                        <Table.Td ta="right">{d.hours}</Table.Td>
-                        <Table.Td ta="right">{(d.pct * 100).toFixed(0)}%</Table.Td>
-                      </Table.Tr>
-                    ))}
-                  </Table.Tbody>
-                </Table>
-              </Card>
-            </Stack>
-          </Grid.Col>
+            <Grid gutter="lg">
+              <Grid.Col span={{ base: 12, lg: 4 }}>
+                <Stack gap="md">
+                  <SummaryCard report={report} />
+                  <ProjectionsCard report={report} />
+                  <DelaySummaryCard report={report} />
+                </Stack>
+              </Grid.Col>
 
-          <Grid.Col span={{ base: 12, lg: 8 }}>
-            <Card title="Weekly log" noPad>
-              <Table fz="sm">
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>Date</Table.Th><Table.Th ta="right">{s.unit}</Table.Th><Table.Th ta="right">GOH</Table.Th>
-                    <Table.Th ta="right">{s.unit}/GOH</Table.Th><Table.Th ta="right">Running {s.unit}</Table.Th><Table.Th />
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {WEEKLY_LOG_PLACEHOLDER.map((wk) => (
-                    <WeekBlock key={wk.projectWeek} wk={wk} />
-                  ))}
-                </Table.Tbody>
-              </Table>
-            </Card>
+              <Grid.Col span={{ base: 12, lg: 8 }}>
+                <WeeklyLog report={report} onExclude={(date) => setExcludeTarget(date)} onInclude={includeDay} />
 
-            <Card title="Shutdown periods" mt="md">
-              <Stack gap={6}>
-                {SHUTDOWN_PERIODS_PLACEHOLDER.map((p) => (
-                  <Group key={p.id} justify="space-between">
-                    <Text size="sm">{p.start} – {p.end}</Text>
-                    <Text size="xs" c="dimmed">{p.reason}</Text>
-                  </Group>
-                ))}
-                <Button size="xs" variant="default" w="fit-content">+ Add shutdown period</Button>
-              </Stack>
-            </Card>
-          </Grid.Col>
-        </Grid>
+                <Box mt="md">
+                  <ScheduledOffDaysCard
+                    projectId={projectId}
+                    excludedDays={excludedDays}
+                    today={today}
+                    onCreate={createExcluded}
+                    onRemove={removeExcluded}
+                    onError={setActionError}
+                  />
+                </Box>
+
+                <ShutdownManager
+                  breaks={breaks}
+                  adding={addingBreak}
+                  onAdd={async (start, end, reason) => {
+                    try {
+                      await createBreak({ project_id: projectId, shutdown_start: start, shutdown_end: end, reason: reason || null })
+                    } catch (e) {
+                      setActionError(e.message)
+                    }
+                  }}
+                  onRemove={async (id) => {
+                    try {
+                      await removeBreak(id)
+                    } catch (e) {
+                      setActionError(e.message)
+                    }
+                  }}
+                />
+              </Grid.Col>
+            </Grid>
+          </>
+        )}
       </Box>
+
+      <ReasonDialog
+        opened={excludeTarget !== null}
+        onClose={() => setExcludeTarget(null)}
+        title="Exclude this day"
+        label={excludeTarget ? `Why is ${prettyDate(excludeTarget)} excluded from the rate & forecast?` : 'Reason'}
+        placeholder="e.g. permit hold, equipment casualty"
+        confirmLabel="Exclude day"
+        confirmColor="red"
+        onConfirm={confirmExclude}
+        submitting={savingExclude}
+      />
     </ScrollArea>
   )
 }
 
-function WeekBlock({ wk }) {
+function StatRow({ label, value, hint, color }) {
   return (
-    <>
-      <Table.Tr style={{ background: 'var(--mantine-color-gray-0)' }}>
-        <Table.Td colSpan={6}><Text size="xs" fw={700} tt="uppercase">Week {wk.projectWeek}</Text></Table.Td>
-      </Table.Tr>
-      {wk.rows.map((r) => (
-        <Table.Tr key={r.date} style={r.excluded ? { color: 'var(--mantine-color-gray-5)' } : undefined}>
-          <Table.Td>
-            {r.date}
-            {r.excluded && r.reason && <Text size="10px" fs="italic">Excluded — {r.reason}</Text>}
-          </Table.Td>
-          <Table.Td ta="right">{fmt(r.cy)}</Table.Td>
-          <Table.Td ta="right">{r.goh}</Table.Td>
-          <Table.Td ta="right">{r.cyPerGoh}</Table.Td>
-          <Table.Td ta="right">{r.excluded ? '—' : fmt(r.runningCy)}</Table.Td>
-          <Table.Td ta="right">
-            <Text size="xs">{r.excluded ? 'Include' : 'Exclude'}</Text>
-          </Table.Td>
-        </Table.Tr>
-      ))}
-      <Table.Tr style={{ background: 'var(--mantine-color-gray-0)', fontWeight: 600 }}>
-        <Table.Td>Week {wk.projectWeek} subtotal</Table.Td>
-        <Table.Td ta="right">{fmt(wk.subtotalCy)}</Table.Td>
-        <Table.Td ta="right">{wk.subtotalGoh}</Table.Td>
-        <Table.Td colSpan={3} />
-      </Table.Tr>
-    </>
+    <Box py={4} style={{ borderBottom: '1px solid var(--mantine-color-gray-1)' }}>
+      <Group justify="space-between" align="flex-start" wrap="nowrap">
+        <Text size="10px" c="dimmed" tt="uppercase">{label}</Text>
+        <Text size="sm" fw={500} c={color} ta="right">{value}</Text>
+      </Group>
+      {hint && <Text size="10px" c="dimmed" ta="right">{hint}</Text>}
+    </Box>
   )
 }
 
-function Card({ title, children, noPad, mt }) {
+function Card({ title, children, noPad }) {
   return (
-    <Box mt={mt} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8, overflow: 'hidden' }}>
+    <Box style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8, overflow: 'hidden' }}>
       <Box p={noPad ? '12px 16px' : 16} pb={noPad ? 8 : 16}>
-        <Text fw={600} size="sm" mb={noPad ? 0 : 8}>{title}</Text>
+        <Text fw={700} size="sm" mb={noPad ? 0 : 8}>{title}</Text>
         {!noPad && children}
       </Box>
       {noPad && children}
@@ -165,15 +273,226 @@ function Card({ title, children, noPad, mt }) {
   )
 }
 
-function StatRow({ label, value, color }) {
+function SummaryCard({ report }) {
+  const s = report.summary
+  const aheadBehind =
+    s.daysAheadBehind == null
+      ? '—'
+      : s.daysAheadBehind >= 0
+        ? `${s.daysAheadBehind.toFixed(1)} days ahead`
+        : `${Math.abs(s.daysAheadBehind).toFixed(1)} days behind`
   return (
-    <Group justify="space-between" py={4} style={{ borderBottom: '1px solid var(--mantine-color-gray-1)' }}>
-      <Text size="xs" c="dimmed" tt="uppercase">{label}</Text>
-      <Text size="sm" fw={500} c={color}>{value}</Text>
-    </Group>
+    <Card title={s.projectName}>
+      <StatRow label="Goal" value={`${fmtNum(s.goal)} ${s.unit}`} />
+      <StatRow label={`${s.unit} to date`} value={`${fmtNum(s.toDate)} ${s.unit}`} />
+      {s.plannedToDate != null && (
+        <StatRow
+          label={s.paceByGoh
+            ? `Expected at ${fmtRate(s.bidRate)} ${s.unit}/GOH × ${fmtNum(s.totalGoh)} GOH worked`
+            : `Planned at ${fmtNum(s.anticipatedDailyProduction ?? 0)} ${s.unit}/day`}
+          value={`${fmtNum(s.plannedToDate)} ${s.unit}`}
+        />
+      )}
+      {s.cyAheadOfPace != null && (
+        <StatRow
+          label={s.cyAheadOfPace >= 0 ? `${s.unit} ahead of pace` : `${s.unit} behind pace`}
+          value={`${s.cyAheadOfPace >= 0 ? '+' : '-'}${fmtNum(Math.abs(s.cyAheadOfPace))} ${s.unit}`}
+          color={s.cyAheadOfPace >= 0 ? 'green' : 'red'}
+        />
+      )}
+      <StatRow label={`${s.unit} remaining to goal`} value={`${fmtNum(s.remaining)} ${s.unit}`} />
+      <StatRow label="Percent complete" value={`${(s.pctComplete * 100).toFixed(1)}%`} />
+      <StatRow label="Bid goal rate" value={`${fmtRate(s.bidRate)} ${s.unit}/GOH`} />
+      <StatRow label="Current overall rate" value={`${fmtRate(s.currentRate)} ${s.unit}/GOH`} />
+      <StatRow
+        label="Anticipated daily production"
+        value={s.anticipatedDailyProduction == null ? '—' : `${fmtNum(s.anticipatedDailyProduction)} ${s.unit}/day`}
+      />
+      <StatRow label="Pace" value={aheadBehind} />
+    </Card>
   )
 }
 
-function fmt(n) {
-  return n?.toLocaleString(undefined, { maximumFractionDigits: 1 }) ?? '—'
+function ProjectionsCard({ report }) {
+  return (
+    <Card title="Projected completion">
+      <Table fz="sm" withRowBorders={false}>
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>Scenario</Table.Th>
+            <Table.Th ta="right">Rate</Table.Th>
+            <Table.Th ta="right">Days left</Table.Th>
+            <Table.Th ta="right">Est. finish</Table.Th>
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {report.projections.map((p) => (
+            <Table.Tr key={p.key}>
+              <Table.Td>{p.label}</Table.Td>
+              <Table.Td ta="right" style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtRate(p.rateCyPerGoh)}</Table.Td>
+              <Table.Td ta="right" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                {p.complete ? '—' : p.workDaysRemaining != null ? p.workDaysRemaining : '—'}
+              </Table.Td>
+              <Table.Td ta="right" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                {p.complete ? 'Complete' : p.estCompletionDate ? prettyDate(p.estCompletionDate) : '—'}
+              </Table.Td>
+            </Table.Tr>
+          ))}
+        </Table.Tbody>
+      </Table>
+      <Text size="10px" c="dimmed" mt={8}>
+        Rate = {report.summary.unit}/GOH over each window. Days left = production work-days to finish at
+        that rate. Finish date uses the project's expected GOH/day &amp; production days/week.
+      </Text>
+    </Card>
+  )
+}
+
+function DelaySummaryCard({ report }) {
+  const { delaySummary, delayTotalHours } = report
+  return (
+    <Card title="Delay summary · this week">
+      {delaySummary.length === 0 ? (
+        <Text size="sm" c="dimmed">No delays logged this week.</Text>
+      ) : (
+        <Table fz="sm" withRowBorders={false}>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Description</Table.Th>
+              <Table.Th ta="right">Hours</Table.Th>
+              <Table.Th ta="right">%</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {delaySummary.map((d) => (
+              <Table.Tr key={d.description}>
+                <Table.Td>{d.description}</Table.Td>
+                <Table.Td ta="right" style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtHours(d.hours)}</Table.Td>
+                <Table.Td ta="right" style={{ fontVariantNumeric: 'tabular-nums' }}>{(d.pct * 100).toFixed(0)}%</Table.Td>
+              </Table.Tr>
+            ))}
+            <Table.Tr style={{ borderTop: '1px solid var(--mantine-color-gray-3)', fontWeight: 600 }}>
+              <Table.Td>Total</Table.Td>
+              <Table.Td ta="right" style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtHours(delayTotalHours)}</Table.Td>
+              <Table.Td />
+            </Table.Tr>
+          </Table.Tbody>
+        </Table>
+      )}
+    </Card>
+  )
+}
+
+function WeeklyLog({ report, onExclude, onInclude }) {
+  const unit = report.summary.unit
+  if (report.weeks.length === 0) {
+    return (
+      <Box style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }} px={24} py={40} ta="center">
+        <Text size="sm" c="dimmed">No released reports with production yet. The log fills in as daily reports are released.</Text>
+      </Box>
+    )
+  }
+  return (
+    <Card title="Weekly log" noPad>
+      <Table fz="sm">
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>Date</Table.Th>
+            <Table.Th ta="right">{unit}</Table.Th>
+            <Table.Th ta="right">GOH</Table.Th>
+            <Table.Th ta="right">{unit}/GOH</Table.Th>
+            <Table.Th ta="right">Running {unit}</Table.Th>
+            <Table.Th />
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {report.weeks.map((wk) => (
+            <WeekBlock key={wk.projectWeek} wk={wk} onExclude={onExclude} onInclude={onInclude} />
+          ))}
+        </Table.Tbody>
+      </Table>
+    </Card>
+  )
+}
+
+function WeekBlock({ wk, onExclude, onInclude }) {
+  return (
+    <>
+      <Table.Tr style={{ background: 'rgba(15,39,68,0.04)' }}>
+        <Table.Td colSpan={6}>
+          <Text size="xs" fw={700} tt="uppercase" c="#0F2744">Week {wk.projectWeek}</Text>
+        </Table.Td>
+      </Table.Tr>
+      {wk.rows.map((r) => (
+        <Table.Tr key={r.date} style={r.excluded ? { color: 'var(--mantine-color-gray-5)', background: 'var(--mantine-color-gray-0)' } : undefined}>
+          <Table.Td>
+            {prettyDate(r.date)}
+            {r.excluded && r.reason && <Text size="10px" fs="italic">Excluded — {r.reason}</Text>}
+          </Table.Td>
+          <Table.Td ta="right" style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtNum(r.cy)}</Table.Td>
+          <Table.Td ta="right" style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtHours(r.goh)}</Table.Td>
+          <Table.Td ta="right" style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtRate(r.cyPerGoh)}</Table.Td>
+          <Table.Td ta="right" style={{ fontVariantNumeric: 'tabular-nums' }}>{r.excluded ? '—' : fmtNum(r.runningCy)}</Table.Td>
+          <Table.Td ta="right">
+            {r.excluded ? (
+              <UnstyledButton onClick={() => onInclude(r.date)}><Text size="xs" c="#0F2744" style={{ textDecoration: 'underline' }}>Include</Text></UnstyledButton>
+            ) : (
+              <UnstyledButton onClick={() => onExclude(r.date)}><Text size="xs" c="dimmed" style={{ textDecoration: 'underline' }}>Exclude</Text></UnstyledButton>
+            )}
+          </Table.Td>
+        </Table.Tr>
+      ))}
+      <Table.Tr style={{ borderTop: '1px solid var(--mantine-color-gray-3)', background: 'var(--mantine-color-gray-0)', fontWeight: 600 }}>
+        <Table.Td><Text size="xs" tt="uppercase">Week {wk.projectWeek} subtotal</Text></Table.Td>
+        <Table.Td ta="right" style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtNum(wk.subtotalCy)}</Table.Td>
+        <Table.Td ta="right" style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtHours(wk.subtotalGoh)}</Table.Td>
+        <Table.Td ta="right" style={{ fontVariantNumeric: 'tabular-nums' }}>
+          {fmtRate(wk.subtotalGoh > 0 ? wk.subtotalCy / wk.subtotalGoh : 0)}
+        </Table.Td>
+        <Table.Td colSpan={2} />
+      </Table.Tr>
+    </>
+  )
+}
+
+function ShutdownManager({ breaks, adding, onAdd, onRemove }) {
+  const [start, setStart] = useState('')
+  const [end, setEnd] = useState('')
+  const [reason, setReason] = useState('')
+
+  async function add() {
+    if (!start || !end) return
+    await onAdd(start, end, reason.trim())
+    setStart('')
+    setEnd('')
+    setReason('')
+  }
+
+  return (
+    <Box mt="md" style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }} p={16}>
+      <Text fw={700} size="sm" mb={4}>Shutdown periods</Text>
+      <Text size="xs" c="dimmed" mb={12}>
+        Mark permit holds / demob periods. The project-week counter pauses during these dates.
+      </Text>
+      {breaks.length > 0 && (
+        <Stack gap={4} mb={12}>
+          {breaks.map((b) => (
+            <Group key={b.id} justify="space-between">
+              <Text size="sm">
+                {prettyDate(b.shutdown_start)} → {prettyDate(b.shutdown_end)}
+                {b.reason && <Text span c="dimmed"> · {b.reason}</Text>}
+              </Text>
+              <UnstyledButton onClick={() => onRemove(b.id)}><Text size="xs" c="dimmed" style={{ textDecoration: 'underline' }}>Remove</Text></UnstyledButton>
+            </Group>
+          ))}
+        </Stack>
+      )}
+      <Group align="flex-end" gap={8}>
+        <TextInput size="xs" label="Start" type="date" value={start} onChange={(e) => setStart(e.currentTarget.value)} />
+        <TextInput size="xs" label="End" type="date" value={end} onChange={(e) => setEnd(e.currentTarget.value)} />
+        <TextInput size="xs" label="Reason (optional)" placeholder="e.g. permit hold" value={reason} onChange={(e) => setReason(e.currentTarget.value)} style={{ flex: 1, minWidth: 140 }} />
+        <Button size="xs" loading={adding} disabled={!start || !end} onClick={add} style={{ background: '#0F2744', border: 'none' }}>Add</Button>
+      </Group>
+    </Box>
+  )
 }

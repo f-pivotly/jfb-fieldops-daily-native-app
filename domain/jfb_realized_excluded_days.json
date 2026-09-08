@@ -1,0 +1,100 @@
+{
+  "schema": [
+    {
+      "pii": false,
+      "name": "project_id",
+      "slug": "project_id",
+      "type": "uuid",
+      "label": "Project Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": true,
+        "target_attr": "id",
+        "target_domain": "jfb_projects",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "project_id",
+      "description": "The project this excluded day belongs to.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "exclude_date",
+      "slug": "exclude_date",
+      "type": "date",
+      "label": "Exclude Date",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "date",
+      "column_name": "exclude_date",
+      "description": "A calendar date to omit from every Realized To-Date rate/pace/forecast calculation for this project -- e.g. a released report day with anomalous or non-representative data. Matches the non-native app's realized_excluded_days.exclude_date. Excluding a day does not delete or alter its underlying production_stats/daily_activities data, only removes it from Realized To-Date's math.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "reason",
+      "slug": "reason",
+      "type": "text",
+      "label": "Reason",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "reason",
+      "description": "Free-text note explaining why this day was excluded, shown when reviewing the exclusion list. Not a constrained/picklist value -- matches the non-native app's realized_excluded_days.reason, which is a typed rationale rather than a category.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    }
+  ],
+  "archive": true,
+  "contact": {
+    "name": "System Administrator"
+  },
+  "multi_tenant": false,
+  "xref_enabled": true,
+  "access_control": {
+    "model": "all_systems",
+    "read_access": true,
+    "delete_access": true,
+    "insert_access": true,
+    "update_access": true,
+    "hard_delete_allowed": true,
+    "direct_write_enabled": true
+  },
+  "archive_policy": {
+    "retention_days": 365,
+    "max_record_versions": 10000
+  },
+  "track_versions": true,
+  "domain_table_name": "jfb_realized_excluded_days",
+  "slug": "jfb_realized_excluded_days",
+  "domain_name_singular": "jfb_realized_excluded_day",
+  "default_conflict_resolution": {
+    "code": "lww",
+    "human_readable": "Last Write Wins"
+  }
+}

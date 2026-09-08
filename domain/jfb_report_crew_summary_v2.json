@@ -132,9 +132,9 @@
     "max_record_versions": 10000
   },
   "track_versions": true,
-  "domain_table_name": "jfb_report_crew_summary",
-  "slug": "jfb_report_crew_summary",
-  "domain_name_singular": "jfb_report_crew_summary",
+  "domain_table_name": "jfb_report_crew_summary_v2",
+  "slug": "jfb_report_crew_summary_v2",
+  "domain_name_singular": "jfb_report_crew_summary_v2",
   "default_conflict_resolution": {
     "code": "lww",
     "human_readable": "Last Write Wins"

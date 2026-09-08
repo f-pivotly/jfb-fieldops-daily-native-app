@@ -1,0 +1,22 @@
+{
+  "slug": "dvw-jfb-crew-hours-total",
+  "description": "Sums jfb_report_crew_summary_v2.hours across every report a project has ever had, no date filter -- matches the reference app's fetchProjectCrewHistory, which also pulls every report_crew_summary row for the project with no date bound. Backs the PDF Safety page's project-lifetime crew-hours totals (Work Hours On-Site This Day / Cumulative Hours from Previous Day / Total Work Hours from Project Start); today's-hours and previous-day figures are then derived client-side from this one total plus the current report's own crew rows (previousProjectHours = max(0, total - today)), same as the reference app.",
+  "authoring_mode": "direct_sql",
+  "implementation": "function",
+  "direct_sql": "SELECT COALESCE(SUM(cs.hours), 0) AS total_hours FROM usdf.jfb_report_crew_summary_v2 cs JOIN usdf.jfb_reports r ON r.id = cs.report_id WHERE r.project_id = p_project_id",
+  "parameters": [
+    {
+      "name": "p_project_id",
+      "type": "uuid",
+      "required": true,
+      "description": "Project to scope the sum to."
+    }
+  ],
+  "columns": [
+    {
+      "name": "total_hours",
+      "type": "numeric",
+      "description": "Sum of hours across every crew row for every report this project has ever had; 0 when none exist."
+    }
+  ]
+}

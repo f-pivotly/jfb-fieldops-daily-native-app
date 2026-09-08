@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Box, ScrollArea, Grid, Text, Badge, Checkbox, Stack, Button, Tabs } from '@mantine/core'
+import { Box, ScrollArea, Grid, Text, Badge, Checkbox, Group, Stack, Button, Tabs } from '@mantine/core'
 import { REPORT_STATUS_LABEL, REPORT_STATUS_COLOR } from '../../config/reportStatus'
 import { shouldShowDredgeProgress } from '../../config/dredgeProgress'
 import { useProject } from '../../hooks/useProject'
@@ -8,7 +8,16 @@ import { useReports } from '../../hooks/useReports'
 import { useEquipment } from '../../hooks/useEquipment'
 import { api, createDomainRecord, executeReport, fetchCurrentUser, fetchFileById } from '../../data'
 import { useAppConfig } from '../../contexts/appConfigContext'
-import { buildNarrativeSectionsParam, buildDailyActivityByEquipmentParam, buildPhotoAssetsParam, buildDredgeChartAssetsParam } from './lib/reportPdfData'
+import { useFieldOpsAction } from '../../contexts/fieldOpsAccessContext'
+import {
+  buildNarrativeSectionsParam,
+  buildDailyActivityByEquipmentParam,
+  buildPhotoAssetsParam,
+  buildDredgeChartAssetsParam,
+  buildSafetyPageDataParam,
+  buildCompletionChecklist,
+  validatePdfIssues,
+} from './lib/reportPdfData'
 import PMReviewPanel from './components/PMReviewPanel'
 import EventLogTab from './reportEditorTabs/EventLogTab'
 import ProductionStatsTab from './reportEditorTabs/ProductionStatsTab'
@@ -38,14 +47,10 @@ const CHECKLIST_LABELS = {
   metrics_entered: 'Metrics entered',
 }
 
-const CHECKLIST_PLACEHOLDER = {
-  event_log_reviewed: false,
-  transitions_added: false,
-  production_stats_entered: false,
-  photos_complete: false,
-  narratives_complete: false,
-  metrics_entered: false,
-}
+// Mirrors the non-native app's ReportEditor.tsx: mobilization day marks
+// exactly these 3 of the 6 items N/A rather than requiring them.
+const MOBILIZATION_NA_ITEMS = new Set(['event_log_reviewed', 'production_stats_entered', 'metrics_entered'])
+const EMPTY_NA_ITEMS = new Set()
 
 export default function ReportEditorPage() {
   const { projectId, date } = useParams()
@@ -69,11 +74,25 @@ export default function ReportEditorPage() {
   const [selectedEquipment, setSelectedEquipment] = useState(null)
   const [tab, setTab] = useState('event_log')
   const [downloadingPdf, setDownloadingPdf] = useState(false)
+  const [checklist, setChecklist] = useState(null)
+  const [pdfIssues, setPdfIssues] = useState(null)
+  const canSkipPdfValidation = useFieldOpsAction('skip_pdf_validation')
   const effectiveEquipmentId = selectedEquipment ?? equipment[0]?.id ?? null
   const canDownloadPdf = status === 'approved' || status === 'released'
   const canSubmitForReview = status === 'draft'
   const canUnlock = status === 'approved' || status === 'released'
   const contentTabs = shouldShowDredgeProgress(project) ? [...CONTENT_TABS, DREDGE_PROGRESS_TAB] : CONTENT_TABS
+  const naItems = mobDay ? MOBILIZATION_NA_ITEMS : EMPTY_NA_ITEMS
+  const checklistDone = !!checklist && Object.keys(CHECKLIST_LABELS).every((key) => naItems.has(key) || checklist[key])
+
+  useEffect(() => {
+    if (!project?.id || !report?.id) return
+    let cancelled = false
+    buildCompletionChecklist({ appSlug: config.appSlug, projectId: project.id, reportId: report.id, dateISO: date })
+      .then((result) => { if (!cancelled) setChecklist(result) })
+      .catch((err) => console.error('Failed to compute completion checklist:', err.message))
+    return () => { cancelled = true }
+  }, [project?.id, report?.id, date, config.appSlug])
 
   async function handleSubmitForReview() {
     if (!report?.id) return
@@ -95,18 +114,26 @@ export default function ReportEditorPage() {
     await updateReport(report.id, { status: 'draft' })
   }
 
-  async function handleDownloadPdf() {
+  async function handleDownloadPdf(opts = {}) {
     setDownloadingPdf(true)
+    setPdfIssues(null)
     try {
       const reportId = report?.id
-      const [narrativeSections, dailyActivityByEquipment, photoAssets, dredgeChartAssets] = await Promise.all([
-        buildNarrativeSectionsParam({ appSlug: config.appSlug, projectId, reportId }),
+      const narrativeSections = await buildNarrativeSectionsParam({ appSlug: config.appSlug, projectId, reportId })
+
+      const issues = await validatePdfIssues({ appSlug: config.appSlug, reportId, narrativeSections })
+      if (issues.length > 0 && !opts.skipValidation) {
+        setPdfIssues(issues)
+        return
+      }
+
+      const [dailyActivityData, photoAssets, dredgeChartAssets, safetyPageData] = await Promise.all([
         buildDailyActivityByEquipmentParam({ appSlug: config.appSlug, projectId, dateISO: date }),
         buildPhotoAssetsParam({ appSlug: config.appSlug, reportId }),
         buildDredgeChartAssetsParam({ appSlug: config.appSlug, reportId }),
+        buildSafetyPageDataParam({ appSlug: config.appSlug, projectId, reportId, dateISO: date, project }),
       ])
-      // TEMP DIAGNOSTIC -- remove once the missing-chart-image bug is found.
-      console.log('[dredge-pdf-debug] reportId:', reportId, 'dredgeChartAssets:', dredgeChartAssets)
+      const { activitiesByEquipment: dailyActivityByEquipment, delaySummaryByEquipment } = dailyActivityData
       const result = await executeReport('rpt-jfb-daily-report', {
         parameters: {
           projectId,
@@ -117,8 +144,10 @@ export default function ReportEditorPage() {
           equipmentFilter: { project_id: projectId },
           narrativeSections,
           dailyActivityByEquipment,
+          delaySummaryByEquipment,
           photoAssets,
           dredgeChartAssets,
+          safetyPageData,
         },
       })
       const fileRes = await api.get(result.downloadUrl, { responseType: 'blob' })
@@ -183,7 +212,14 @@ export default function ReportEditorPage() {
               </Box>
 
               {canSubmitForReview && (
-                <Button size="xs" loading={reportSaving} onClick={handleSubmitForReview} style={{ background: '#0F2744', border: 'none' }}>
+                <Button
+                  size="xs"
+                  loading={reportSaving}
+                  onClick={handleSubmitForReview}
+                  disabled={!checklistDone}
+                  title={!checklistDone ? 'All 6 checklist items must be complete before sending to PM.' : undefined}
+                  style={{ background: '#0F2744', border: 'none' }}
+                >
                   Submit for review
                 </Button>
               )}
@@ -204,9 +240,20 @@ export default function ReportEditorPage() {
               <Box>
                 <Text size="xs" fw={700} tt="uppercase" c="dimmed" mb={6}>Completion</Text>
                 <Stack gap={6}>
-                  {Object.entries(CHECKLIST_LABELS).map(([key, label]) => (
-                    <Checkbox key={key} size="xs" readOnly label={label} checked={CHECKLIST_PLACEHOLDER[key]} />
-                  ))}
+                  {Object.entries(CHECKLIST_LABELS).map(([key, label]) => {
+                    const isNa = naItems.has(key)
+                    if (isNa) {
+                      return (
+                        <Group key={key} gap={6} wrap="nowrap">
+                          <Badge size="xs" color="gray" variant="light" title="N/A — Mobilization day (no production)">N/A</Badge>
+                          <Text size="xs" c="dimmed" fs="italic">{label}</Text>
+                        </Group>
+                      )
+                    }
+                    return (
+                      <Checkbox key={key} size="xs" readOnly label={label} checked={!!checklist?.[key]} />
+                    )
+                  })}
                 </Stack>
               </Box>
 
@@ -230,9 +277,34 @@ export default function ReportEditorPage() {
               <PMReviewPanel report={report} onApprove={handleApprove} onSendBack={handleSendBack} saving={reportSaving} />
 
               {canDownloadPdf && (
-                <Button size="xs" loading={downloadingPdf} onClick={handleDownloadPdf}>
-                  Download PDF
-                </Button>
+                <Stack gap={6}>
+                  <Button size="xs" loading={downloadingPdf} onClick={() => handleDownloadPdf()}>
+                    Download PDF
+                  </Button>
+                  {pdfIssues && pdfIssues.length > 0 && (
+                    <Box p={8} style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 6 }}>
+                      <Text size="xs" fw={700} c="#92400E" mb={4}>PDF blocked — fix these first:</Text>
+                      <Stack gap={2}>
+                        {pdfIssues.map((issue) => (
+                          <Text key={issue.key} size="xs" c="#92400E">• {issue.message}</Text>
+                        ))}
+                      </Stack>
+                      {canSkipPdfValidation && (
+                        <Text
+                          size="xs"
+                          fw={600}
+                          c="#92400E"
+                          mt={4}
+                          style={{ cursor: 'pointer', textDecoration: 'underline', display: 'inline-block' }}
+                          onClick={() => handleDownloadPdf({ skipValidation: true })}
+                          title="This override requires the skip_pdf_validation grant."
+                        >
+                          Generate anyway (override)
+                        </Text>
+                      )}
+                    </Box>
+                  )}
+                </Stack>
               )}
             </Stack>
           </Grid.Col>

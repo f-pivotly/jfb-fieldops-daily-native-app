@@ -1,0 +1,44 @@
+{
+  "slug": "dvw-jfb-realized-delay-summary",
+  "description": "Delay hours by code for a project+date range, backing the Realized To-Date report's captured-week delay summary. Only activities with a delay_code_id set are counted (matches dvw-jfb-metric-hours-delay's classification). Resolves the display category/code through jfb_project_delay_codes first, falling back to the company-library jfb_delay_codes row it references -- a project-specific custom code (delay_code_id null on the project-delay-code row) has no library row to fall back to, so its own category/code are used directly. Because both apps' codes are picklist/FK-governed rather than free text, this avoids the case-variant cleanup the non-native app needed (sql/2026-06-15_clean_operational_delay_inconsistencies.sql) for its free-text daily_events.delay_category column.",
+  "authoring_mode": "direct_sql",
+  "implementation": "function",
+  "direct_sql": "SELECT COALESCE(pdc.category, lib.category) AS category, COALESCE(pdc.code, lib.code) AS code, SUM(EXTRACT(EPOCH FROM (da.end_date_time - da.start_date_time)) / 3600.0) AS hours FROM usdf.jfb_daily_activities da JOIN usdf.jfb_project_delay_codes pdc ON pdc.id = da.delay_code_id LEFT JOIN usdf.jfb_delay_codes lib ON lib.id = pdc.delay_code_id WHERE da.project_id = p_project_id AND da.start_date_time::date BETWEEN p_start_date AND p_end_date AND da.is_deleted IS NOT TRUE GROUP BY COALESCE(pdc.category, lib.category), COALESCE(pdc.code, lib.code) ORDER BY hours DESC",
+  "parameters": [
+    {
+      "name": "p_project_id",
+      "type": "uuid",
+      "required": true,
+      "description": "Project to scope the sum to."
+    },
+    {
+      "name": "p_start_date",
+      "type": "date",
+      "required": true,
+      "description": "Inclusive start of the date range -- typically the captured week's Monday."
+    },
+    {
+      "name": "p_end_date",
+      "type": "date",
+      "required": true,
+      "description": "Inclusive end of the date range -- typically the captured week's Sunday."
+    }
+  ],
+  "columns": [
+    {
+      "name": "category",
+      "type": "text",
+      "description": "Delay code category (e.g. General, Mechanical, Booster, Land Plant)."
+    },
+    {
+      "name": "code",
+      "type": "text",
+      "description": "Delay code display name (e.g. \"ShutDown\", \"Wash Pipeline\")."
+    },
+    {
+      "name": "hours",
+      "type": "numeric",
+      "description": "Summed duration (hours) of matching delay activities for that code."
+    }
+  ]
+}

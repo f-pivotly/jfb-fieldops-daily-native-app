@@ -112,6 +112,55 @@ export function utcDayRange(dateISO) {
   return { gte, lt }
 }
 
+// Matches the two productive-tile labels workType.js writes -- everything
+// else on jfb_daily_activities.category is a delay code's own text, and a
+// null category with no delay_code_id is a legacy row saved before the
+// category column existed.
+const PRODUCTIVE_CATEGORIES = new Set(['ACTIVE DREDGING', 'ACTIVE PLACEMENT'])
+
+function isProductiveActivity(a) {
+  if (a.category && PRODUCTIVE_CATEGORIES.has(a.category)) return true
+  return !a.category && !a.delay_code_id
+}
+
+// Ported from the non-native app's buildDelaySummary (loadProductionSheetData.ts):
+// groups an equipment's non-productive activities by label, with the
+// chronologically first/last STARTUP/SHUTDOWN-category row broken out into
+// its own "Startup"/"ShutDown" row (native's operator app auto-gap feature
+// writes this exact category value). Sorted by minutes descending.
+function buildDelaySummary(activities, projectDelayCodeById, masterDelayCodeById) {
+  const sorted = activities.slice().sort((x, y) => new Date(x.start_date_time) - new Date(y.start_date_time))
+  const delays = sorted.filter((a) => !isProductiveActivity(a))
+  if (delays.length === 0) return []
+
+  const ssEvents = delays.filter((a) => a.category === 'STARTUP/SHUTDOWN')
+  const firstSS = ssEvents[0] ?? null
+  const lastSS = ssEvents.length > 1 ? ssEvents[ssEvents.length - 1] : null
+
+  const totals = new Map()
+  let totalMinutes = 0
+  for (const a of delays) {
+    const minutes = durationMinutes(a.start_date_time, a.end_date_time) ?? 0
+    totalMinutes += minutes
+    let label
+    if (a === firstSS) label = 'Startup'
+    else if (a === lastSS) label = 'ShutDown'
+    else label = a.category || resolveDelayCode(a.delay_code_id, projectDelayCodeById, masterDelayCodeById)
+    totals.set(label, (totals.get(label) ?? 0) + minutes)
+  }
+
+  return Array.from(totals.entries())
+    .map(([description, minutes]) => ({
+      description,
+      minutes,
+      percent: totalMinutes > 0 ? Math.round((minutes / totalMinutes) * 100) : 0,
+    }))
+    .sort((a, b) => b.minutes - a.minutes)
+}
+
+// Returns { activitiesByEquipment, delaySummaryByEquipment }, both keyed by
+// equipment_id -- the report template looks up each the same way, e.g.
+// `{{#with (lookup ../parameters.dailyActivityByEquipment this.id)}}`.
 export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, dateISO }) {
   const { gte, lt } = utcDayRange(dateISO)
 
@@ -152,10 +201,11 @@ export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, d
     byEquipment.get(a.equipment_id).push(a)
   }
 
-  const result = {}
+  const activitiesByEquipment = {}
+  const delaySummaryByEquipment = {}
   for (const [equipmentId, rows] of byEquipment) {
     const sorted = rows.slice().sort((x, y) => new Date(x.start_date_time) - new Date(y.start_date_time))
-    result[equipmentId] = sorted.map((a, i) => ({
+    activitiesByEquipment[equipmentId] = sorted.map((a, i) => ({
       num: i + 1,
       from: hhmm(a.start_date_time),
       to: hhmm(a.end_date_time),
@@ -169,6 +219,227 @@ export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, d
       event: a.category || resolveDelayCode(a.delay_code_id, projectDelayCodeById, masterDelayCodeById),
       notes: a.notes || '',
     }))
+    delaySummaryByEquipment[equipmentId] = buildDelaySummary(rows, projectDelayCodeById, masterDelayCodeById)
   }
-  return result
+  return { activitiesByEquipment, delaySummaryByEquipment }
+}
+
+// Ported from the non-native app's validateForPdf: blocks PDF generation
+// until narratives are filled, at least 2 photos are uploaded, every photo
+// has a label, and no photo is an unconvertible HEIC/HEIF file. Reuses the
+// already-built narrativeSections param so narrative content isn't fetched
+// twice.
+export async function validatePdfIssues({ appSlug, reportId, narrativeSections }) {
+  const issues = []
+
+  const emptyNarrs = narrativeSections.filter((n) => !n.content.trim())
+  if (emptyNarrs.length > 0) {
+    issues.push({
+      key: 'narratives_incomplete',
+      message: `Narrative sections missing content: ${emptyNarrs.map((n) => n.label).join(', ')}`,
+    })
+  }
+
+  const photosRes = await fetchDomainRecords({
+    domain: 'jfb_report_photos', system: 'core', appSlug,
+    filters: { report_id: reportId }, limit: 50,
+  })
+  const photos = (photosRes?.data ?? []).filter((p) => p.photo_file_path)
+
+  if (photos.length < 2) {
+    issues.push({
+      key: 'photos_missing',
+      message: `Two photos required — ${photos.length} uploaded.`,
+    })
+  } else {
+    const unlabeled = photos.filter((p) => !p.label?.trim())
+    if (unlabeled.length > 0) {
+      issues.push({
+        key: 'photo_labels_missing',
+        message: `Photo${unlabeled.length === 1 ? '' : 's'} missing label: slot ${unlabeled.map((p) => p.photo_number).join(', slot ')}`,
+      })
+    }
+    const heic = photos.filter((p) => /\.(heic|heif)$/i.test(p.photo_file_path || ''))
+    if (heic.length > 0) {
+      issues.push({
+        key: 'heic_photo_pending',
+        message: `HEIC photo on slot ${heic.map((p) => p.photo_number).join(', slot ')} cannot be embedded; convert to JPEG or re-upload.`,
+      })
+    }
+  }
+
+  return issues
+}
+
+function naOr(value) {
+  const trimmed = typeof value === 'string' ? value.trim() : value
+  return trimmed || 'N/A'
+}
+
+// "75 °F" / "0.30 IN" / "—" when null -- matches the reference app's PDF
+// ClimateSubRow fallback exactly (an em dash, distinct from the "N/A" the
+// Daily Safety Updates rows use).
+function fmtClimate(value, unit, decimals) {
+  if (value === null || value === undefined || value === '') return '—'
+  const num = Number(value)
+  if (!Number.isFinite(num)) return '—'
+  return `${decimals != null ? num.toFixed(decimals) : Math.round(num)} ${unit}`
+}
+
+// Builds the one caller-resolved parameter the report template binds its
+// whole Safety page to -- same "resolve client-side, pass as JSON" pattern
+// as narrativeSections/dailyActivityByEquipment above, chosen for the same
+// reason: Culture Tenant needs a join (report_safety.culture_tenant_id ->
+// culture_tenants), Equipment needs an as-of-this-date mobilize/demob
+// window filter, and Precip MTD/Project Total need a project-lifetime sum
+// -- none expressible as a single domain-query source or in this engine's
+// Handlebars (no eq/date-math helpers), so all three are resolved here
+// via the same dvw-jfb-precip-sums data view SafetyTab.jsx itself calls.
+export async function buildSafetyPageDataParam({ appSlug, projectId, reportId, dateISO, project }) {
+  const [safetyRes, cultureRes, crewRes, equipmentRes, categoryLabelRows, precipSumRows, crewHoursRows] = await Promise.all([
+    fetchDomainRecords({ domain: 'jfb_report_safety_v2', system: 'core', appSlug, filters: { report_id: reportId }, limit: 1 }),
+    fetchDomainRecords({ domain: 'jfb_culture_tenants', system: 'core', appSlug, limit: 200 }),
+    fetchDomainRecords({ domain: 'jfb_report_crew_summary_v2', system: 'core', appSlug, filters: { report_id: reportId }, limit: 200 }),
+    fetchDomainRecords({ domain: 'jfb_project_site_equipment', system: 'core', appSlug, filters: { project_id: projectId }, limit: 1000 }),
+    fetchPicklistValues('pkl-jfb-site-equipment-category'),
+    executeDataView('dvw-jfb-precip-sums', {
+      p_project_id: projectId, p_month_start: `${dateISO.slice(0, 7)}-01`, p_end_date: dateISO,
+    }),
+    executeDataView('dvw-jfb-crew-hours-total', { p_project_id: projectId }),
+  ])
+
+  const safety = (safetyRes?.data ?? [])[0] ?? null
+  const tenant = safety?.culture_tenant_id
+    ? (cultureRes?.data ?? []).find((t) => t.id === safety.culture_tenant_id)
+    : null
+  const categoryLabels = Object.fromEntries(
+    (categoryLabelRows || []).filter((r) => r.is_active !== false).map((r) => [r.value, r.label ?? r.value]),
+  )
+
+  const crewRows = (crewRes?.data ?? [])
+    .slice()
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+    .map((r) => ({ category: r.category || '—', count: r.count ?? 0, hours: Number(r.hours) || 0 }))
+
+  // "On site" = mobilized on/before this report's date and not yet
+  // demobilized (or demobilized on/after this date) -- same window
+  // SiteEquipmentTab's own mobilize/demobilize fields define.
+  const equipmentRows = (equipmentRes?.data ?? [])
+    .filter((r) => {
+      if (!r.mobilized_at || r.mobilized_at > dateISO) return false
+      if (r.demobilized_at && r.demobilized_at < dateISO) return false
+      return true
+    })
+    .sort((a, b) => (a.category || '').localeCompare(b.category || '') || (a.sort_order ?? 0) - (b.sort_order ?? 0))
+    .map((r) => ({ category: categoryLabels[r.category] ?? r.category, description: r.description || '' }))
+
+  const [preparerSignatureDataUri, sshoSignatureDataUri] = await Promise.all([
+    safety?.signature_image_path
+      ? downloadAttachment(safety.signature_image_path).then(blobToDataUri)
+      : Promise.resolve(null),
+    safety?.ssho_signature_image_path
+      ? downloadAttachment(safety.ssho_signature_image_path).then(blobToDataUri)
+      : Promise.resolve(null),
+  ])
+
+  // Project-lifetime crew-hours totals, PDF-only (not shown anywhere on
+  // screen) -- mirrors the reference app's SafetyPage.tsx crewTotals
+  // exactly: todayHours/totalCount from this report's own crew rows,
+  // totalProjectHours from summing every crew row the project has ever
+  // had (dvw-jfb-crew-hours-total, no date filter, matching
+  // fetchProjectCrewHistory's own project_id-only scope), and
+  // previousProjectHours = max(0, total - today).
+  const todayHours = crewRows.reduce((sum, r) => sum + r.hours, 0)
+  const totalCount = crewRows.reduce((sum, r) => sum + r.count, 0)
+  const totalProjectHours = Number(crewHoursRows?.[0]?.total_hours) || 0
+  const previousProjectHours = Math.max(0, totalProjectHours - todayHours)
+  const crewTotals = {
+    totalCount: String(totalCount),
+    todayHours: todayHours.toFixed(0),
+    previousProjectHours: previousProjectHours.toLocaleString('en-US', { maximumFractionDigits: 0 }),
+    totalProjectHours: totalProjectHours.toLocaleString('en-US', { maximumFractionDigits: 0 }),
+  }
+
+  const precipSums = precipSumRows?.[0] ?? {}
+  const climate = {
+    windHeader: safety?.wind_direction ? `Wind · ${safety.wind_direction}` : 'Wind',
+    tempHigh: fmtClimate(safety?.temp_high_f, '°F'),
+    tempLow: fmtClimate(safety?.temp_low_f, '°F'),
+    windHigh: fmtClimate(safety?.wind_high_mph, 'MPH'),
+    windGusts: fmtClimate(safety?.wind_gusts_mph, 'MPH'),
+    windAvg: fmtClimate(safety?.wind_avg_mph, 'MPH'),
+    precipToday: fmtClimate(safety?.precip_today_in, 'IN', 2),
+    precipMtd: fmtClimate(precipSums.mtd_in, 'IN', 2),
+    precipProjectTotal: fmtClimate(precipSums.ptd_in, 'IN', 2),
+    conditions: safety?.conditions?.trim() || '—',
+  }
+
+  return {
+    jhaAhaReviewed: naOr(safety?.jha_aha_reviewed),
+    highRiskTask: naOr(safety?.high_risk_task),
+    toolboxTopic: naOr(safety?.safety_meeting_topic),
+    afternoonTopic: naOr(safety?.afternoon_meeting_topic),
+    incidents: naOr(safety?.incidents_to_report),
+    cultureTenantLabel: tenant ? `${tenant.name}: ${tenant.description ?? ''}` : 'N/A',
+    planOfDay: naOr(safety?.plan_of_day),
+    showNextDaySummary: !!project?.show_next_day_summary,
+    nextDaySummary: naOr(safety?.next_day_summary),
+    crewRows,
+    crewTotals,
+    equipmentRows,
+    climate,
+    showSsho: !!project?.show_ssho_field,
+    preparerName: naOr(safety?.signature_name),
+    preparerSignatureDataUri,
+    sshoName: naOr(safety?.ssho_name),
+    sshoSignatureDataUri,
+  }
+}
+
+// Ported from the non-native app's live-computed ChecklistState. Two
+// adaptations forced by schema differences, noted where they diverge:
+// native has no "UNATTRIBUTED" gap-marker category, so event_log_reviewed
+// only checks that activities exist for the day (reference also requires
+// zero unresolved gap placeholders); transitions_added is permanently true
+// on both apps since native has no TRANSITION marker-event concept at all.
+export async function buildCompletionChecklist({ appSlug, projectId, reportId, dateISO }) {
+  const { gte, lt } = utcDayRange(dateISO)
+
+  const [activityRes, narrativeSections, photosRes, productionRes, metricsRes, metricValuesRes] = await Promise.all([
+    fetchDomainRecords({
+      domain: 'jfb_daily_activities', system: 'core', appSlug,
+      filters: { project_id: projectId, start_date_time: { gte, lt } },
+      limit: 1000,
+    }),
+    buildNarrativeSectionsParam({ appSlug, projectId, reportId }),
+    fetchDomainRecords({ domain: 'jfb_report_photos', system: 'core', appSlug, filters: { report_id: reportId }, limit: 50 }),
+    fetchDomainRecords({ domain: 'jfb_production_stats', system: 'core', appSlug, filters: { report_id: reportId }, limit: 500 }),
+    fetchDomainRecords({ domain: 'jfb_metrics', system: 'core', appSlug, filters: { project_id: projectId }, limit: 200 }),
+    fetchDomainRecords({ domain: 'jfb_report_metric_value', system: 'core', appSlug, filters: { report_id: reportId }, limit: 200 }),
+  ])
+
+  const activities = (activityRes?.data ?? []).filter((a) => sameCalendarDay(a.start_date_time, dateISO, a.timezone))
+
+  const photos = (photosRes?.data ?? []).filter((p) => p.photo_file_path)
+  const acceptedPhotos = photos.filter((p) => p.label?.trim() && !p.pm_comment).length
+
+  const production = productionRes?.data ?? []
+  const productionEntered = production.filter((p) => p.volume !== null && p.volume !== undefined).length
+
+  const manualMetrics = (metricsRes?.data ?? []).filter((m) => m.source === 'manual' && m.active !== false)
+  const manualMetricIds = new Set(manualMetrics.map((m) => m.id))
+  const metricValues = (metricValuesRes?.data ?? []).filter(
+    (v) => manualMetricIds.has(v.metric_id) && v.value !== null && v.value !== undefined && v.value !== '',
+  )
+
+  const narrativesFilled = narrativeSections.filter((s) => s.content.trim().length > 0).length
+
+  return {
+    event_log_reviewed: activities.length > 0,
+    transitions_added: true,
+    production_stats_entered: productionEntered > 0,
+    photos_complete: acceptedPhotos >= 2,
+    narratives_complete: narrativeSections.length > 0 && narrativesFilled >= narrativeSections.length,
+    metrics_entered: manualMetrics.length === 0 || metricValues.length >= manualMetrics.length,
+  }
 }

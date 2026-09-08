@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Box, ScrollArea, Text, Group, Button, Stack, Textarea, SimpleGrid, Switch, Table, Modal } from '@mantine/core'
+import { Box, ScrollArea, Text, Group, Button, Stack, Textarea, SimpleGrid, Switch, Modal } from '@mantine/core'
 import {
   executeDataView, uploadAttachment, deleteAttachment, readWrittenRecordId,
   executeReport, api, createDomainRecord, fetchCurrentUser, fetchFileById,
@@ -9,8 +9,6 @@ import { useAppConfig } from '../../contexts/appConfigContext'
 import { useProject } from '../../hooks/useProject'
 import { useReports } from '../../hooks/useReports'
 import { useDomainData } from '../../hooks/useDomainData'
-import { useDelayCodes } from '../../hooks/useDelayCodes'
-import { useProjectDelayCodes } from '../../hooks/useProjectDelayCodes'
 import { useWeeklySummaries } from '../../hooks/useWeeklySummaries'
 import { useWeeklySummaryPhotos } from '../../hooks/useWeeklySummaryPhotos'
 import PhotoSlot from './reportEditorTabs/components/PhotoSlot'
@@ -44,12 +42,17 @@ function withUniqueName(file, uniqueId) {
   return new File([file], `${uniqueId}-${Date.now()}${ext}`, { type: file.type })
 }
 
-function resolveDelayLabel(delayCodeId, projectDelayCodeById, masterDelayCodeById) {
-  if (!delayCodeId) return null
-  const row = projectDelayCodeById.get(delayCodeId)
-  if (!row) return null
-  const master = row.delay_code_id ? masterDelayCodeById.get(row.delay_code_id) : null
-  return (master ? master.code : row.code) || (master ? master.category : row.category) || null
+function fmtNum(n) {
+  return Math.round(n ?? 0).toLocaleString()
+}
+function fmtRate(n) {
+  return (n ?? 0).toLocaleString(undefined, { maximumFractionDigits: 1 })
+}
+function fmtHours(n) {
+  return (n ?? 0).toFixed(2)
+}
+function signedNum(n) {
+  return `${n >= 0 ? '+' : '-'}${fmtNum(Math.abs(n))}`
 }
 
 const TODAY_ISO = new Date().toISOString().slice(0, 10)
@@ -84,24 +87,42 @@ export default function WeeklySummaryPage() {
     system: 'core',
     projectId,
   })
-  const { records: activities, loading: activitiesLoading, error: activitiesError } = useDomainData({
-    domain: 'jfb_daily_activities',
-    system: 'core',
-    projectId,
-  })
-  const { delayCodes: masterDelayCodes, loading: masterDelayLoading, error: masterDelayError } = useDelayCodes()
-  const { projectDelayCodes, loading: projectDelayLoading, error: projectDelayError } = useProjectDelayCodes(projectId)
   const {
     photos, loading: photosLoading, error: photosError,
     create: createPhoto, update: updatePhoto, remove: removePhoto,
   } = useWeeklySummaryPhotos(projectId)
 
+  // Production (week + project-to-date CY/SF/GOH/NOH) and the week's delay
+  // summary -- same pre-aggregated data views the Realized To-Date report
+  // uses, rather than pulling raw jfb_daily_activities to the client.
+  const [dailyTotals, setDailyTotals] = useState(null)
+  const [dailyTotalsError, setDailyTotalsError] = useState(null)
+  useEffect(() => {
+    if (!projectId) return
+    let cancelled = false
+    const startDate = project?.production_start_date || (project?.start_date ? project.start_date.slice(0, 10) : '2000-01-01')
+    executeDataView('dvw-jfb-realized-daily-totals', { p_project_id: projectId, p_start_date: startDate })
+      .then((rows) => { if (!cancelled) setDailyTotals(rows) })
+      .catch((err) => { if (!cancelled) setDailyTotalsError(err.message) })
+    return () => { cancelled = true }
+  }, [projectId, project?.production_start_date, project?.start_date])
+
+  const [delayRows, setDelayRows] = useState([])
+  useEffect(() => {
+    if (!projectId) return
+    let cancelled = false
+    executeDataView('dvw-jfb-realized-delay-summary', { p_project_id: projectId, p_start_date: weekStart, p_end_date: weekEnd })
+      .then((rows) => { if (!cancelled) setDelayRows(rows) })
+      .catch(() => { if (!cancelled) setDelayRows([]) })
+    return () => { cancelled = true }
+  }, [projectId, weekStart, weekEnd])
+
   const loading =
     projectLoading || reportsLoading || sectionsLoading || contentLoading ||
-    activitiesLoading || masterDelayLoading || projectDelayLoading || summariesLoading || photosLoading
+    summariesLoading || photosLoading || dailyTotals === null
   const error =
     projectError || reportsError || sectionsError || contentError ||
-    activitiesError || masterDelayError || projectDelayError || summariesError || photosError
+    summariesError || photosError || dailyTotalsError
 
   const [photoUploading, setPhotoUploading] = useState({ 1: false, 2: false })
   const [photoSlotErrors, setPhotoSlotErrors] = useState({ 1: null, 2: null })
@@ -199,6 +220,7 @@ export default function WeeklySummaryPage() {
   }
 
   async function handleDownloadPdf() {
+    if (!report) return
     setDownloadingPdf(true)
     setPdfError(null)
     try {
@@ -211,8 +233,10 @@ export default function WeeklySummaryPage() {
       // is ungated -- equipment with nothing to show just gets the "No dredge
       // progress chart generated" fallback page.
       const weeklyChartAssets = dredgeConfigRecords.length > 0
-        ? await buildWeeklyChartAssetsParam({ appSlug: config.appSlug, projectId, weekStart, weekEnd })
-        : undefined
+        ? Object.values(await buildWeeklyChartAssetsParam({ appSlug: config.appSlug, projectId, weekStart, weekEnd }))
+        : []
+      const p = report.production
+      const hasPlan = p.anticipatedDailyProduction != null
       const result = await executeReport(REPORT_SLUG, {
         parameters: {
           projectId,
@@ -224,17 +248,30 @@ export default function WeeklySummaryPage() {
           narrativeSections,
           weeklyPhotoAssets,
           weeklyChartAssets,
-          weeklyProduction: production.week && production.toDate
-            ? {
-                weekCy: production.week.cy.toLocaleString(),
-                weekSf: production.week.sf.toLocaleString(),
-                toDateCy: production.toDate.cy.toLocaleString(),
-                toDateSf: production.toDate.sf.toLocaleString(),
-                goal: project?.volume_goal != null ? Number(project.volume_goal).toLocaleString() : null,
-              }
-            : null,
-          weeklyDelays: report.hours.byDelayLabel.map((d) => ({ description: d.description, hours: d.hours.toFixed(1) })),
-          weeklyDelayTotalHours: report.hours.delayApprox.toFixed(1),
+          unit: report.unit,
+          weeklyProduction: {
+            weekCy: fmtNum(p.weekCy),
+            weekSf: fmtNum(p.weekSf),
+            weekGoh: fmtHours(p.weekGoh),
+            weekNoh: fmtHours(p.weekNoh),
+            weekCyPerGoh: fmtRate(p.weekCyPerGoh),
+            toDateCy: fmtNum(p.toDateCy),
+            goal: p.goal > 0 ? fmtNum(p.goal) : null,
+            pctComplete: p.goal > 0 ? `${(p.pctComplete * 100).toFixed(1)}%` : null,
+            hasPlan,
+            plannedWeekCy: hasPlan ? fmtNum(p.plannedWeekCy) : null,
+            weekVariance: hasPlan ? signedNum(p.weekVariance) : null,
+            weekVariancePositive: hasPlan ? p.weekVariance >= 0 : null,
+            plannedToDateCy: hasPlan ? fmtNum(p.plannedToDateCy) : null,
+            toDateVariance: hasPlan ? signedNum(p.toDateVariance) : null,
+            toDateVariancePositive: hasPlan ? p.toDateVariance >= 0 : null,
+          },
+          weeklyDelays: report.delaySummary.map((d) => ({
+            description: d.description,
+            hours: fmtHours(d.hours),
+            pct: `${(d.pct * 100).toFixed(0)}%`,
+          })),
+          weeklyDelayTotalHours: fmtHours(report.delayTotalHours),
         },
       })
       const fileRes = await api.get(result.downloadUrl, { responseType: 'blob' })
@@ -280,35 +317,6 @@ export default function WeeklySummaryPage() {
     }
   }
 
-  const [production, setProduction] = useState({ week: null, toDate: null, error: null })
-
-  useEffect(() => {
-    if (!projectId) return
-    let cancelled = false
-    const toDateStart = project?.start_date ? project.start_date.slice(0, 10) : '2000-01-01'
-    const params = (start, end) => ({ p_project_id: projectId, p_start_date: start, p_end_date: end, p_equipment_id: null })
-    Promise.all([
-      executeDataView('dvw-jfb-metric-cy', params(weekStart, weekEnd)),
-      executeDataView('dvw-jfb-metric-sf', params(weekStart, weekEnd)),
-      executeDataView('dvw-jfb-metric-cy', params(toDateStart, weekEnd)),
-      executeDataView('dvw-jfb-metric-sf', params(toDateStart, weekEnd)),
-    ])
-      .then(([cyWeek, sfWeek, cyToDate, sfToDate]) => {
-        if (cancelled) return
-        const read = (res, col) => Number(res?.[0]?.[col] ?? 0)
-        setProduction({
-          week: { cy: read(cyWeek, 'total_volume'), sf: read(sfWeek, 'total_area') },
-          toDate: { cy: read(cyToDate, 'total_volume'), sf: read(sfToDate, 'total_area') },
-          error: null,
-        })
-      })
-      .catch((err) => {
-        if (cancelled) return
-        setProduction({ week: null, toDate: null, error: err.message })
-      })
-    return () => { cancelled = true }
-  }, [projectId, weekStart, weekEnd, project?.start_date])
-
   // null = checking, N = dredges with coverage (week or prior) this range,
   // 0 = none yet. Mirrors reference's progressDredgeCount -- cheap coverage
   // fetch only, not the full chart render (that only runs at PDF-download
@@ -330,18 +338,8 @@ export default function WeeklySummaryPage() {
     return () => { cancelled = true }
   }, [projectId, weekStart, weekEnd, dredgeConfigRecords.length, config.appSlug])
 
-  const projectDelayCodeById = new Map(projectDelayCodes.map((r) => [r.id, r]))
-  const masterDelayCodeById = new Map(masterDelayCodes.map((m) => [m.id, m]))
-
   const report = !loading && !error
-    ? buildWeeklyReport({
-        weekStart,
-        reports,
-        sections,
-        contentRows,
-        activities,
-        resolveDelayLabel: (id) => resolveDelayLabel(id, projectDelayCodeById, masterDelayCodeById),
-      })
+    ? buildWeeklyReport({ project, weekStart, reports, sections, contentRows, dailyTotals, delayRows })
     : null
 
   return (
@@ -349,7 +347,14 @@ export default function WeeklySummaryPage() {
       <Box p={24} maw={900} mx="auto">
         <Group justify="space-between" mb={4}>
           <Text fw={700} size="lg">Weekly Summary</Text>
-          <Link to={`/projects/${projectId}/reports`} style={{ fontSize: 13 }}>← Reports</Link>
+          <Group gap="md">
+            {report && report.releasedCount > 0 && (
+              <Button size="xs" variant="outline" loading={downloadingPdf} onClick={handleDownloadPdf}>
+                {downloadingPdf ? 'Generating…' : 'Download PDF'}
+              </Button>
+            )}
+            <Link to={`/projects/${projectId}/reports`} style={{ fontSize: 13 }}>← Reports</Link>
+          </Group>
         </Group>
         <Text size="sm" c="dimmed" mb={16}>
           Client-facing roll-up of the week's daily narratives, production, and delays.
@@ -383,6 +388,15 @@ export default function WeeklySummaryPage() {
               </Text>
             </Group>
 
+            {report.releasedCount === 0 ? (
+              <Box p={24} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8, textAlign: 'center' }}>
+                <Text size="sm" c="dimmed">
+                  No released reports for this week. Use the week navigation above to find a week with released
+                  dailies. (Drafts and reports still in PM Review don't appear here.)
+                </Text>
+              </Box>
+            ) : (
+            <>
             <Group justify="space-between" p={12} mb={20} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }}>
               <Box>
                 <Text size="sm" fw={500}>AI first-draft summary</Text>
@@ -459,45 +473,12 @@ export default function WeeklySummaryPage() {
             )}
 
             <SimpleGrid cols={{ base: 1, sm: 2 }} mb={20}>
-              <Box p={16} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }}>
-                <Text fw={600} size="sm" mb={8}>Production</Text>
-                {!production.week && !production.error && <Text size="xs" c="dimmed">Loading…</Text>}
-                {production.error && <SafeError message={production.error} />}
-                {production.week && production.toDate && (
-                  <>
-                    <Text size="sm">This week: {production.week.cy.toLocaleString()} CY · {production.week.sf.toLocaleString()} SF</Text>
-                    <Text size="sm">Project to date: {production.toDate.cy.toLocaleString()} CY · {production.toDate.sf.toLocaleString()} SF</Text>
-                    {project?.volume_goal != null && (
-                      <Text size="sm" c="dimmed">Goal: {Number(project.volume_goal).toLocaleString()}</Text>
-                    )}
-                  </>
-                )}
-                <Text size="10px" c="dimmed" mt={6}>
-                  Operating hours aren't shown — jfb_daily_activities has no category field to compute them from yet.
-                </Text>
-              </Box>
-              <Box p={16} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }}>
-                <Text fw={600} size="sm" mb={4}>Delay summary · this week</Text>
-                <Text size="10px" c="dimmed" mb={8}>
-                  Approximate — based on which activities have a delay code attached, not a true operating/delay/bookend split.
-                </Text>
-                <Table fz="sm" withRowBorders={false}>
-                  <Table.Tbody>
-                    {report.hours.byDelayLabel.length === 0 && (
-                      <Table.Tr><Table.Td><Text size="xs" c="dimmed">No delay-coded activity this week.</Text></Table.Td></Table.Tr>
-                    )}
-                    {report.hours.byDelayLabel.map((d) => (
-                      <Table.Tr key={d.description}>
-                        <Table.Td>{d.description}</Table.Td>
-                        <Table.Td ta="right">{d.hours.toFixed(1)}h</Table.Td>
-                      </Table.Tr>
-                    ))}
-                  </Table.Tbody>
-                </Table>
-              </Box>
+              <ProductionCard report={report} />
+              <DelayCard report={report} />
             </SimpleGrid>
+            </>
+            )}
 
-            <Button size="xs" loading={downloadingPdf} onClick={handleDownloadPdf}>Download PDF</Button>
             <SafeError message={pdfError} />
 
             <Modal
@@ -605,4 +586,89 @@ function SaveIndicator({ state }) {
     default:
       return null
   }
+}
+
+function ProductionCard({ report }) {
+  const p = report.production
+  const unit = report.unit
+  const hasPlan = p.anticipatedDailyProduction != null
+  return (
+    <Box p={16} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }}>
+      <Text fw={600} size="sm" mb={8}>Production</Text>
+
+      <Text size="10px" fw={700} tt="uppercase" c="dimmed" mb={2}>This week</Text>
+      <Row label={`Actual ${unit}`} value={`${fmtNum(p.weekCy)} ${unit}`} />
+      {hasPlan && (
+        <>
+          <Row label={`Planned ${unit}`} value={`${fmtNum(p.plannedWeekCy)} ${unit}`} />
+          <Row label="Variance" value={`${signedNum(p.weekVariance)} ${unit}`} highlight={p.weekVariance >= 0 ? 'green' : 'red'} />
+        </>
+      )}
+      <Row label="Area" value={`${fmtNum(p.weekSf)} SF`} />
+      <Row label="Operating hours (GOH)" value={fmtHours(p.weekGoh)} />
+      <Row label="Net operating hours (NOH)" value={fmtHours(p.weekNoh)} />
+      <Row label={`${unit}/GOH`} value={fmtRate(p.weekCyPerGoh)} />
+
+      <Text size="10px" fw={700} tt="uppercase" c="dimmed" mt={10} mb={2}>Project to date</Text>
+      <Row label={`Actual ${unit}`} value={`${fmtNum(p.toDateCy)} ${unit}`} />
+      {hasPlan && (
+        <>
+          <Row label={`Planned ${unit}`} value={`${fmtNum(p.plannedToDateCy)} ${unit}`} />
+          <Row label="Variance" value={`${signedNum(p.toDateVariance)} ${unit}`} highlight={p.toDateVariance >= 0 ? 'green' : 'red'} />
+        </>
+      )}
+      {p.goal > 0 && (
+        <>
+          <Row label="Contract goal" value={`${fmtNum(p.goal)} ${unit}`} />
+          <Row label="Percent complete" value={`${(p.pctComplete * 100).toFixed(1)}%`} />
+        </>
+      )}
+
+      {!hasPlan && (
+        <Text size="10px" c="dimmed" mt={8}>
+          Planned {unit} needs the production plan (bid rate + expected GOH/day) set on the Project Settings page.
+        </Text>
+      )}
+    </Box>
+  )
+}
+
+function DelayCard({ report }) {
+  const { delaySummary, delayTotalHours } = report
+  return (
+    <Box p={16} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }}>
+      <Text fw={600} size="sm" mb={8}>Delay summary · this week</Text>
+      {delaySummary.length === 0 ? (
+        <Text size="xs" c="dimmed">No delays logged this week.</Text>
+      ) : (
+        <Stack gap={4}>
+          {delaySummary.map((d) => (
+            <Group key={d.description} justify="space-between" gap={8}>
+              <Text size="xs">{d.description}</Text>
+              <Group gap={10}>
+                <Text size="xs" fw={600}>{fmtHours(d.hours)}h</Text>
+                <Text size="xs" c="dimmed" w={30} ta="right">{(d.pct * 100).toFixed(0)}%</Text>
+              </Group>
+            </Group>
+          ))}
+          <Group justify="space-between" mt={4} pt={4} style={{ borderTop: '1px solid var(--mantine-color-gray-2)' }}>
+            <Text size="xs" fw={700}>Total</Text>
+            <Text size="xs" fw={700}>{fmtHours(delayTotalHours)}h</Text>
+          </Group>
+        </Stack>
+      )}
+    </Box>
+  )
+}
+
+const ROW_COLORS = { green: 'teal', red: 'red' }
+
+function Row({ label, value, highlight }) {
+  const color = ROW_COLORS[highlight]
+  return (
+    <Group justify="space-between" gap={8} py={2} style={{ borderBottom: '1px solid var(--mantine-color-gray-1)' }}>
+      <Text size="10px" c="dimmed" tt="uppercase">{label}</Text>
+      <Text size="xs" fw={600} c={color}>{value}</Text>
+    </Group>
+  )
 }

@@ -1,0 +1,73 @@
+{
+  "schema": [
+    {
+      "pii": false,
+      "name": "user_id",
+      "slug": "user_id",
+      "type": "uuid",
+      "label": "User Id",
+      "unique": true,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "column_name": "user_id",
+      "description": "The Pivotly IAM user this default signature belongs to -- one row per user. No fk_config -- there is no local jfb_ domain representing platform users to target, matching the convention already used by jfb_report_photos.uploaded_by / jfb_weekly_summaries.edited_by.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "signature_image_path",
+      "slug": "signature_image_path",
+      "type": "text",
+      "label": "Signature Image Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "signature_image_path",
+      "description": "Attachment file id for this user's saved default signature image, set via the Safety tab's \"Also save as my default signature\" checkbox. Backs the \"Use my saved signature\" pre-fill on the preparer Sign-off block -- once accepted there, it's copied onto that report's own jfb_report_safety_v2.signature_image_path, so nothing downstream (including PDF generation) needs its own fallback logic.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    }
+  ],
+  "archive": true,
+  "contact": {
+    "name": "System Administrator"
+  },
+  "multi_tenant": false,
+  "xref_enabled": true,
+  "access_control": {
+    "model": "all_systems",
+    "read_access": true,
+    "delete_access": true,
+    "insert_access": true,
+    "update_access": true,
+    "hard_delete_allowed": true,
+    "direct_write_enabled": true
+  },
+  "archive_policy": {
+    "retention_days": 365,
+    "max_record_versions": 10000
+  },
+  "track_versions": true,
+  "domain_table_name": "jfb_user_signatures",
+  "slug": "jfb_user_signatures",
+  "domain_name_singular": "jfb_user_signature",
+  "default_conflict_resolution": {
+    "code": "lww",
+    "human_readable": "Last Write Wins"
+  }
+}

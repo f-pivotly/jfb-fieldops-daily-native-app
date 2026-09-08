@@ -52,28 +52,25 @@ export function defaultWeeklyWeekStart(todayISO) {
   return addDaysISO(mondayStartISO(todayISO), -7)
 }
 
-function calendarDayISO(iso, timeZone) {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return null
-  return timeZone
-    ? new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d)
-    : `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
+function rate(cy, goh) {
+  return goh > 0 ? cy / goh : 0
 }
 
-export function activityFallsInWeek(activity, weekStartISO, weekEndISOStr) {
-  if (!activity?.start_date_time) return false
-  const day = calendarDayISO(activity.start_date_time, activity.timezone)
-  return !!day && day >= weekStartISO && day <= weekEndISOStr
-}
-
-function durationHours(startISO, endISO) {
-  if (!startISO || !endISO) return 0
-  const ms = new Date(endISO) - new Date(startISO)
-  return ms > 0 ? ms / 3600000 : 0
-}
-
-export function buildWeeklyReport({ weekStart, reports, sections, contentRows, activities, resolveDelayLabel }) {
+/**
+ * Build the client-facing Weekly Summary report for one Monday-Sunday week.
+ *
+ * Production (weekCy/weekSf/weekGoh/weekNoh + project-to-date cumulative) comes
+ * from `dailyTotals` -- the same dvw-jfb-realized-daily-totals rows Realized
+ * To-Date already fetches (per-day cy/sf/goh/noh, released reports only, from
+ * the project's production_start_date/start_date floor onward) -- filtered to
+ * the week here for "this week" and summed whole for "to date". Delay summary
+ * comes pre-aggregated from dvw-jfb-realized-delay-summary, scoped to this
+ * week's date range by the caller. Planned/variance use the same bid-rate x
+ * expected-GOH/day definition as the Realized To-Date report.
+ */
+export function buildWeeklyReport({ project, weekStart, reports, sections, contentRows, dailyTotals, delayRows }) {
   const weekEnd = weekEndISO(weekStart)
+  const inWeek = (d) => d >= weekStart && d <= weekEnd
 
   const weekReports = reports.filter((r) => r.report_date >= weekStart && r.report_date <= weekEnd)
   const releasedReports = weekReports.filter((r) => r.status === 'released')
@@ -92,35 +89,59 @@ export function buildWeeklyReport({ weekStart, reports, sections, contentRows, a
     return { key: s.id, label: s.narrative_label, entries }
   })
 
-  const weekActivities = activities.filter((a) => activityFallsInWeek(a, weekStart, weekEnd))
-  const delayActivities = weekActivities.filter((a) => a.delay_code_id)
-  const operatingActivities = weekActivities.filter((a) => !a.delay_code_id)
+  const weekDays = dailyTotals.filter((d) => inWeek(d.report_date))
+  const weekCy = weekDays.reduce((a, d) => a + Number(d.cy || 0), 0)
+  const weekSf = weekDays.reduce((a, d) => a + Number(d.sf || 0), 0)
+  const weekGoh = weekDays.reduce((a, d) => a + Number(d.goh || 0), 0)
+  const weekNoh = weekDays.reduce((a, d) => a + Number(d.noh || 0), 0)
+  const weekCyPerGoh = rate(weekCy, weekGoh)
 
-  const delayHoursByLabel = new Map()
-  let delayApproxHours = 0
-  for (const a of delayActivities) {
-    const hours = durationHours(a.start_date_time, a.end_date_time)
-    delayApproxHours += hours
-    const label = resolveDelayLabel(a.delay_code_id) || 'Uncategorized delay'
-    delayHoursByLabel.set(label, (delayHoursByLabel.get(label) || 0) + hours)
-  }
-  const operatingApproxHours = operatingActivities.reduce(
-    (sum, a) => sum + durationHours(a.start_date_time, a.end_date_time),
-    0,
-  )
+  const toDateCy = dailyTotals.reduce((a, d) => a + Number(d.cy || 0), 0)
+  const goal = project?.volume_goal ?? 0
+  const pctComplete = goal > 0 ? toDateCy / goal : 0
+
+  const bidRate = project?.cy_goh_goal ?? 0
+  const expGoh = project?.expected_goh_per_day
+  const anticipatedDailyProduction = expGoh != null && bidRate > 0 ? bidRate * expGoh : null
+  const weekProductionDays = weekDays.length
+  const toDateProductionDays = dailyTotals.length
+  const plannedWeekCy = anticipatedDailyProduction != null ? anticipatedDailyProduction * weekProductionDays : null
+  const plannedToDateCy = anticipatedDailyProduction != null ? anticipatedDailyProduction * toDateProductionDays : null
+  const weekVariance = plannedWeekCy != null ? weekCy - plannedWeekCy : null
+  const toDateVariance = plannedToDateCy != null ? toDateCy - plannedToDateCy : null
+
+  const delayTotalHours = delayRows.reduce((a, r) => a + (Number(r.hours) || 0), 0)
+  const delaySummary = [...delayRows]
+    .map((r) => ({
+      description: r.code || r.category || 'Uncategorized',
+      hours: Number(r.hours) || 0,
+      pct: delayTotalHours > 0 ? (Number(r.hours) || 0) / delayTotalHours : 0,
+    }))
+    .sort((a, b) => b.hours - a.hours)
 
   return {
     weekStart,
     weekEnd,
     releasedCount: releasedReports.length,
+    unit: project?.primary_measure || 'CY',
     sections: sectionReports,
-    hours: {
-      operatingApprox: operatingApproxHours,
-      delayApprox: delayApproxHours,
-      byDelayLabel: [...delayHoursByLabel.entries()]
-        .map(([description, hours]) => ({ description, hours }))
-        .sort((a, b) => b.hours - a.hours),
+    production: {
+      weekCy,
+      weekSf,
+      weekGoh,
+      weekNoh,
+      weekCyPerGoh,
+      toDateCy,
+      goal,
+      pctComplete,
+      anticipatedDailyProduction,
+      plannedWeekCy,
+      plannedToDateCy,
+      weekVariance,
+      toDateVariance,
     },
+    delaySummary,
+    delayTotalHours,
   }
 }
 

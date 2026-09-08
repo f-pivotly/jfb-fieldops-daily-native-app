@@ -1,0 +1,39 @@
+{
+  "slug": "dvw-jfb-precip-sums",
+  "description": "Sums jfb_report_safety_v2.precip_today_in for a project across every report up to and including an end date, split into month-to-date (reports on/after a caller-supplied month start) and project-to-date (every report up to end date). Only rows with precip_today_in > 0 count, matching the non-native app's fetchPrecipSums. Backs the Safety tab's read-only Precip MTD / Precip Project Total fields -- these are never stored, always derived live.",
+  "authoring_mode": "direct_sql",
+  "implementation": "function",
+  "direct_sql": "SELECT COALESCE(SUM(rs.precip_today_in) FILTER (WHERE r.report_date >= p_month_start), 0) AS mtd_in, COALESCE(SUM(rs.precip_today_in), 0) AS ptd_in FROM usdf.jfb_report_safety_v2 rs JOIN usdf.jfb_reports r ON r.id = rs.report_id WHERE r.project_id = p_project_id AND r.report_date <= p_end_date AND rs.precip_today_in > 0",
+  "parameters": [
+    {
+      "name": "p_project_id",
+      "type": "uuid",
+      "required": true,
+      "description": "Project to scope the sum to."
+    },
+    {
+      "name": "p_month_start",
+      "type": "date",
+      "required": true,
+      "description": "First day of the calendar month containing the report date being viewed (caller computes this, e.g. dateISO.slice(0,7)+'-01') -- reports on/after this date count toward mtd_in."
+    },
+    {
+      "name": "p_end_date",
+      "type": "date",
+      "required": true,
+      "description": "Inclusive end of the range -- the report date being viewed. Every report on/before this date (project-lifetime) counts toward ptd_in."
+    }
+  ],
+  "columns": [
+    {
+      "name": "mtd_in",
+      "type": "numeric",
+      "description": "Sum of precip_today_in (where > 0) across this project's reports dated on/after p_month_start and on/before p_end_date."
+    },
+    {
+      "name": "ptd_in",
+      "type": "numeric",
+      "description": "Sum of precip_today_in (where > 0) across every one of this project's reports dated on/before p_end_date."
+    }
+  ]
+}

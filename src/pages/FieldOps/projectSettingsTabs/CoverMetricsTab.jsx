@@ -3,6 +3,7 @@ import { Box, Text, Group, Button, Modal, TextInput, NumberInput, Select, Switch
 import { IconPlus, IconPencil, IconTrash, IconRefresh } from '@tabler/icons-react'
 import { useMetrics } from '../../../hooks/useMetrics'
 import { useMetricSources } from '../../../hooks/useMetricSources'
+import { useMetricDefaults } from '../../../hooks/useMetricDefaults'
 import { useEquipment } from '../../../hooks/useEquipment'
 import { useConfirmDialog } from '../../../hooks/useConfirmDialog'
 import { useFieldOpsDomainAccess, useFieldOpsAction } from '../../../contexts/fieldOpsAccessContext'
@@ -34,9 +35,11 @@ export default function CoverMetricsTab({ project }) {
   const { confirm, modal: confirmModal } = useConfirmDialog()
   const { metrics, loading, error, creating, updating, reload, create, update, remove } = useMetrics(project?.id)
   const { metricSources } = useMetricSources()
+  const { metricDefaults } = useMetricDefaults()
   const { equipment } = useEquipment(project?.id)
   const { canCreate, canUpdate, canDelete } = useFieldOpsDomainAccess('jfb_metrics')
   const canManageSourceType = useFieldOpsAction('manage_metric_source_type')
+  const [seeding, setSeeding] = useState(false)
 
   const activeSources = metricSources.filter((m) => m.active !== false)
   const sourceOptions = [
@@ -126,6 +129,29 @@ export default function CoverMetricsTab({ project }) {
     }
   }
 
+  async function handleSeedDefaults() {
+    setSeeding(true)
+    setFormError(null)
+    try {
+      for (const d of metricDefaults) {
+        await create({
+          project_id: project.id,
+          metric_key: d.metric_key,
+          label: d.label,
+          source: d.source,
+          equipment_id: null,
+          unit: d.unit || null,
+          sort_order: d.sort_order ?? 0,
+          active: true,
+        })
+      }
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'Failed to seed defaults.')
+    } finally {
+      setSeeding(false)
+    }
+  }
+
   async function toggleActive(row) {
     await update(row.id, { active: !row.active })
   }
@@ -168,9 +194,16 @@ export default function CoverMetricsTab({ project }) {
       )}
 
       {!loading && !error && hasProject && sorted.length === 0 && (
-        <Text size="xs" c="dimmed" ta="center" py={24}>
-          No metrics configured yet.
-        </Text>
+        <Box style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }} py={24} ta="center">
+          <Text size="xs" c="dimmed" mb={canCreate && metricDefaults.length > 0 ? 10 : 0}>
+            No metrics configured yet.{canCreate ? ' Click + Add Metric to start.' : ''}
+          </Text>
+          {canCreate && metricDefaults.length > 0 && (
+            <Button size="xs" variant="default" loading={seeding} onClick={handleSeedDefaults}>
+              Seed from defaults
+            </Button>
+          )}
+        </Box>
       )}
 
       {!loading && !error && hasProject && sorted.length > 0 && (

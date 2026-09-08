@@ -62,13 +62,17 @@
       "label": "Plan Of Day",
       "unique": false,
       "indexed": false,
-      "masking": { "masked": false },
+      "masking": {
+        "masked": false
+      },
       "nullable": true,
       "required": false,
       "data_type": "text",
       "column_name": "plan_of_day",
       "description": "",
-      "conflict_resolution": { "code": "lww" },
+      "conflict_resolution": {
+        "code": "lww"
+      },
       "triggers_version_change": true
     },
     {
@@ -79,13 +83,17 @@
       "label": "Incidents To Report",
       "unique": false,
       "indexed": false,
-      "masking": { "masked": false },
+      "masking": {
+        "masked": false
+      },
       "nullable": true,
       "required": false,
       "data_type": "text",
       "column_name": "incidents_to_report",
       "description": "",
-      "conflict_resolution": { "code": "lww" },
+      "conflict_resolution": {
+        "code": "lww"
+      },
       "triggers_version_change": true
     },
     {
@@ -96,13 +104,17 @@
       "label": "Safety Meeting Topic",
       "unique": false,
       "indexed": false,
-      "masking": { "masked": false },
+      "masking": {
+        "masked": false
+      },
       "nullable": true,
       "required": false,
       "data_type": "text",
       "column_name": "safety_meeting_topic",
       "description": "Morning tool box topic.",
-      "conflict_resolution": { "code": "lww" },
+      "conflict_resolution": {
+        "code": "lww"
+      },
       "triggers_version_change": true
     },
     {
@@ -113,13 +125,17 @@
       "label": "Afternoon Meeting Topic",
       "unique": false,
       "indexed": false,
-      "masking": { "masked": false },
+      "masking": {
+        "masked": false
+      },
       "nullable": true,
       "required": false,
       "data_type": "text",
       "column_name": "afternoon_meeting_topic",
       "description": "",
-      "conflict_resolution": { "code": "lww" },
+      "conflict_resolution": {
+        "code": "lww"
+      },
       "triggers_version_change": true
     },
     {
@@ -130,13 +146,17 @@
       "label": "Jha Aha Reviewed",
       "unique": false,
       "indexed": false,
-      "masking": { "masked": false },
+      "masking": {
+        "masked": false
+      },
       "nullable": true,
       "required": false,
       "data_type": "text",
       "column_name": "jha_aha_reviewed",
       "description": "",
-      "conflict_resolution": { "code": "lww" },
+      "conflict_resolution": {
+        "code": "lww"
+      },
       "triggers_version_change": true
     },
     {
@@ -147,13 +167,17 @@
       "label": "High Risk Task",
       "unique": false,
       "indexed": false,
-      "masking": { "masked": false },
+      "masking": {
+        "masked": false
+      },
       "nullable": true,
       "required": false,
       "data_type": "text",
       "column_name": "high_risk_task",
       "description": "",
-      "conflict_resolution": { "code": "lww" },
+      "conflict_resolution": {
+        "code": "lww"
+      },
       "triggers_version_change": true
     },
     {
@@ -164,13 +188,17 @@
       "label": "Temp High F",
       "unique": false,
       "indexed": false,
-      "masking": { "masked": false },
+      "masking": {
+        "masked": false
+      },
       "nullable": true,
       "required": false,
       "data_type": "numeric",
       "column_name": "temp_high_f",
       "description": "Decimal, not integer -- the non-native table stores this as integer, widened here per explicit direction.",
-      "conflict_resolution": { "code": "lww" },
+      "conflict_resolution": {
+        "code": "lww"
+      },
       "triggers_version_change": true
     },
     {
@@ -181,13 +209,17 @@
       "label": "Temp Low F",
       "unique": false,
       "indexed": false,
-      "masking": { "masked": false },
+      "masking": {
+        "masked": false
+      },
       "nullable": true,
       "required": false,
       "data_type": "numeric",
       "column_name": "temp_low_f",
       "description": "Decimal, not integer -- widened per explicit direction.",
-      "conflict_resolution": { "code": "lww" },
+      "conflict_resolution": {
+        "code": "lww"
+      },
       "triggers_version_change": true
     },
     {
@@ -198,13 +230,17 @@
       "label": "Wind High Mph",
       "unique": false,
       "indexed": false,
-      "masking": { "masked": false },
+      "masking": {
+        "masked": false
+      },
       "nullable": true,
       "required": false,
       "data_type": "numeric",
       "column_name": "wind_high_mph",
       "description": "Decimal, not integer -- widened per explicit direction.",
-      "conflict_resolution": { "code": "lww" },
+      "conflict_resolution": {
+        "code": "lww"
+      },
       "triggers_version_change": true
     },
     {
@@ -215,13 +251,17 @@
       "label": "Wind Gusts Mph",
       "unique": false,
       "indexed": false,
-      "masking": { "masked": false },
+      "masking": {
+        "masked": false
+      },
       "nullable": true,
       "required": false,
       "data_type": "numeric",
       "column_name": "wind_gusts_mph",
       "description": "Decimal, not integer -- widened per explicit direction.",
-      "conflict_resolution": { "code": "lww" },
+      "conflict_resolution": {
+        "code": "lww"
+      },
       "triggers_version_change": true
     },
     {
@@ -232,13 +272,17 @@
       "label": "Wind Avg Mph",
       "unique": false,
       "indexed": false,
-      "masking": { "masked": false },
+      "masking": {
+        "masked": false
+      },
       "nullable": true,
       "required": false,
       "data_type": "numeric",
       "column_name": "wind_avg_mph",
       "description": "Decimal, not integer -- widened per explicit direction.",
-      "conflict_resolution": { "code": "lww" },
+      "conflict_resolution": {
+        "code": "lww"
+      },
       "triggers_version_change": true
     },
     {
@@ -249,13 +293,17 @@
       "label": "Wind Direction",
       "unique": false,
       "indexed": false,
-      "masking": { "masked": false },
+      "masking": {
+        "masked": false
+      },
       "nullable": true,
       "required": false,
       "data_type": "text",
       "column_name": "wind_direction",
       "description": "e.g. NW, S.",
-      "conflict_resolution": { "code": "lww" },
+      "conflict_resolution": {
+        "code": "lww"
+      },
       "triggers_version_change": true
     },
     {
@@ -266,13 +314,17 @@
       "label": "Precip Today In",
       "unique": false,
       "indexed": false,
-      "masking": { "masked": false },
+      "masking": {
+        "masked": false
+      },
       "nullable": true,
       "required": false,
       "data_type": "numeric",
       "column_name": "precip_today_in",
       "description": "The only precip field actually entered/fetched -- MTD/PTD are derived by summing this across the project's reports, not stored inputs.",
-      "conflict_resolution": { "code": "lww" },
+      "conflict_resolution": {
+        "code": "lww"
+      },
       "triggers_version_change": true
     },
     {
@@ -283,13 +335,17 @@
       "label": "Precip Mtd In",
       "unique": false,
       "indexed": false,
-      "masking": { "masked": false },
+      "masking": {
+        "masked": false
+      },
       "nullable": true,
       "required": false,
       "data_type": "numeric",
       "column_name": "precip_mtd_in",
       "description": "Legacy stored column -- the non-native app now computes this live from SUM(precip_today_in) instead of reading/writing it.",
-      "conflict_resolution": { "code": "lww" },
+      "conflict_resolution": {
+        "code": "lww"
+      },
       "triggers_version_change": true
     },
     {
@@ -300,13 +356,17 @@
       "label": "Precip Project Total In",
       "unique": false,
       "indexed": false,
-      "masking": { "masked": false },
+      "masking": {
+        "masked": false
+      },
       "nullable": true,
       "required": false,
       "data_type": "numeric",
       "column_name": "precip_project_total_in",
       "description": "Legacy stored column -- same as precip_mtd_in, superseded by a live derived sum.",
-      "conflict_resolution": { "code": "lww" },
+      "conflict_resolution": {
+        "code": "lww"
+      },
       "triggers_version_change": true
     },
     {
@@ -317,13 +377,17 @@
       "label": "Conditions",
       "unique": false,
       "indexed": false,
-      "masking": { "masked": false },
+      "masking": {
+        "masked": false
+      },
       "nullable": true,
       "required": false,
       "data_type": "text",
       "column_name": "conditions",
       "description": "e.g. Light Rain, Sunny, Overcast.",
-      "conflict_resolution": { "code": "lww" },
+      "conflict_resolution": {
+        "code": "lww"
+      },
       "triggers_version_change": true
     },
     {
@@ -334,13 +398,17 @@
       "label": "Signature Name",
       "unique": false,
       "indexed": false,
-      "masking": { "masked": false },
+      "masking": {
+        "masked": false
+      },
       "nullable": true,
       "required": false,
       "data_type": "text",
       "column_name": "signature_name",
       "description": "Report Preparer name.",
-      "conflict_resolution": { "code": "lww" },
+      "conflict_resolution": {
+        "code": "lww"
+      },
       "triggers_version_change": true
     },
     {
@@ -351,13 +419,17 @@
       "label": "Signature Image Path",
       "unique": false,
       "indexed": false,
-      "masking": { "masked": false },
+      "masking": {
+        "masked": false
+      },
       "nullable": true,
       "required": false,
       "data_type": "text",
       "column_name": "signature_image_path",
       "description": "Per-report signature override path. Non-native stores the file in a private Supabase Storage bucket and this column holds the path -- native has no equivalent file store wired up yet, so this would need one before it's usable end-to-end.",
-      "conflict_resolution": { "code": "lww" },
+      "conflict_resolution": {
+        "code": "lww"
+      },
       "triggers_version_change": true
     },
     {
@@ -368,13 +440,17 @@
       "label": "Ssho Name",
       "unique": false,
       "indexed": false,
-      "masking": { "masked": false },
+      "masking": {
+        "masked": false
+      },
       "nullable": true,
       "required": false,
       "data_type": "text",
       "column_name": "ssho_name",
       "description": "Project SSHO name -- only shown on projects with the SSHO field enabled.",
-      "conflict_resolution": { "code": "lww" },
+      "conflict_resolution": {
+        "code": "lww"
+      },
       "triggers_version_change": true
     },
     {
@@ -385,13 +461,17 @@
       "label": "Ssho Signature Image Path",
       "unique": false,
       "indexed": false,
-      "masking": { "masked": false },
+      "masking": {
+        "masked": false
+      },
       "nullable": true,
       "required": false,
       "data_type": "text",
       "column_name": "ssho_signature_image_path",
       "description": "Same file-store caveat as signature_image_path.",
-      "conflict_resolution": { "code": "lww" },
+      "conflict_resolution": {
+        "code": "lww"
+      },
       "triggers_version_change": true
     },
     {
@@ -402,13 +482,17 @@
       "label": "Next Day Summary",
       "unique": false,
       "indexed": false,
-      "masking": { "masked": false },
+      "masking": {
+        "masked": false
+      },
       "nullable": true,
       "required": false,
       "data_type": "text",
       "column_name": "next_day_summary",
       "description": "Only shown on projects with next-day summary enabled.",
-      "conflict_resolution": { "code": "lww" },
+      "conflict_resolution": {
+        "code": "lww"
+      },
       "triggers_version_change": true
     }
   ],
@@ -432,9 +516,9 @@
     "max_record_versions": 10000
   },
   "track_versions": true,
-  "domain_table_name": "jfb_report_safety",
-  "slug": "jfb_report_safety",
-  "domain_name_singular": "jfb_report_safety",
+  "domain_table_name": "jfb_report_safety_v2",
+  "slug": "jfb_report_safety_v2",
+  "domain_name_singular": "jfb_report_safety_v2",
   "default_conflict_resolution": {
     "code": "lww",
     "human_readable": "Last Write Wins"

@@ -14,9 +14,7 @@ import { parseTrackDxf, looksLikeTrack, trackCoverage, TRACK_DEFAULTS } from '..
 import { parseEarthworksCsv, coverageFromSurface, diffSurfaces, filenameDateISO } from '../../../lib/dredge/earthworks'
 import { parseAlignmentDxf } from '../../../lib/dredge/alignment'
 
-// Must match the real, published domain slug -- see the same note in
-// DredgeChartTab.jsx (core.fnc_file_attach validates this against
-// core.cfg_domain_info_cache_b, it can't be a cosmetic label).
+
 const DREDGE_PROGRESS_DOMAIN = 'jfb_dredge_progress'
 
 function triggerDownload(blob, name) {
