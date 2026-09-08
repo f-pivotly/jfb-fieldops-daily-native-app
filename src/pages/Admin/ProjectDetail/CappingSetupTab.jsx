@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Box, Text, Group, Button, Table, Tabs, Modal, TextInput, Select, NumberInput, Switch } from "@mantine/core";
 import { IconPlus } from "@tabler/icons-react";
-import { useConfirmDialog } from "../../../hooks/useConfirmDialog";
+import { useCrudModal } from "../../../hooks/useCrudModal";
 import { useDomainData } from "../../../hooks/useDomainData";
 import { useProjectAreas } from "../../../hooks/useProjectAreas";
 import { useProjectLayers } from "../../../hooks/useProjectLayers";
@@ -213,38 +213,19 @@ export default function CappingSetupTab({ project }) {
 }
 
 function NamedTypeTable({ rows, typeRef, nameField, typeField, reportNameField, entityLabel, saving, onCreate, onUpdate, onDelete }) {
-  const { confirm, modal: confirmModal } = useConfirmDialog();
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editRow, setEditRow] = useState(null);
-  const [form, setForm] = useState({ name: "", type: typeRef[0]?.id ?? "", reportName: "", sortOrder: rows.length + 1 });
-
-  function openAdd() {
-    setEditRow(null);
-    setForm({ name: "", type: typeRef[0]?.id ?? "", reportName: "", sortOrder: rows.length + 1 });
-    setModalOpen(true);
-  }
-
-  function openEdit(row) {
-    setEditRow(row);
-    setForm({ name: row[nameField], type: row[typeField], reportName: row[reportNameField] ?? "", sortOrder: row.sort_order });
-    setModalOpen(true);
-  }
-
-  async function handleSave() {
-    if (!form.name.trim()) return;
-    const payload = { [nameField]: form.name.trim(), [typeField]: form.type || null, [reportNameField]: form.reportName.trim() || null, sort_order: Number(form.sortOrder) || 0 };
-    if (editRow) {
-      await onUpdate(editRow.id, payload);
-    } else {
-      await onCreate({ ...payload, active: true });
-    }
-    setModalOpen(false);
-  }
-
-  async function remove(row) {
-    if (!(await confirm(`Delete "${row[nameField]}"? Any mappings that use it will also be removed.`))) return;
-    await onDelete(row.id);
-  }
+  const { modalOpen, setModalOpen, editRow, form, setFormField, openAdd, openEdit, save, remove, confirmModal } = useCrudModal({
+    emptyForm: () => ({ name: "", type: typeRef[0]?.id ?? "", reportName: "", sortOrder: rows.length + 1 }),
+    toForm: (row) => ({ name: row[nameField], type: row[typeField], reportName: row[reportNameField] ?? "", sortOrder: row.sort_order }),
+    toPayload: (f, { editRow: er }) => {
+      if (!f.name.trim()) return null;
+      const payload = { [nameField]: f.name.trim(), [typeField]: f.type || null, [reportNameField]: f.reportName.trim() || null, sort_order: Number(f.sortOrder) || 0 };
+      return er ? payload : { ...payload, active: true };
+    },
+    onCreate,
+    onUpdate,
+    onDelete,
+    confirmMessage: (row) => `Delete "${row[nameField]}"? Any mappings that use it will also be removed.`,
+  });
 
   async function toggleActive(row) {
     await onUpdate(row.id, { active: !row.active });
@@ -255,7 +236,7 @@ function NamedTypeTable({ rows, typeRef, nameField, typeField, reportNameField, 
   return (
     <Box>
       <Group justify="flex-end" mb={10}>
-        <Button size="xs" leftSection={<IconPlus size={12} />} onClick={openAdd} style={{ background: "#0F2744", border: "none" }}>Add {entityLabel}</Button>
+        <Button size="xs" leftSection={<IconPlus size={12} />} onClick={() => openAdd()} style={{ background: "#0F2744", border: "none" }}>Add {entityLabel}</Button>
       </Group>
       <Table withTableBorder verticalSpacing="xs" fz="sm">
         <Table.Thead>
@@ -284,13 +265,13 @@ function NamedTypeTable({ rows, typeRef, nameField, typeField, reportNameField, 
       </Table>
 
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit" : "Add"} {entityLabel}</Text>} size="sm">
-        <TextInput label={`${entityLabel} Name`} required value={form.name} onChange={(e) => { const v = e.currentTarget.value; setForm((f) => ({ ...f, name: v })) }} mb={10} autoFocus />
-        <Select label={`${entityLabel} Type`} data={typeRef.map((t) => ({ value: t.id, label: t.name }))} value={form.type} onChange={(v) => setForm((f) => ({ ...f, type: v }))} mb={10} />
-        <NumberInput label="Sort Order" hideControls value={form.sortOrder} onChange={(v) => setForm((f) => ({ ...f, sortOrder: v }))} mb={10} />
-        <TextInput label="Report Name (optional)" placeholder="Defaults to name above" value={form.reportName} onChange={(e) => { const v = e.currentTarget.value; setForm((f) => ({ ...f, reportName: v })) }} mb={16} />
+        <TextInput label={`${entityLabel} Name`} required value={form.name} onChange={(e) => setFormField("name", e.currentTarget.value)} mb={10} autoFocus />
+        <Select label={`${entityLabel} Type`} data={typeRef.map((t) => ({ value: t.id, label: t.name }))} value={form.type} onChange={(v) => setFormField("type", v)} mb={10} />
+        <NumberInput label="Sort Order" hideControls value={form.sortOrder} onChange={(v) => setFormField("sortOrder", v)} mb={10} />
+        <TextInput label="Report Name (optional)" placeholder="Defaults to name above" value={form.reportName} onChange={(e) => setFormField("reportName", e.currentTarget.value)} mb={16} />
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => setModalOpen(false)}>Cancel</Button>
-          <Button size="xs" loading={saving} onClick={handleSave} disabled={!form.name.trim()} style={{ background: "#0F2744", border: "none" }}>Save</Button>
+          <Button size="xs" loading={saving} onClick={save} disabled={!form.name.trim()} style={{ background: "#0F2744", border: "none" }}>Save</Button>
         </Group>
       </Modal>
 
@@ -300,52 +281,33 @@ function NamedTypeTable({ rows, typeRef, nameField, typeField, reportNameField, 
 }
 
 function ComponentsTable({ rows, typeRef, saving, onCreate, onUpdate, onDelete }) {
-  const { confirm, modal: confirmModal } = useConfirmDialog();
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editRow, setEditRow] = useState(null);
-  const [form, setForm] = useState({ name: "", type: typeRef[0]?.id ?? "", reportName: "", reportUom: "", invUom: "", sortOrder: rows.length + 1 });
-
-  function openAdd() {
-    setEditRow(null);
-    setForm({ name: "", type: typeRef[0]?.id ?? "", reportName: "", reportUom: "", invUom: "", sortOrder: rows.length + 1 });
-    setModalOpen(true);
-  }
-
-  function openEdit(row) {
-    setEditRow(row);
-    setForm({
+  const { modalOpen, setModalOpen, editRow, form, setFormField, openAdd, openEdit, save, remove, confirmModal } = useCrudModal({
+    emptyForm: () => ({ name: "", type: typeRef[0]?.id ?? "", reportName: "", reportUom: "", invUom: "", sortOrder: rows.length + 1 }),
+    toForm: (row) => ({
       name: row.component_name,
       type: row.component_type_id,
       reportName: row.component_report_name ?? "",
       reportUom: row.component_report_uom ?? "",
       invUom: row.component_inventory_uom ?? "",
       sortOrder: row.sort_order,
-    });
-    setModalOpen(true);
-  }
-
-  async function handleSave() {
-    if (!form.name.trim()) return;
-    const payload = {
-      component_name: form.name.trim(),
-      component_type_id: form.type || null,
-      component_report_name: form.reportName.trim() || null,
-      component_report_uom: form.reportUom || null,
-      component_inventory_uom: form.invUom || null,
-      sort_order: Number(form.sortOrder) || 0,
-    };
-    if (editRow) {
-      await onUpdate(editRow.id, payload);
-    } else {
-      await onCreate({ ...payload, active: true });
-    }
-    setModalOpen(false);
-  }
-
-  async function remove(row) {
-    if (!(await confirm(`Delete "${row.component_name}"? Any mappings that use it will also be removed.`))) return;
-    await onDelete(row.id);
-  }
+    }),
+    toPayload: (f, { editRow: er }) => {
+      if (!f.name.trim()) return null;
+      const payload = {
+        component_name: f.name.trim(),
+        component_type_id: f.type || null,
+        component_report_name: f.reportName.trim() || null,
+        component_report_uom: f.reportUom || null,
+        component_inventory_uom: f.invUom || null,
+        sort_order: Number(f.sortOrder) || 0,
+      };
+      return er ? payload : { ...payload, active: true };
+    },
+    onCreate,
+    onUpdate,
+    onDelete,
+    confirmMessage: (row) => `Delete "${row.component_name}"? Any mappings that use it will also be removed.`,
+  });
 
   async function toggleActive(row) {
     await onUpdate(row.id, { active: !row.active });
@@ -357,7 +319,7 @@ function ComponentsTable({ rows, typeRef, saving, onCreate, onUpdate, onDelete }
     <Box>
       <Text size="xs" c="dimmed" mb={10}>Only needed when a material is a blend (e.g. amended sand).</Text>
       <Group justify="flex-end" mb={10}>
-        <Button size="xs" leftSection={<IconPlus size={12} />} onClick={openAdd} style={{ background: "#0F2744", border: "none" }}>Add Component</Button>
+        <Button size="xs" leftSection={<IconPlus size={12} />} onClick={() => openAdd()} style={{ background: "#0F2744", border: "none" }}>Add Component</Button>
       </Group>
       <Table withTableBorder verticalSpacing="xs" fz="sm">
         <Table.Thead>
@@ -386,17 +348,17 @@ function ComponentsTable({ rows, typeRef, saving, onCreate, onUpdate, onDelete }
       </Table>
 
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit" : "Add"} Component</Text>} size="sm">
-        <TextInput label="Component Name" required value={form.name} onChange={(e) => { const v = e.currentTarget.value; setForm((f) => ({ ...f, name: v })) }} mb={10} autoFocus />
-        <Select label="Component Type" data={typeRef.map((t) => ({ value: t.id, label: t.name }))} value={form.type} onChange={(v) => setForm((f) => ({ ...f, type: v }))} mb={10} />
+        <TextInput label="Component Name" required value={form.name} onChange={(e) => setFormField("name", e.currentTarget.value)} mb={10} autoFocus />
+        <Select label="Component Type" data={typeRef.map((t) => ({ value: t.id, label: t.name }))} value={form.type} onChange={(v) => setFormField("type", v)} mb={10} />
         <Group grow mb={10}>
-          <Select label="Report UOM" data={UOM_OPTIONS} value={form.reportUom} onChange={(v) => setForm((f) => ({ ...f, reportUom: v ?? "" }))} />
-          <Select label="Inventory UOM" data={UOM_OPTIONS} value={form.invUom} onChange={(v) => setForm((f) => ({ ...f, invUom: v ?? "" }))} />
+          <Select label="Report UOM" data={UOM_OPTIONS} value={form.reportUom} onChange={(v) => setFormField("reportUom", v ?? "")} />
+          <Select label="Inventory UOM" data={UOM_OPTIONS} value={form.invUom} onChange={(v) => setFormField("invUom", v ?? "")} />
         </Group>
-        <NumberInput label="Sort Order" hideControls value={form.sortOrder} onChange={(v) => setForm((f) => ({ ...f, sortOrder: v }))} mb={10} />
-        <TextInput label="Report Name (optional)" value={form.reportName} onChange={(e) => { const v = e.currentTarget.value; setForm((f) => ({ ...f, reportName: v })) }} mb={16} />
+        <NumberInput label="Sort Order" hideControls value={form.sortOrder} onChange={(v) => setFormField("sortOrder", v)} mb={10} />
+        <TextInput label="Report Name (optional)" value={form.reportName} onChange={(e) => setFormField("reportName", e.currentTarget.value)} mb={16} />
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => setModalOpen(false)}>Cancel</Button>
-          <Button size="xs" loading={saving} onClick={handleSave} disabled={!form.name.trim()} style={{ background: "#0F2744", border: "none" }}>Save</Button>
+          <Button size="xs" loading={saving} onClick={save} disabled={!form.name.trim()} style={{ background: "#0F2744", border: "none" }}>Save</Button>
         </Group>
       </Modal>
 
@@ -406,26 +368,11 @@ function ComponentsTable({ rows, typeRef, saving, onCreate, onUpdate, onDelete }
 }
 
 function AreaLayerMappings({ areas, layers, map, saving, onCreate, onUpdate, onDelete }) {
-  const { confirm, modal: confirmModal } = useConfirmDialog();
-  const [modalOpen, setModalOpen] = useState(false);
-  const [areaId, setAreaId] = useState(null);
-  const [editRow, setEditRow] = useState(null);
-  const [form, setForm] = useState({ layerId: "", minThickness: "", targetThickness: "", overplacement: "", cyGoal: "", tonsGoal: "", sfGoal: "" });
-
-  const areaIdsWithMappings = [...new Set(map.map((m) => m.area_id))];
-  const layerById = Object.fromEntries(layers.map((l) => [l.id, l]));
-
-  function openAdd(id) {
-    setEditRow(null);
-    setAreaId(id);
-    setForm({ layerId: "", minThickness: "", targetThickness: "", overplacement: "", cyGoal: "", tonsGoal: "", sfGoal: "" });
-    setModalOpen(true);
-  }
-
-  function openEdit(row) {
-    setEditRow(row);
-    setAreaId(row.area_id);
-    setForm({
+  const {
+    modalOpen, setModalOpen, editRow, form, setFormField, context: areaId, openAdd, openEdit, save, remove, confirmModal,
+  } = useCrudModal({
+    emptyForm: () => ({ layerId: "", minThickness: "", targetThickness: "", overplacement: "", cyGoal: "", tonsGoal: "", sfGoal: "" }),
+    toForm: (row) => ({
       layerId: row.layer_id,
       minThickness: row.min_design_thickness ?? "",
       targetThickness: row.target_thickness ?? "",
@@ -433,34 +380,30 @@ function AreaLayerMappings({ areas, layers, map, saving, onCreate, onUpdate, onD
       cyGoal: row.cy_goal ?? "",
       tonsGoal: row.tons_goal ?? "",
       sfGoal: row.sf_goal ?? "",
-    });
-    setModalOpen(true);
-  }
+    }),
+    contextFromRow: (row) => row.area_id,
+    toPayload: (f, { editRow: er, context }) => {
+      if (!f.layerId) return null;
+      const num = (v) => (v === "" ? null : Number(v));
+      const payload = {
+        layer_id: f.layerId,
+        min_design_thickness: num(f.minThickness),
+        target_thickness: num(f.targetThickness),
+        overplacement_tolerance: num(f.overplacement),
+        cy_goal: num(f.cyGoal),
+        tons_goal: num(f.tonsGoal),
+        sf_goal: num(f.sfGoal),
+      };
+      return er ? payload : { area_id: context, ...payload };
+    },
+    onCreate,
+    onUpdate,
+    onDelete,
+    confirmMessage: () => "Remove this layer from the area?",
+  });
 
-  async function handleSave() {
-    if (!form.layerId) return;
-    const num = (v) => (v === "" ? null : Number(v));
-    const payload = {
-      layer_id: form.layerId,
-      min_design_thickness: num(form.minThickness),
-      target_thickness: num(form.targetThickness),
-      overplacement_tolerance: num(form.overplacement),
-      cy_goal: num(form.cyGoal),
-      tons_goal: num(form.tonsGoal),
-      sf_goal: num(form.sfGoal),
-    };
-    if (editRow) {
-      await onUpdate(editRow.id, payload);
-    } else {
-      await onCreate({ area_id: areaId, ...payload });
-    }
-    setModalOpen(false);
-  }
-
-  async function remove(row) {
-    if (!(await confirm("Remove this layer from the area?"))) return;
-    await onDelete(row.id);
-  }
+  const areaIdsWithMappings = [...new Set(map.map((m) => m.area_id))];
+  const layerById = Object.fromEntries(layers.map((l) => [l.id, l]));
 
   const availableLayers = (id, excludeRowId) => layers.filter((l) => !map.some((m) => m.area_id === id && m.layer_id === l.id && m.id !== excludeRowId));
 
@@ -502,20 +445,20 @@ function AreaLayerMappings({ areas, layers, map, saving, onCreate, onUpdate, onD
       </Box>
 
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit" : "Add"} Layer Mapping</Text>} size="sm">
-        <Select label="Layer" required data={availableLayers(areaId, editRow?.id).map((l) => ({ value: l.id, label: l.layer_name }))} value={form.layerId} onChange={(v) => setForm((f) => ({ ...f, layerId: v ?? "" }))} mb={10} />
+        <Select label="Layer" required data={availableLayers(areaId, editRow?.id).map((l) => ({ value: l.id, label: l.layer_name }))} value={form.layerId} onChange={(v) => setFormField("layerId", v ?? "")} mb={10} />
         <Group grow mb={10}>
-          <NumberInput label='Min Thickness (in)' hideControls value={form.minThickness} onChange={(v) => setForm((f) => ({ ...f, minThickness: v }))} />
-          <NumberInput label='Target Thickness (in)' hideControls value={form.targetThickness} onChange={(v) => setForm((f) => ({ ...f, targetThickness: v }))} />
-          <NumberInput label='Overplacement (in)' hideControls value={form.overplacement} onChange={(v) => setForm((f) => ({ ...f, overplacement: v }))} />
+          <NumberInput label='Min Thickness (in)' hideControls value={form.minThickness} onChange={(v) => setFormField("minThickness", v)} />
+          <NumberInput label='Target Thickness (in)' hideControls value={form.targetThickness} onChange={(v) => setFormField("targetThickness", v)} />
+          <NumberInput label='Overplacement (in)' hideControls value={form.overplacement} onChange={(v) => setFormField("overplacement", v)} />
         </Group>
         <Group grow mb={16}>
-          <NumberInput label="CY Goal" hideControls value={form.cyGoal} onChange={(v) => setForm((f) => ({ ...f, cyGoal: v }))} />
-          <NumberInput label="Tons Goal" hideControls value={form.tonsGoal} onChange={(v) => setForm((f) => ({ ...f, tonsGoal: v }))} />
-          <NumberInput label="SF Goal" hideControls value={form.sfGoal} onChange={(v) => setForm((f) => ({ ...f, sfGoal: v }))} />
+          <NumberInput label="CY Goal" hideControls value={form.cyGoal} onChange={(v) => setFormField("cyGoal", v)} />
+          <NumberInput label="Tons Goal" hideControls value={form.tonsGoal} onChange={(v) => setFormField("tonsGoal", v)} />
+          <NumberInput label="SF Goal" hideControls value={form.sfGoal} onChange={(v) => setFormField("sfGoal", v)} />
         </Group>
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => setModalOpen(false)}>Cancel</Button>
-          <Button size="xs" loading={saving} onClick={handleSave} disabled={!form.layerId} style={{ background: "#0F2744", border: "none" }}>Save</Button>
+          <Button size="xs" loading={saving} onClick={save} disabled={!form.layerId} style={{ background: "#0F2744", border: "none" }}>Save</Button>
         </Group>
       </Modal>
 
@@ -525,50 +468,31 @@ function AreaLayerMappings({ areas, layers, map, saving, onCreate, onUpdate, onD
 }
 
 function LayerMaterialMappings({ layers, materials, map, saving, onCreate, onUpdate, onDelete }) {
-  const { confirm, modal: confirmModal } = useConfirmDialog();
-  const [modalOpen, setModalOpen] = useState(false);
-  const [layerId, setLayerId] = useState(null);
-  const [editRow, setEditRow] = useState(null);
-  const [form, setForm] = useState({ materialId: "", loadingRate: "", reportName: "" });
-  const materialById = Object.fromEntries(materials.map((m) => [m.id, m]));
-
-  function openAdd(id) {
-    setEditRow(null);
-    setLayerId(id);
-    setForm({ materialId: "", loadingRate: "", reportName: "" });
-    setModalOpen(true);
-  }
-
-  function openEdit(row) {
-    setEditRow(row);
-    setLayerId(row.layer_id);
-    setForm({
+  const {
+    modalOpen, setModalOpen, editRow, form, setFormField, context: layerId, openAdd, openEdit, save, remove, confirmModal,
+  } = useCrudModal({
+    emptyForm: () => ({ materialId: "", loadingRate: "", reportName: "" }),
+    toForm: (row) => ({
       materialId: row.material_id,
       loadingRate: row.loading_rate ?? "",
       reportName: row.layer_material_report_name ?? "",
-    });
-    setModalOpen(true);
-  }
-
-  async function handleSave() {
-    if (!form.materialId) return;
-    const payload = {
-      material_id: form.materialId,
-      loading_rate: form.loadingRate === "" ? null : Number(form.loadingRate),
-      layer_material_report_name: form.reportName.trim() || null,
-    };
-    if (editRow) {
-      await onUpdate(editRow.id, payload);
-    } else {
-      await onCreate({ layer_id: layerId, ...payload });
-    }
-    setModalOpen(false);
-  }
-
-  async function remove(row) {
-    if (!(await confirm("Remove this material from the layer?"))) return;
-    await onDelete(row.id);
-  }
+    }),
+    contextFromRow: (row) => row.layer_id,
+    toPayload: (f, { editRow: er, context }) => {
+      if (!f.materialId) return null;
+      const payload = {
+        material_id: f.materialId,
+        loading_rate: f.loadingRate === "" ? null : Number(f.loadingRate),
+        layer_material_report_name: f.reportName.trim() || null,
+      };
+      return er ? payload : { layer_id: context, ...payload };
+    },
+    onCreate,
+    onUpdate,
+    onDelete,
+    confirmMessage: () => "Remove this material from the layer?",
+  });
+  const materialById = Object.fromEntries(materials.map((m) => [m.id, m]));
 
   const availableMaterials = (id, excludeRowId) => materials.filter((m) => !map.some((x) => x.layer_id === id && x.material_id === m.id && x.id !== excludeRowId));
 
@@ -598,12 +522,12 @@ function LayerMaterialMappings({ layers, materials, map, saving, onCreate, onUpd
       })}
 
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit" : "Add"} Material Mapping</Text>} size="sm">
-        <Select label="Material" required data={availableMaterials(layerId, editRow?.id).map((m) => ({ value: m.id, label: m.material_name }))} value={form.materialId} onChange={(v) => setForm((f) => ({ ...f, materialId: v ?? "" }))} mb={10} />
-        <NumberInput label="Loading Rate (tons/hr, optional)" hideControls value={form.loadingRate} onChange={(v) => setForm((f) => ({ ...f, loadingRate: v }))} mb={10} />
-        <TextInput label="Report Name Override (optional)" value={form.reportName} onChange={(e) => { const v = e.currentTarget.value; setForm((f) => ({ ...f, reportName: v })) }} mb={16} />
+        <Select label="Material" required data={availableMaterials(layerId, editRow?.id).map((m) => ({ value: m.id, label: m.material_name }))} value={form.materialId} onChange={(v) => setFormField("materialId", v ?? "")} mb={10} />
+        <NumberInput label="Loading Rate (tons/hr, optional)" hideControls value={form.loadingRate} onChange={(v) => setFormField("loadingRate", v)} mb={10} />
+        <TextInput label="Report Name Override (optional)" value={form.reportName} onChange={(e) => setFormField("reportName", e.currentTarget.value)} mb={16} />
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => setModalOpen(false)}>Cancel</Button>
-          <Button size="xs" loading={saving} onClick={handleSave} disabled={!form.materialId} style={{ background: "#0F2744", border: "none" }}>Save</Button>
+          <Button size="xs" loading={saving} onClick={save} disabled={!form.materialId} style={{ background: "#0F2744", border: "none" }}>Save</Button>
         </Group>
       </Modal>
 
@@ -613,48 +537,29 @@ function LayerMaterialMappings({ layers, materials, map, saving, onCreate, onUpd
 }
 
 function MaterialComponentMappings({ materials, components, map, saving, onCreate, onUpdate, onDelete }) {
-  const { confirm, modal: confirmModal } = useConfirmDialog();
-  const [modalOpen, setModalOpen] = useState(false);
-  const [materialId, setMaterialId] = useState(null);
-  const [editRow, setEditRow] = useState(null);
-  const [form, setForm] = useState({ componentId: "", percent: "" });
-  const componentById = Object.fromEntries(components.map((c) => [c.id, c]));
-
-  function openAdd(id) {
-    setEditRow(null);
-    setMaterialId(id);
-    setForm({ componentId: "", percent: "" });
-    setModalOpen(true);
-  }
-
-  function openEdit(row) {
-    setEditRow(row);
-    setMaterialId(row.material_id);
-    setForm({
+  const {
+    modalOpen, setModalOpen, editRow, form, setFormField, context: materialId, openAdd, openEdit, save, remove, confirmModal,
+  } = useCrudModal({
+    emptyForm: () => ({ componentId: "", percent: "" }),
+    toForm: (row) => ({
       componentId: row.component_id,
       percent: row.component_percent_of_material ?? "",
-    });
-    setModalOpen(true);
-  }
-
-  async function handleSave() {
-    if (!form.componentId) return;
-    const payload = {
-      component_id: form.componentId,
-      component_percent_of_material: form.percent === "" ? null : Number(form.percent),
-    };
-    if (editRow) {
-      await onUpdate(editRow.id, payload);
-    } else {
-      await onCreate({ material_id: materialId, ...payload });
-    }
-    setModalOpen(false);
-  }
-
-  async function remove(row) {
-    if (!(await confirm("Remove this component from the material?"))) return;
-    await onDelete(row.id);
-  }
+    }),
+    contextFromRow: (row) => row.material_id,
+    toPayload: (f, { editRow: er, context }) => {
+      if (!f.componentId) return null;
+      const payload = {
+        component_id: f.componentId,
+        component_percent_of_material: f.percent === "" ? null : Number(f.percent),
+      };
+      return er ? payload : { material_id: context, ...payload };
+    },
+    onCreate,
+    onUpdate,
+    onDelete,
+    confirmMessage: () => "Remove this component from the material?",
+  });
+  const componentById = Object.fromEntries(components.map((c) => [c.id, c]));
 
   const availableComponents = (id, excludeRowId) => components.filter((c) => !map.some((x) => x.material_id === id && x.component_id === c.id && x.id !== excludeRowId));
 
@@ -688,11 +593,11 @@ function MaterialComponentMappings({ materials, components, map, saving, onCreat
       })}
 
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit" : "Add"} Component Mapping</Text>} size="sm">
-        <Select label="Component" required data={availableComponents(materialId, editRow?.id).map((c) => ({ value: c.id, label: c.component_name }))} value={form.componentId} onChange={(v) => setForm((f) => ({ ...f, componentId: v ?? "" }))} mb={10} />
-        <NumberInput label="% of Material (optional)" hideControls min={0} max={100} value={form.percent} onChange={(v) => setForm((f) => ({ ...f, percent: v }))} mb={16} />
+        <Select label="Component" required data={availableComponents(materialId, editRow?.id).map((c) => ({ value: c.id, label: c.component_name }))} value={form.componentId} onChange={(v) => setFormField("componentId", v ?? "")} mb={10} />
+        <NumberInput label="% of Material (optional)" hideControls min={0} max={100} value={form.percent} onChange={(v) => setFormField("percent", v)} mb={16} />
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => setModalOpen(false)}>Cancel</Button>
-          <Button size="xs" loading={saving} onClick={handleSave} disabled={!form.componentId} style={{ background: "#0F2744", border: "none" }}>Save</Button>
+          <Button size="xs" loading={saving} onClick={save} disabled={!form.componentId} style={{ background: "#0F2744", border: "none" }}>Save</Button>
         </Group>
       </Modal>
 

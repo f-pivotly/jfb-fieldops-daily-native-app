@@ -1,0 +1,310 @@
+{
+  "schema": [
+    {
+      "pii": false,
+      "name": "project_id",
+      "slug": "project_id",
+      "type": "uuid",
+      "label": "Project Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": true,
+        "target_attr": "id",
+        "target_domain": "jfb_projects",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "project_id",
+      "description": "One row per project. The project this air monitoring configuration belongs to.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "provider",
+      "slug": "provider",
+      "type": "text",
+      "label": "Provider",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "text",
+      "column_name": "provider",
+      "description": "Defaults to 'ecomzen' (SGS Galson SmartSense).",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "base_url",
+      "slug": "base_url",
+      "type": "text",
+      "label": "Base URL",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "text",
+      "column_name": "base_url",
+      "description": "Base URL of the provider's API. Defaults to 'https://sgsusa-ws.i-comesure.com'.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "timezone",
+      "slug": "timezone",
+      "type": "text",
+      "label": "Timezone",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "text",
+      "column_name": "timezone",
+      "description": "IANA timezone the reporting window is expressed in. Defaults to 'America/New_York'.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "window_start",
+      "slug": "window_start",
+      "type": "text",
+      "label": "Window Start",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "text",
+      "column_name": "window_start",
+      "description": "Local time-of-day (HH:MM:SS) the daily reporting window opens. Defaults to '06:00:00'.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "window_end",
+      "slug": "window_end",
+      "type": "text",
+      "label": "Window End",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "text",
+      "column_name": "window_end",
+      "description": "Local time-of-day (HH:MM:SS) the daily reporting window closes. Defaults to '18:00:00'.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "interval_minutes",
+      "slug": "interval_minutes",
+      "type": "integer",
+      "label": "Interval (minutes)",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "integer",
+      "column_name": "interval_minutes",
+      "description": "Expected spacing between readings, in minutes. Defaults to 15.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "stations",
+      "slug": "stations",
+      "type": "jsonb",
+      "label": "Stations",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "jsonb",
+      "column_name": "stations",
+      "description": "Array of monitoring stations: {key, label, sensor_id, chart, role?}. chart is 'llra' (beaches chart) or 'mbp' (the other capping-boundary chart) -- selects which report chart the station's series belongs to. role='background' marks the upwind reference station.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "thresholds",
+      "slug": "thresholds",
+      "type": "jsonb",
+      "label": "Thresholds",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "jsonb",
+      "column_name": "thresholds",
+      "description": "{alert_offset_mgm3?, action_offset_mgm3?, early_warning_mgm3?, not_to_exceed_mgm3?}. alert/action offsets are added to each time slot's minimum llra-station value to produce the Alert Level / Action Level series; early_warning/not_to_exceed are flat lines on the mbp chart.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "equipment_text",
+      "slug": "equipment_text",
+      "type": "text",
+      "label": "Equipment Text",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "equipment_text",
+      "description": "Printed boilerplate describing the monitoring equipment used.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "calibration_text",
+      "slug": "calibration_text",
+      "type": "text",
+      "label": "Calibration Text",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "calibration_text",
+      "description": "Printed boilerplate describing the calibration procedure/schedule.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "notes_text",
+      "slug": "notes_text",
+      "type": "text",
+      "label": "Notes Text",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "notes_text",
+      "description": "Printed boilerplate notes shown on the page.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "aerial_path",
+      "slug": "aerial_path",
+      "type": "text",
+      "label": "Aerial Image Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "aerial_path",
+      "description": "Annotated aerial showing stations and the barge lane. Null = no aerial block.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    }
+  ],
+  "archive": true,
+  "contact": {
+    "name": "System Administrator"
+  },
+  "multi_tenant": false,
+  "xref_enabled": true,
+  "access_control": {
+    "model": "all_systems",
+    "read_access": true,
+    "delete_access": true,
+    "insert_access": true,
+    "update_access": true,
+    "hard_delete_allowed": true,
+    "direct_write_enabled": true
+  },
+  "archive_policy": {
+    "retention_days": 365,
+    "max_record_versions": 10000
+  },
+  "track_versions": true,
+  "domain_table_name": "jfb_air_monitoring_config",
+  "slug": "jfb_air_monitoring_config",
+  "domain_name_singular": "jfb_air_monitoring_config",
+  "default_conflict_resolution": {
+    "code": "lww",
+    "human_readable": "Last Write Wins"
+  }
+}

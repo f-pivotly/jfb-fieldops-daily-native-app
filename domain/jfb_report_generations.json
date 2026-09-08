@@ -99,6 +99,27 @@
         },
         {
             "pii": false,
+            "name": "report_type",
+            "slug": "report_type",
+            "type": "text",
+            "label": "Report Type",
+            "unique": false,
+            "indexed": true,
+            "masking": {
+                "masked": false
+            },
+            "nullable": false,
+            "required": true,
+            "data_type": "text",
+            "column_name": "report_type",
+            "description": "daily, weekly, or realized_to_date.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
             "name": "generated_at",
             "slug": "generated_at",
             "type": "timestamp with time zone",

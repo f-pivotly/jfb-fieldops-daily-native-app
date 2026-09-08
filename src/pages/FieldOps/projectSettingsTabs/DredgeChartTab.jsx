@@ -5,7 +5,9 @@ import { useProjectAreas } from '../../../hooks/useProjectAreas'
 import { useDredgeEquipmentConfig } from '../../../hooks/useDredgeEquipmentConfig'
 import { useDomainData } from '../../../hooks/useDomainData'
 import { useReports } from '../../../hooks/useReports'
-import { uploadAttachment, getAttachments, deleteAttachment, downloadAttachment, readWrittenRecordId } from '../../../data'
+import { useAttachmentUpload } from '../../../hooks/useAttachmentUpload'
+import { useAsyncAction } from '../../../hooks/useAsyncAction'
+import { downloadAttachment, readWrittenRecordId } from '../../../data'
 import { parseSurveyXyz, encodeRefSurface, gzipBytes, surveyFilenameDateISO, DEFAULT_REF_CELL_FT } from '../../../lib/dredge/designVolume'
 import { isopachCsvToImage } from '../../../lib/dredge/earthworks'
 import { fetchAerial } from '../../../lib/dredge/aerial'
@@ -13,6 +15,7 @@ import { renderChart, parseCells, parseReferenceLines, parseDxfPolylines, buildP
 import { ringArea } from '../../../lib/dredge/coverage'
 import { loadAttachmentImage, loadPublicImage, loadTiles } from '../../../lib/dredge/imageLoaders'
 import { makeZip } from '../../../lib/zip'
+import { useStagedFiles } from './hooks/useStagedFiles'
 
 const DATA_SOURCES = [
   { value: 'hypack', label: 'HYPACK RAW folder — hydraulic dredge cutter track' },
@@ -49,39 +52,6 @@ function fieldsToGeoref(f) {
 // label the way a plain storage namespace could be.
 const DREDGE_CONFIG_DOMAIN = 'jfb_dredge_config'
 const EQUIPMENT_CONFIG_DOMAIN = 'jfb_dredge_equipment_config'
-
-// Every *_path field on jfb_dredge_config/jfb_dredge_equipment_config has a
-// sibling <prefix>_original_name / <prefix>_storage_path pair -- uploadAttachment
-// only ever sees a uniquified filename (see src/data/index.js), so the human
-// name has to be recorded separately, and its response doesn't include the
-// storage path, so it's read back via getAttachments right after. That
-// lookup is best-effort only (storage_path is nice-to-have metadata, not
-// required to link the file) -- if it fails for any reason, the critical
-// part (pointing [field] at the uploaded file) still happens, just with
-// *_storage_path left null instead of the whole save silently losing the
-// upload. Also deletes whatever file this one is replacing, so config edits
-// never pile up orphaned files.
-async function replaceConfigFile({ coreRecordId, domain, field, uploadFile, originalName, previousFileId, extra, update }) {
-  const res = await uploadAttachment({ coreRecordId, domain, file: uploadFile })
-  let storagePath = null
-  try {
-    const rows = await getAttachments({ coreRecordId, domain })
-    storagePath = rows.find((r) => r.fileId === res.fileId)?.storagePath ?? null
-  } catch {
-    // best-effort -- see comment above
-  }
-  const prefix = field.replace(/_path$/, '')
-  await update({
-    [field]: res.fileId,
-    [`${prefix}_original_name`]: originalName ?? uploadFile.name,
-    [`${prefix}_storage_path`]: storagePath,
-    ...extra,
-  })
-  if (previousFileId && previousFileId !== res.fileId) {
-    await deleteAttachment({ fileId: previousFileId, domain, coreRecordId })
-  }
-  return res
-}
 
 export default function DredgeChartTab({ project }) {
   const hasProject = !!project?.id
@@ -134,8 +104,6 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
   const [aerialGeoref, setAerialGeoref] = useState(() => georefToFields(existingConfig?.aerial_georef))
   const [uploading, setUploading] = useState({})
   const [uploadErrors, setUploadErrors] = useState({})
-  const [saveMsg, setSaveMsg] = useState('')
-  const [saveError, setSaveError] = useState('')
   const [bucketWidth, setBucketWidth] = useState(existingConfig?.bucket_width_ft != null ? String(existingConfig.bucket_width_ft) : '')
   const [bedTol, setBedTol] = useState(existingConfig?.track_bed_tolerance_ft != null ? String(existingConfig.track_bed_tolerance_ft) : '')
   const [alignSnap, setAlignSnap] = useState(existingConfig?.alignment_snap_ft != null ? String(existingConfig.alignment_snap_ft) : '')
@@ -144,73 +112,54 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
   const [designElev, setDesignElev] = useState(existingConfig?.design_elev_ft != null ? String(existingConfig.design_elev_ft) : '')
   const [refCell, setRefCell] = useState(existingConfig?.reference_cell_ft != null ? String(existingConfig.reference_cell_ft) : '')
   const [recovery, setRecovery] = useState(existingConfig?.volume_recovery_factor != null ? String(existingConfig.volume_recovery_factor) : '')
-  const [refUploading, setRefUploading] = useState(false)
-  const [refError, setRefError] = useState('')
-  const [refMsg, setRefMsg] = useState('')
-  const [aerialFetching, setAerialFetching] = useState(false)
-  const [aerialFetchError, setAerialFetchError] = useState('')
-  const [aerialFetchMsg, setAerialFetchMsg] = useState('')
   const [basemap, setBasemap] = useState('topo')
   const [priorEqId, setPriorEqId] = useState('')
   const [priorDate, setPriorDate] = useState('')
   const [priorFile, setPriorFile] = useState(null)
-  const [priorBusy, setPriorBusy] = useState(false)
-  const [priorMsg, setPriorMsg] = useState('')
-  const [priorError, setPriorError] = useState('')
   const [previewEqId, setPreviewEqId] = useState('')
-  const [previewBusy, setPreviewBusy] = useState(false)
-  const [previewMsg, setPreviewMsg] = useState('')
-  const [previewError, setPreviewError] = useState('')
   const [previewGenerated, setPreviewGenerated] = useState(false)
   const previewCanvasRef = useRef(null)
-  const [dxfBusy, setDxfBusy] = useState(false)
-  const [dxfMsg, setDxfMsg] = useState('')
-  const [dxfError, setDxfError] = useState('')
+
+  // Six independent busy/message/error triples -- one per action below, each
+  // its own useAsyncAction instance so they don't share a spinner/message.
+  const { busy: savingAll, message: saveMsg, error: saveError, run: runSaveAll } = useAsyncAction()
+  const { busy: refUploading, message: refMsg, error: refError, run: runRefUpload, markSuccess: markRefProgress } = useAsyncAction()
+  const { busy: aerialFetching, message: aerialFetchMsg, error: aerialFetchError, run: runAerialFetch, markError: markAerialError } = useAsyncAction()
+  const { busy: priorBusy, message: priorMsg, error: priorError, run: runPrior, markError: markPriorError } = useAsyncAction()
+  const { busy: previewBusy, message: previewMsg, error: previewError, run: runPreview, markError: markPreviewError } = useAsyncAction()
+  const { busy: dxfBusy, message: dxfMsg, error: dxfError, run: runDxf } = useAsyncAction()
 
   // Every file field always stages here first, never uploads on pick --
   // exact parity with the reference app (DredgeChartManager.tsx keeps bgFile/
   // colorbarFile/aerialFile/etc. in local state regardless of whether cfg
-  // exists yet; only its one saveProject() ever uploads anything). Keyed by
-  // field name, flushed and cleared in handleSaveBackground. Fields with
-  // their own downstream side effects (isopach CSV -> georef, aerial fetch ->
-  // aerial_georef) stash those under `extra`, merged into the same patch that
-  // sets the *_original_name/*_storage_path columns.
-  const [stagedFiles, setStagedFiles] = useState({})
-  const [stagedTiles, setStagedTiles] = useState({ isopach_tiles: [], aerial_tiles: [] })
-  // Covers the whole save (create/update + flushing every staged file/tile),
-  // not just the record write -- savingConfig (from useDomainData) only
-  // covers that one write and would otherwise flip off while uploads are
-  // still running.
-  const [savingAll, setSavingAll] = useState(false)
+  // exists yet; only its one saveProject() ever uploads anything).
+  const { stagedFiles, stagedTiles, stageFile, stageTiles, flushFiles, flushTiles } = useStagedFiles()
 
   const showVolumeRecovery = volumeMode !== '' || dataSource === 'earthworks'
 
   async function handleSaveBackground() {
-    setSaveMsg('')
-    setSaveError('')
-    setSavingAll(true)
-    const recordData = {
-      project_id: project.id,
-      chart_title_override: title.trim() || null,
-      default_area_id: areaId || null,
-      default_material_note: materials.trim() || null,
-      data_source: dataSource,
-      water_elev_ft: waterElev.trim() === '' ? null : Number(waterElev),
-      crs_definition: crsText.trim() || null,
-      require_stations: requireStations,
-      cells_reference_only: cellsReferenceOnly,
-      georef: fieldsToGeoref(georef),
-      aerial_georef: fieldsToGeoref(aerialGeoref),
-      bucket_width_ft: bucketWidth.trim() === '' ? null : Number(bucketWidth),
-      track_bed_tolerance_ft: bedTol.trim() === '' ? null : Number(bedTol),
-      alignment_snap_ft: alignSnap.trim() === '' ? null : Number(alignSnap),
-      split_gap_ft: splitGap.trim() === '' ? null : Number(splitGap),
-      volume_mode: volumeMode === '' ? null : volumeMode,
-      design_elev_ft: designElev.trim() === '' ? null : Number(designElev),
-      reference_cell_ft: refCell.trim() === '' ? null : Number(refCell),
-      volume_recovery_factor: recovery.trim() === '' ? null : Number(recovery),
-    }
-    try {
+    await runSaveAll(async () => {
+      const recordData = {
+        project_id: project.id,
+        chart_title_override: title.trim() || null,
+        default_area_id: areaId || null,
+        default_material_note: materials.trim() || null,
+        data_source: dataSource,
+        water_elev_ft: waterElev.trim() === '' ? null : Number(waterElev),
+        crs_definition: crsText.trim() || null,
+        require_stations: requireStations,
+        cells_reference_only: cellsReferenceOnly,
+        georef: fieldsToGeoref(georef),
+        aerial_georef: fieldsToGeoref(aerialGeoref),
+        bucket_width_ft: bucketWidth.trim() === '' ? null : Number(bucketWidth),
+        track_bed_tolerance_ft: bedTol.trim() === '' ? null : Number(bedTol),
+        alignment_snap_ft: alignSnap.trim() === '' ? null : Number(alignSnap),
+        split_gap_ft: splitGap.trim() === '' ? null : Number(splitGap),
+        volume_mode: volumeMode === '' ? null : volumeMode,
+        design_elev_ft: designElev.trim() === '' ? null : Number(designElev),
+        reference_cell_ft: refCell.trim() === '' ? null : Number(refCell),
+        volume_recovery_factor: recovery.trim() === '' ? null : Number(recovery),
+      }
       let configId = existingConfig?.id ?? null
       if (existingConfig) {
         await updateDredgeConfig(existingConfig.id, recordData)
@@ -219,38 +168,12 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
         if (!configId) throw new Error('Could not resolve the saved config record.')
       }
 
-      for (const [field, staged] of Object.entries(stagedFiles)) {
-        await replaceConfigFile({
-          coreRecordId: configId,
-          domain: DREDGE_CONFIG_DOMAIN,
-          field,
-          uploadFile: staged.file,
-          originalName: staged.originalName,
-          previousFileId: existingConfig?.[field] ?? null,
-          extra: staged.extra,
-          update: (patch) => updateDredgeConfig(configId, patch),
-        })
-      }
-      if (Object.keys(stagedFiles).length) setStagedFiles({})
+      const update = (patch) => updateDredgeConfig(configId, patch)
+      await flushFiles({ recordId: configId, domain: DREDGE_CONFIG_DOMAIN, existing: existingConfig, update })
+      await flushTiles({ recordId: configId, domain: DREDGE_CONFIG_DOMAIN, existing: existingConfig, update })
 
-      for (const [fieldName, list] of Object.entries(stagedTiles)) {
-        if (!list?.length) continue
-        const uploadedTiles = []
-        for (const t of list) {
-          const res = await uploadAttachment({ coreRecordId: configId, domain: DREDGE_CONFIG_DOMAIN, file: t.file })
-          uploadedTiles.push({ file_id: res.fileId, georef: t.georef })
-        }
-        const merged = [...(existingConfig?.[fieldName] ?? []), ...uploadedTiles]
-        await updateDredgeConfig(configId, { [fieldName]: merged })
-      }
-      if (Object.values(stagedTiles).some((l) => l?.length)) setStagedTiles({ isopach_tiles: [], aerial_tiles: [] })
-
-      setSaveMsg('Saved.')
-    } catch (err) {
-      setSaveError(err.message)
-    } finally {
-      setSavingAll(false)
-    }
+      return 'Saved.'
+    })
   }
 
   // Every field below always stages into stagedFiles and never uploads on
@@ -262,7 +185,7 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
   function handleUploadImage(field, file) {
     if (!file) return
     setUploadErrors((e) => ({ ...e, [field]: '' }))
-    setStagedFiles((s) => ({ ...s, [field]: { file, originalName: file.name } }))
+    stageFile(field, file)
   }
 
   // Isopach upload: images pass through to handleUploadImage unchanged; a raw
@@ -278,7 +201,7 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
     setUploading((u) => ({ ...u, bg_path: true }))
     try {
       const { file: pngFile, georef: computedGeoref } = await isopachCsvToImage(await file.text())
-      setStagedFiles((s) => ({ ...s, bg_path: { file: pngFile, originalName: file.name, extra: { georef: computedGeoref } } }))
+      stageFile('bg_path', pngFile, { originalName: file.name, extra: { georef: computedGeoref } })
       setGeoref(georefToFields(computedGeoref))
     } catch (err) {
       setUploadErrors((e) => ({ ...e, bg_path: err.message }))
@@ -293,31 +216,20 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
   // for Save).
   async function handleUploadReferenceSurvey(file) {
     if (!file) return
-    setRefError('')
-    setRefMsg('')
-    setRefUploading(true)
-    try {
+    await runRefUpload(async () => {
       const cell = refCell.trim() === '' ? DEFAULT_REF_CELL_FT : Number(refCell)
       if (!Number.isFinite(cell) || cell <= 0) {
         throw new Error('Reference survey cell size must be a positive number (or blank for 2 ft).')
       }
-      const { surface, points } = await parseSurveyXyz(file, cell, (pct, phase) => setRefMsg(`${phase} ${pct.toFixed(0)}%`))
+      const { surface, points } = await parseSurveyXyz(file, cell, (pct, phase) => markRefProgress(`${phase} ${pct.toFixed(0)}%`))
       const gz = await gzipBytes(encodeRefSurface(surface))
       const gzFile = new File([gz], `${file.name}.jfbs.gz`, { type: 'application/gzip' })
       const surveyDate = surveyFilenameDateISO(file.name)
-      setStagedFiles((s) => ({
-        ...s,
-        reference_surface_path: { file: gzFile, originalName: file.name, extra: { reference_surface_date: surveyDate, reference_cell_ft: cell } },
-      }))
+      stageFile('reference_surface_path', gzFile, { originalName: file.name, extra: { reference_surface_date: surveyDate, reference_cell_ft: cell } })
       const mb = (gz.size / 1e6).toFixed(1)
       const flownSuffix = surveyDate ? `, flown ${surveyDate}` : ''
-      setRefMsg(`Read ${points.toLocaleString()} survey points → ${surface.nx}x${surface.ny} grid at ${cell} ft (${mb} MB)${flownSuffix} — click Save to apply.`)
-    } catch (err) {
-      setRefMsg('')
-      setRefError(err.message)
-    } finally {
-      setRefUploading(false)
-    }
+      return `Read ${points.toLocaleString()} survey points → ${surface.nx}x${surface.ny} grid at ${cell} ft (${mb} MB)${flownSuffix} — click Save to apply.`
+    })
   }
 
   // Pulls a georeferenced USGS aerial for the work-area bbox (the isopach
@@ -325,33 +237,26 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
   // exactly (it also only fills the aerial File + corner fields and tells
   // the user to click Save).
   async function handleFetchAerial() {
-    setAerialFetchError('')
-    setAerialFetchMsg('')
     const bbox = fieldsToGeoref(georef)
     if (!bbox) {
-      setAerialFetchError('Enter the four work-area corners (the isopach georeference above) first, then fetch.')
+      markAerialError('Enter the four work-area corners (the isopach georeference above) first, then fetch.')
       return
     }
     if (!crsText.trim()) {
-      setAerialFetchError('Set the coordinate system (WKID / .prj) first.')
+      markAerialError('Set the coordinate system (WKID / .prj) first.')
       return
     }
-    setAerialFetching(true)
-    try {
+    await runAerialFetch(async () => {
       const { blob, georef: fetchedGeoref } = await fetchAerial(bbox, crsText, { source: basemap })
       const file = new File([blob], 'aerial.png', { type: 'image/png' })
       const rounded = {
         wL: Math.round(fetchedGeoref.wL), wR: Math.round(fetchedGeoref.wR),
         wT: Math.round(fetchedGeoref.wT), wB: Math.round(fetchedGeoref.wB),
       }
-      setStagedFiles((s) => ({ ...s, aerial_path: { file, originalName: 'aerial.png', extra: { aerial_georef: rounded } } }))
+      stageFile('aerial_path', file, { originalName: 'aerial.png', extra: { aerial_georef: rounded } })
       setAerialGeoref(georefToFields(rounded))
-      setAerialFetchMsg('Aerial fetched & aligned — click "Save background & labels" to apply.')
-    } catch (err) {
-      setAerialFetchError(err.message)
-    } finally {
-      setAerialFetching(false)
-    }
+      return 'Aerial fetched & aligned — click "Save background & labels" to apply.'
+    })
   }
 
   // Seeds prior coverage from an imported as-built border DXF -- stored as a
@@ -362,13 +267,10 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
   // backfilling onto a real dredging day) or INSERT a new one -- never touch
   // chart_path/pose on an update, so a saved chart isn't wiped.
   async function importPriorBaseline() {
-    setPriorError('')
-    setPriorMsg('')
-    if (!priorEqId) { setPriorError('Pick the dredge.'); return }
-    if (!priorDate) { setPriorError('Pick the baseline date.'); return }
-    if (!priorFile) { setPriorError('Choose the as-built border DXF.'); return }
-    setPriorBusy(true)
-    try {
+    if (!priorEqId) { markPriorError('Pick the dredge.'); return }
+    if (!priorDate) { markPriorError('Pick the baseline date.'); return }
+    if (!priorFile) { markPriorError('Choose the as-built border DXF.'); return }
+    await runPrior(async () => {
       const rings = parseDxfPolylines(await priorFile.text())
       if (!rings.length) throw new Error('No closed polylines found in that DXF.')
       // reports.find() rows are already flat domain records; a freshly-created
@@ -391,12 +293,8 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
         })
       }
       setPriorFile(null)
-      setPriorMsg(`Imported ${rings.length} polygon(s) as the ${priorDate} baseline.`)
-    } catch (err) {
-      setPriorError(err.message)
-    } finally {
-      setPriorBusy(false)
-    }
+      return `Imported ${rings.length} polygon(s) as the ${priorDate} baseline.`
+    })
   }
 
   // Dry-run the chart from the saved settings alone -- no live RAW data.
@@ -404,10 +302,8 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
   // todayPts is empty (preview: true) -- see chart.js. Any imported baseline
   // (see importPriorBaseline above) shows in green as progress-to-date.
   async function generatePreview() {
-    setPreviewError('')
-    setPreviewMsg('')
     if (!existingConfig) {
-      setPreviewError('Save background & labels first, then preview.')
+      markPreviewError('Save background & labels first, then preview.')
       return
     }
     const eq = equipment.find((e) => e.id === previewEqId) ?? equipment[0]
@@ -416,9 +312,8 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
           .filter((r) => r.equipment_id === eq.id)
           .flatMap((r) => r.footprint_rings ?? r.coverage_rings ?? [])
       : []
-    setPreviewBusy(true)
     setPreviewGenerated(false)
-    try {
+    await runPreview(async () => {
       const [bgImage, aerialImage, colorbarImage, northImage, logoImage, isopachTiles, aerialTiles, cells, referenceLines] = await Promise.all([
         loadAttachmentImage(existingConfig.bg_path),
         loadAttachmentImage(existingConfig.aerial_path),
@@ -455,14 +350,10 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
         showAdvanceLine: false,
       })
       setPreviewGenerated(true)
-      setPreviewMsg(priorRings.length
+      return priorRings.length
         ? 'Preview generated — green shows the imported baseline (progress to date).'
-        : 'Preview generated — backgrounds and georeference only (no baseline imported yet).')
-    } catch (err) {
-      setPreviewError(err.message)
-    } finally {
-      setPreviewBusy(false)
-    }
+        : 'Preview generated — backgrounds and georeference only (no baseline imported yet).'
+    })
   }
 
   function downloadPreviewPng() {
@@ -479,10 +370,7 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
   // already loaded for this tab -- and bundles them into one .zip. Mirrors
   // the reference's fetchAllDredgeDxfs()/downloadAllDxfs().
   async function handleDownloadAllDxfs() {
-    setDxfError('')
-    setDxfMsg('')
-    setDxfBusy(true)
-    try {
+    await runDxf(async () => {
       const reportDateById = new Map(reports.map((r) => [r.id, r.report_date]))
       const equipmentNameById = new Map(equipment.map((e) => [e.id, e.name]))
       const safe = (s) => s.replace(/[^A-Za-z0-9._-]+/g, '_')
@@ -496,10 +384,7 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
         const eqName = safe(equipmentNameById.get(row.equipment_id) || row.equipment_id.slice(0, 8))
         files.push({ name: `progress_${date}_${eqName}.dxf`, text: buildProgressDxfFromRings(first, second) })
       }
-      if (!files.length) {
-        setDxfMsg('No saved dredge days yet.')
-        return
-      }
+      if (!files.length) return 'No saved dredge days yet.'
       files.sort((a, b) => a.name.localeCompare(b.name))
       const blob = makeZip(files)
       const url = URL.createObjectURL(blob)
@@ -508,12 +393,8 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
       a.download = 'progress-dxfs.zip'
       a.click()
       URL.revokeObjectURL(url)
-      setDxfMsg(`Downloaded ${files.length} DXF${files.length === 1 ? '' : 's'}.`)
-    } catch (err) {
-      setDxfError(err.message)
-    } finally {
-      setDxfBusy(false)
-    }
+      return `Downloaded ${files.length} DXF${files.length === 1 ? '' : 's'}.`
+    })
   }
 
   return (
@@ -687,7 +568,7 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
           help="Optional — for lake-sized isopachs one image can't cover. Every tile whose corners overlap the day's view gets drawn; leave empty to use the single isopach image above."
           tiles={existingConfig?.isopach_tiles}
           stagedTiles={stagedTiles.isopach_tiles}
-          onStagedTilesChange={(list) => setStagedTiles((s) => ({ ...s, isopach_tiles: list }))}
+          onStagedTilesChange={(list) => stageTiles('isopach_tiles', list)}
           onRemoveSavedTile={(idx) => updateDredgeConfig(existingConfig.id, { isopach_tiles: (existingConfig.isopach_tiles ?? []).filter((_, i) => i !== idx) })}
         />
 
@@ -732,7 +613,7 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
               help="Optional — multiple aerial tiles instead of one. Leave empty to use the single aerial image above."
               tiles={existingConfig?.aerial_tiles}
               stagedTiles={stagedTiles.aerial_tiles}
-              onStagedTilesChange={(list) => setStagedTiles((s) => ({ ...s, aerial_tiles: list }))}
+              onStagedTilesChange={(list) => stageTiles('aerial_tiles', list)}
               onRemoveSavedTile={(idx) => updateDredgeConfig(existingConfig.id, { aerial_tiles: (existingConfig.aerial_tiles ?? []).filter((_, i) => i !== idx) })}
             />
           </Stack>
@@ -978,23 +859,19 @@ function GeoreferenceGrid({ value, onChange }) {
 function EquipmentShapeRow({ equipment, projectId, existingEquipmentConfig, createEquipmentConfig, updateEquipmentConfig }) {
   const [label, setLabel] = useState(existingEquipmentConfig?.chart_label_override ?? equipment.name ?? '')
   const [stagedShape, setStagedShape] = useState(null)
-  const [saving, setSaving] = useState(false)
-  const [saveMsg, setSaveMsg] = useState('')
-  const [saveError, setSaveError] = useState('')
+  const { busy: saving, message: saveMsg, error: saveError, run: runSave } = useAsyncAction()
+  const shapeUpload = useAttachmentUpload()
 
   // Mirrors the reference's EquipmentRow exactly: the shape file always
   // stages locally (handleUploadShape) and only this row's own Save
   // uploads it, whether the row already exists or is being created here.
   async function handleSave() {
-    setSaveMsg('')
-    setSaveError('')
-    setSaving(true)
-    const recordData = {
-      project_id: projectId,
-      equipment_id: equipment.id,
-      chart_label_override: label.trim() || null,
-    }
-    try {
+    await runSave(async () => {
+      const recordData = {
+        project_id: projectId,
+        equipment_id: equipment.id,
+        chart_label_override: label.trim() || null,
+      }
       let rowId = existingEquipmentConfig?.id ?? null
       if (existingEquipmentConfig) {
         await updateEquipmentConfig(existingEquipmentConfig.id, recordData)
@@ -1003,22 +880,19 @@ function EquipmentShapeRow({ equipment, projectId, existingEquipmentConfig, crea
         if (!rowId) throw new Error('Could not resolve the saved equipment record.')
       }
       if (stagedShape) {
-        await replaceConfigFile({
-          coreRecordId: rowId,
+        await shapeUpload.upload({
+          recordId: rowId,
           domain: EQUIPMENT_CONFIG_DOMAIN,
           field: 'shape_path',
-          uploadFile: stagedShape,
+          file: stagedShape,
           previousFileId: existingEquipmentConfig?.shape_path ?? null,
+          metadataPrefix: 'shape',
           update: (patch) => updateEquipmentConfig(rowId, patch),
         })
         setStagedShape(null)
       }
-      setSaveMsg('Saved.')
-    } catch (err) {
-      setSaveError(err.message)
-    } finally {
-      setSaving(false)
-    }
+      return 'Saved.'
+    })
   }
 
   function handleUploadShape(file) {

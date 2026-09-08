@@ -1,6 +1,71 @@
 import { fetchDomainRecords, fetchPicklistValues, downloadAttachment, executeDataView } from '../../../data'
 import { renderWeeklyProgressCharts } from '../../../lib/dredge/weeklyChart'
-import { mondayStartISO } from './realizedToDate'
+import { buildCombosFromActivities, comboNOH, isUnassigned } from '../../../lib/productionCombos'
+import { prettyDate } from './realizedToDate'
+
+// Ported from the non-native app's src/lib/dates.ts (isoCalWeek/projectWeekNumber).
+// Feeds the cover, production sheet, and safety sheet date tables' Cal. Wk# /
+// Prod. Wk# columns, which the CSS (.meta-date-table .weekday,
+// .sheet-date-table .weekday) was already built for but the template never
+// populated -- these all shipped as hardcoded em-dashes until now.
+function isoCalWeek(dateISO) {
+  const [y, m, d] = dateISO.split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d))
+  const dayNum = dt.getUTCDay() || 7 // Sun (0) -> 7
+  dt.setUTCDate(dt.getUTCDate() + 4 - dayNum)
+  const yearStart = Date.UTC(dt.getUTCFullYear(), 0, 1)
+  return Math.ceil(((dt.getTime() - yearStart) / 86_400_000 + 1) / 7)
+}
+
+function projectWeekNumber(reportDateISO, projectStartRaw) {
+  if (!projectStartRaw) return null
+  const projectStartISO = projectStartRaw.slice(0, 10)
+  const a = new Date(`${projectStartISO}T00:00:00Z`)
+  const b = new Date(`${reportDateISO}T00:00:00Z`)
+  const days = Math.round((b - a) / 86_400_000)
+  if (days < 0) return 0
+  return Math.floor(days / 7) + 1
+}
+
+function weekdayName(dateISO) {
+  const [y, m, d] = dateISO.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'long' })
+}
+
+// {weekday, calWeek, projectWeek, reportNameCompact} shared by the cover,
+// every per-equipment production sheet, and the safety sheet's date tables.
+export function buildDateTableParams({ date, project }) {
+  return {
+    weekday: weekdayName(date),
+    calWeek: isoCalWeek(date),
+    projectWeek: projectWeekNumber(date, project?.start_date),
+    reportNameCompact: date.replaceAll('-', ''),
+    projectStartDate: project?.start_date ? prettyDate(project.start_date.slice(0, 10)) : null,
+  }
+}
+
+// Ported from the non-native app's loadProductionSheetData.ts: each
+// equipment's "Report #:" is a 6-digit YYMMDD (not the 8-digit
+// reportNameCompact above) plus that equipment's initials.
+function nameInitials(name) {
+  const words = (name ?? '').trim().split(/\s+/).filter(Boolean)
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase()
+  if (words.length === 1 && words[0].length >= 2) return words[0].slice(0, 2).toUpperCase()
+  return 'XX'
+}
+
+// {equipmentId: "YYMMDD" + initials}, looked up per-equipment sheet as
+// `../parameters.reportNumberByEquipment`. Native's jfb_equipments has no
+// equipment_number column, so unlike reference's Report #, there's no
+// separate stored id to fall back to -- this compact form is the only one.
+export function buildEquipmentReportNumbers({ date, equipment }) {
+  const compact = date.replaceAll('-', '').slice(2)
+  const result = {}
+  for (const eq of equipment ?? []) {
+    result[eq.id] = compact + nameInitials(eq.name)
+  }
+  return result
+}
 
 function blobToDataUri(blob) {
   return new Promise((resolve, reject) => {
@@ -187,10 +252,29 @@ function summarizeOperatorShift(rows, operatorNameById) {
   }
 }
 
+// Reference (ProductionSheetPage.tsx selectActivityDensity) pads the Daily
+// Activity grid to a fixed 15 rows only on sparse days (<=12 real rows);
+// above that it renders exactly the real row count with no padding, because
+// padding on busy days pushed the Delay Summary strip below onto an
+// otherwise-empty extra page (reference's own postmortem: Lake Pepin
+// 2026-08-03, Torch Lake 2026-08-04). Never truncate real rows.
+const ACTIVITY_GRID_ROWS = 15
+function padActivityRows(rows) {
+  if (rows.length > 12) return rows
+  const padded = rows.slice()
+  for (let i = padded.length; i < ACTIVITY_GRID_ROWS; i++) {
+    padded.push({ num: i + 1, from: '', to: '', minutes: '', area: '', pass: '', event: '', notes: '' })
+  }
+  return padded
+}
+
 // Returns { activitiesByEquipment, delaySummaryByEquipment, opSummaryByEquipment },
 // all keyed by equipment_id -- the report template looks up each the same way,
 // e.g. `{{#with (lookup ../parameters.dailyActivityByEquipment this.id)}}`.
-export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, dateISO }) {
+// `equipmentIds` (all equipment on the project, not just ones with activity
+// today) guarantees every sheet gets a padded 15-row grid, including
+// equipment with zero logged activity for the day.
+export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, dateISO, equipmentIds }) {
   const { gte, lt } = utcDayRange(dateISO)
 
   const [activityRes, areaLabelRows, projectDelayRes, masterDelayRes, passTypeRows, operatorRes] = await Promise.all([
@@ -227,6 +311,7 @@ export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, d
   const activities = (activityRes?.data ?? []).filter((a) => sameCalendarDay(a.start_date_time, dateISO, a.timezone))
 
   const byEquipment = new Map()
+  for (const id of equipmentIds ?? []) byEquipment.set(id, [])
   for (const a of activities) {
     if (!byEquipment.has(a.equipment_id)) byEquipment.set(a.equipment_id, [])
     byEquipment.get(a.equipment_id).push(a)
@@ -237,7 +322,7 @@ export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, d
   const opSummaryByEquipment = {}
   for (const [equipmentId, rows] of byEquipment) {
     const sorted = rows.slice().sort((x, y) => new Date(x.start_date_time) - new Date(y.start_date_time))
-    activitiesByEquipment[equipmentId] = sorted.map((a, i) => ({
+    activitiesByEquipment[equipmentId] = padActivityRows(sorted.map((a, i) => ({
       num: i + 1,
       from: hhmm(a.start_date_time),
       to: hhmm(a.end_date_time),
@@ -250,7 +335,7 @@ export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, d
       // existed.
       event: a.category || resolveDelayCode(a.delay_code_id, projectDelayCodeById, masterDelayCodeById),
       notes: a.notes || '',
-    }))
+    })))
     delaySummaryByEquipment[equipmentId] = buildDelaySummary(rows, projectDelayCodeById, masterDelayCodeById)
     opSummaryByEquipment[equipmentId] = summarizeOperatorShift(sorted, operatorNameById)
   }
@@ -260,97 +345,350 @@ export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, d
 function fmtHrs(n) {
   return (n ?? 0).toFixed(2)
 }
-function fmtPct(n) {
-  return n == null ? '—' : `${Math.round(n)}%`
-}
 function fmtNum(n) {
   return Math.round(n ?? 0).toLocaleString()
 }
+function fmtPct(n) {
+  return `${Math.round(n)}%`
+}
 
-// One equipment's GOH/NOH/Delay/Efficiency/Area/Volume for one date range,
-// via the already-published per-project/per-equipment metric data views
-// (same ones the on-screen Metrics tab uses) -- no new SQL needed.
+function shapeComboStats(goh, noh, delay, volume, area) {
+  return {
+    goh: fmtHrs(goh),
+    noh: fmtHrs(noh),
+    delay: fmtHrs(delay),
+    efficiency: fmtPct(goh > 0 ? (noh / goh) * 100 : 0),
+    area: fmtNum(area),
+    volume: fmtNum(volume),
+    cyPerGoh: fmtNum(goh > 0 ? volume / goh : 0),
+    cyPerNoh: fmtNum(noh > 0 ? volume / noh : 0),
+    sfPerGoh: fmtNum(goh > 0 ? area / goh : 0),
+    sfPerNoh: fmtNum(noh > 0 ? area / noh : 0),
+  }
+}
+
+// Matches the reference app's ProductionSheetPage.tsx exactly: one "Total"
+// column (the equipment's whole day) plus one column per work combo (area +
+// pass + tsca + attachment) actually logged that day -- NOT a Day/Week/
+// Project-Total time-window breakdown (that was this native port's own
+// invention and has been replaced to match reference). "Standard" is
+// reference's own fallback column label for a day with zero real combos,
+// not a real category -- reused here for the same case.
 //
-// Deliberately does NOT call dvw-jfb-goh: its optional area/pass_type/tsca/
-// attachment_id filters use `IS NOT DISTINCT FROM`, which (unlike
-// p_equipment_id's `IS NULL OR ...`) treats an omitted/NULL filter as "match
-// only rows where this field is ALSO NULL" rather than "don't filter on
-// this" -- confirmed by testing against real data: every real activity has a
-// non-null area/pass_type/tsca/attachment_id, so an unscoped call silently
-// returned 0. dvw-jfb-goh is built for the combo-scoped drill-down (a
-// specific area/pass/tsca/attachment combination), not a plain equipment
-// total. GOH (every activity, productive or not) is instead derived as
-// noh + delay, which are exhaustive and mutually exclusive by construction
-// (dvw-jfb-metric-hours-op/-delay split on the same category check, no
-// third bucket) and have no such extra-filter footgun.
-async function fetchEquipmentMetrics({ projectId, equipmentId, startDate, endDate }) {
-  const p = { p_project_id: projectId, p_start_date: startDate, p_end_date: endDate, p_equipment_id: equipmentId }
-  const [noh, delay, efficiency, cy, sf] = await Promise.all([
-    executeDataView('dvw-jfb-metric-hours-op', p),
-    executeDataView('dvw-jfb-metric-hours-delay', p),
-    executeDataView('dvw-jfb-metric-efficiency', p),
-    executeDataView('dvw-jfb-metric-cy', p),
-    executeDataView('dvw-jfb-metric-sf', p),
-  ])
-  const nohHours = Number(noh?.[0]?.op_hours ?? 0)
-  const delayHours = Number(delay?.[0]?.delay_hours ?? 0)
-  return {
-    goh: fmtHrs(nohHours + delayHours),
-    noh: fmtHrs(nohHours),
-    delay: fmtHrs(delayHours),
-    efficiency: fmtPct(efficiency?.[0]?.efficiency_pct != null ? Number(efficiency[0].efficiency_pct) : null),
-    area: fmtNum(Number(sf?.[0]?.total_area ?? 0)),
-    volume: fmtNum(Number(cy?.[0]?.total_volume ?? 0)),
-  }
-}
-
-// Day/Week/Project-Total GOH/NOH/Delay/Efficiency/Area/Volume per equipment,
-// keyed by equipment_id -- fills in the Production Report sheet's "Daily
-// Production Totals by Activity" box, which previously shipped as hardcoded
-// em-dashes despite these exact metric views already existing (built for the
-// on-screen Metrics tab, never wired into this PDF). Week = Monday of this
-// report's week through the report date (running total, not the full
-// Mon-Sun span); Project = the project's production/start date through the
-// report date -- same "to-date" floor convention as Realized To-Date and
-// Weekly Summary.
-export async function buildProductionStatsByEquipmentParam({ projectId, project, dateISO, equipmentIds }) {
-  const weekStart = mondayStartISO(dateISO)
-  const projectStart = project?.production_start_date || (project?.start_date ? project.start_date.slice(0, 10) : '2000-01-01')
-
-  const entries = await Promise.all(
-    equipmentIds.map(async (equipmentId) => {
-      const [day, week, project_] = await Promise.all([
-        fetchEquipmentMetrics({ projectId, equipmentId, startDate: dateISO, endDate: dateISO }),
-        fetchEquipmentMetrics({ projectId, equipmentId, startDate: weekStart, endDate: dateISO }),
-        fetchEquipmentMetrics({ projectId, equipmentId, startDate: projectStart, endDate: dateISO }),
-      ])
-      return [equipmentId, { day, week, project: project_ }]
+// Activities (jfb_daily_activities, via buildCombosFromActivities) are the
+// SOLE source of combo identity, mirroring reference's buildCombosFromEvents
+// -- jfb_production_stats rows are only ever matched onto an already-built
+// combo, never used to originate a new column. A stats row that doesn't
+// match any activity combo (e.g. a tsca/pass/area mismatch between logging
+// and stats entry) is dropped from the per-combo breakdown, same as
+// reference silently drops it, rather than surfacing as its own column with
+// no real identity. It still counts toward Total below, matching
+// reference's Total (summed straight from every stats row, independent of
+// the combo breakdown) -- so entered production is never silently lost from
+// the day's total even when it can't be attributed to a specific combo.
+export async function buildProductionComboTotalsByEquipmentParam({ appSlug, projectId, reportId, dateISO }) {
+  const { gte, lt } = utcDayRange(dateISO)
+  const [activityRes, statsRes, areaRes, passTypeRows, attachmentRes] = await Promise.all([
+    fetchDomainRecords({
+      domain: 'jfb_daily_activities', system: 'core', appSlug,
+      filters: { project_id: projectId, start_date_time: { gte, lt } },
+      limit: 1000,
     }),
+    fetchDomainRecords({ domain: 'jfb_production_stats', system: 'core', appSlug, filters: { report_id: reportId }, limit: 500 }),
+    fetchDomainRecords({ domain: 'jfb_project_areas', system: 'core', appSlug, filters: { project_id: projectId }, limit: 1000 }),
+    fetchPicklistValues('pkl-jfb-pass-type'),
+    fetchDomainRecords({ domain: 'jfb_project_attachments', system: 'core', appSlug, filters: { project_id: projectId }, limit: 200 }),
+  ])
+
+  const areaNameById = new Map((areaRes?.data ?? []).map((a) => [a.id, a.name]))
+  const passLabels = Object.fromEntries(
+    (passTypeRows || []).filter((r) => r.is_active !== false).map((r) => [r.value, r.label ?? r.value]),
   )
-  return Object.fromEntries(entries)
+  const attachmentNameById = new Map((attachmentRes?.data ?? []).map((a) => [a.id, a.name]))
+
+  function comboLabel(c) {
+    if (isUnassigned(c)) return 'Standard'
+    const parts = []
+    if (c.attachmentId && attachmentNameById.has(c.attachmentId)) parts.push(attachmentNameById.get(c.attachmentId))
+    if (c.passKey) parts.push(passLabels[c.passKey] ?? c.passKey)
+    return parts.length ? parts.join(' | ') : 'Standard'
+  }
+  // Natural-key match only (area + pass + tsca) -- deliberately excludes
+  // attachment, mirroring reference's statsForCombo(). Production stats
+  // don't reliably carry the same attachment a PE logged on the activity
+  // side, so matching on it would drop real volume/area for no reason.
+  function statsMatchCombo(s, c) {
+    const areaId = s.area_level_combinations?.[0]?.area_id ?? null
+    // Same tsca bucketing as comboKey() (productionCombos.js): null and
+    // false are the same "not flagged" bucket, only true is distinct. Must
+    // match here too, or a stats row with tsca=false silently stops
+    // matching a combo whose activities left tsca unset (null).
+    const statsTscaBucket = s.tsca === true ? 'y' : 'n'
+    const comboTscaBucket = c.tsca === true ? 'y' : 'n'
+    return areaId === c.areaId
+      && (s.pass_value ?? null) === c.passKey
+      && statsTscaBucket === comboTscaBucket
+  }
+
+  const activities = (activityRes?.data ?? []).filter((a) => sameCalendarDay(a.start_date_time, dateISO, a.timezone))
+  const statsRows = statsRes?.data ?? []
+
+  const byEquipment = new Map()
+  for (const a of activities) {
+    if (!byEquipment.has(a.equipment_id)) byEquipment.set(a.equipment_id, { activities: [], stats: [] })
+    byEquipment.get(a.equipment_id).activities.push(a)
+  }
+  for (const s of statsRows) {
+    if (!s.equipment_id) continue
+    if (!byEquipment.has(s.equipment_id)) byEquipment.set(s.equipment_id, { activities: [], stats: [] })
+    byEquipment.get(s.equipment_id).stats.push(s)
+  }
+
+  const result = {}
+  for (const [equipmentId, { activities: acts, stats: eqStats }] of byEquipment) {
+    const actCombos = buildCombosFromActivities(acts, { passKeyOf: (a) => a.pass_type })
+
+    const rawCombos = actCombos.map((c) => {
+      const goh = c.timeHours ?? 0
+      const noh = comboNOH(c)
+      const matched = eqStats.filter((s) => statsMatchCombo(s, c))
+      const volume = matched.reduce((a, s) => a + (Number(s.volume) || 0), 0)
+      const area = matched.reduce((a, s) => a + (Number(s.area) || 0), 0)
+      return { c, goh, noh, delay: Math.max(0, goh - noh), volume, area }
+    })
+
+    const totalGoh = rawCombos.reduce((a, r) => a + r.goh, 0)
+    const totalNoh = rawCombos.reduce((a, r) => a + r.noh, 0)
+    const totalDelay = rawCombos.reduce((a, r) => a + r.delay, 0)
+    // Total volume/area sums every stats row for this equipment/report,
+    // independent of the combo breakdown -- matches reference's Total (which
+    // never derives from the per-combo columns), so a stats row that can't
+    // be attributed to any activity combo still counts toward the day's
+    // total instead of vanishing.
+    const totalVolume = eqStats.reduce((a, s) => a + (Number(s.volume) || 0), 0)
+    const totalArea = eqStats.reduce((a, s) => a + (Number(s.area) || 0), 0)
+    const totalAreaLabel = [...new Set(rawCombos.map((r) => areaNameById.get(r.c.areaId)).filter(Boolean))].join(', ') || '—'
+
+    const combos = rawCombos.length > 0
+      ? rawCombos.map((r) => ({
+          columnLabel: comboLabel(r.c),
+          areaLabel: r.c.areaId ? (areaNameById.get(r.c.areaId) ?? '—') : '—',
+          ...shapeComboStats(r.goh, r.noh, r.delay, r.volume, r.area),
+        }))
+      : [{ columnLabel: 'Standard', areaLabel: '—', ...shapeComboStats(0, 0, 0, 0, 0) }]
+    const total = { areaLabel: totalAreaLabel, ...shapeComboStats(totalGoh, totalNoh, totalDelay, totalVolume, totalArea) }
+
+    // Row-oriented on purpose: this Handlebars engine has no way to look up
+    // "column N of this row" by index, so each metric becomes one row with
+    // a `values` array already in the same order as `columns` -- the
+    // template just walks {{#each rows}}...{{#each this.values}} in lockstep
+    // with the header's {{#each columns}}.
+    const METRIC_ROWS = [
+      ['Gross Operating Hours (GOH)', 'goh'],
+      ['Net Operating Hours (NOH)', 'noh'],
+      ['Delay Hours', 'delay'],
+      ['Efficiency', 'efficiency'],
+      ['Area (SF)', 'area'],
+      ['Volume (CY)', 'volume'],
+      ['CY/GOH', 'cyPerGoh'],
+      ['CY/NOH', 'cyPerNoh'],
+      ['SF/GOH', 'sfPerGoh'],
+      ['SF/NOH', 'sfPerNoh'],
+      ['Area', 'areaLabel'],
+    ]
+    result[equipmentId] = {
+      columns: combos.map((c) => c.columnLabel),
+      rows: METRIC_ROWS.map(([label, key]) => ({
+        label,
+        total: total[key],
+        values: combos.map((c) => c[key]),
+      })),
+      // Whole-day headline figures for the sheet's big Operating/Delay/Total
+      // Hours stat boxes -- those need one named value each, not a row walk.
+      headline: { goh: total.goh, noh: total.noh, delay: total.delay },
+    }
+  }
+  return result
 }
 
-// Whole-project (all equipment) Day/Week/Project-Total production volume,
-// via the same dvw-jfb-metric-cy view -- fills the cover page's "Project
-// Production Table" Week/Project Total columns, which previously shipped
-// hardcoded. Per-pass-value breakdowns for Week/Project aren't available
-// without a new grouped-by-pass data view (out of scope here), so this adds
-// one honest "Total (All Passes)" row rather than fabricating per-row totals.
-export async function buildCoverProductionTotalsParam({ projectId, project, dateISO }) {
-  const weekStart = mondayStartISO(dateISO)
-  const projectStart = project?.production_start_date || (project?.start_date ? project.start_date.slice(0, 10) : '2000-01-01')
-  const p = (startDate) => ({ p_project_id: projectId, p_start_date: startDate, p_end_date: dateISO, p_equipment_id: null })
+// Ported from the non-native app's src/lib/dates.ts weekStartISO -- Sunday
+// of the week containing dateISO. Deliberately NOT mondayStartISO: reference
+// uses a different week boundary for this cover table than it does for the
+// Weekly Summary report (which runs Monday-Sunday production weeks), so this
+// stays local rather than becoming a third caller of mondayStartISO.
+function sundayStartISO(dateISO) {
+  const [y, m, d] = dateISO.split('-').map(Number)
+  const dt = new Date(y, m - 1, d)
+  dt.setDate(dt.getDate() - dt.getDay())
+  const yy = dt.getFullYear()
+  const mm = String(dt.getMonth() + 1).padStart(2, '0')
+  const dd = String(dt.getDate()).padStart(2, '0')
+  return `${yy}-${mm}-${dd}`
+}
 
-  const [day, week, proj] = await Promise.all([
-    executeDataView('dvw-jfb-metric-cy', p(dateISO)),
-    executeDataView('dvw-jfb-metric-cy', p(weekStart)),
-    executeDataView('dvw-jfb-metric-cy', p(projectStart)),
-  ])
-  return {
-    day: fmtNum(Number(day?.[0]?.total_volume ?? 0)),
-    week: fmtNum(Number(week?.[0]?.total_volume ?? 0)),
-    project: fmtNum(Number(proj?.[0]?.total_volume ?? 0)),
+function fmtCoverHrs(n) {
+  return n == null ? null : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+function fmtCoverPct(n) {
+  return n == null ? null : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+function fmtCoverCy(n) {
+  return n == null ? null : n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+}
+function fmtCoverSf(n) {
+  return n == null ? null : Math.round(n).toLocaleString('en-US')
+}
+
+// Matches the non-native app's cover-page "Project Production Table"
+// exactly: 5 fixed metric rows (Total Volume Removed / Total Area Covered /
+// Operating Hours / Delay Hours / Efficiency), each with Day/Week/Project
+// Total columns -- replaces this native port's own earlier invention (a raw
+// per-production-stats-row list plus one "Total (All Passes)" line).
+//
+// Sourced from dvw-jfb-realized-daily-totals (the same per-day cy/sf/goh/noh
+// view Weekly Summary and Realized To-Date already use), fetched once for
+// the whole project history and reduced client-side into Day/Week/Project
+// windows -- Week is Sunday-of-this-week through today (sundayStartISO,
+// reference's own boundary for THIS table), Project is every day up to and
+// including today. Per an explicit product decision, this reuses that view
+// as-is (released reports only) rather than reference's own unrestricted
+// (draft+approved+released) historical rollup, for consistency with how
+// Weekly Summary/Realized To-Date already scope their own history -- an
+// approved-but-not-yet-released day's own numbers won't show until release.
+//
+// Operating Hours (noh) and Delay Hours (goh-noh) come from
+// jfb_daily_activities via the view's own goh/noh convention (every activity
+// counts toward GOH; only activities with no delay_code_id count toward
+// NOH), which is functionally the reference app's own "shift span minus
+// delay" definition whenever a shift has no unlogged gaps. Efficiency is a
+// ratio of SUMMED goh/noh over each window, not an average of daily
+// efficiencies, matching reference's own rollup formula.
+export async function buildCoverProductionTotalsParam({ projectId, project, dateISO }) {
+  const projectStart = project?.production_start_date || (project?.start_date ? project.start_date.slice(0, 10) : '2000-01-01')
+  const weekStart = sundayStartISO(dateISO)
+
+  const rows = await executeDataView('dvw-jfb-realized-daily-totals', { p_project_id: projectId, p_start_date: projectStart })
+  const days = (rows ?? []).map((r) => ({
+    date: r.report_date,
+    cy: Number(r.cy) || 0,
+    sf: Number(r.sf) || 0,
+    goh: Number(r.goh) || 0,
+    noh: Number(r.noh) || 0,
+  }))
+
+  function windowStats(matching) {
+    const cy = matching.reduce((a, d) => a + d.cy, 0)
+    const sf = matching.reduce((a, d) => a + d.sf, 0)
+    const goh = matching.reduce((a, d) => a + d.goh, 0)
+    const noh = matching.reduce((a, d) => a + d.noh, 0)
+    return {
+      volume: fmtCoverCy(cy),
+      area: fmtCoverSf(sf),
+      operating: fmtCoverHrs(noh),
+      delay: fmtCoverHrs(Math.max(0, goh - noh)),
+      efficiency: fmtCoverPct(goh > 0 ? (noh / goh) * 100 : 0),
+    }
   }
+
+  const dayRow = days.find((d) => d.date === dateISO) ?? null
+  // No activities logged today (or the day isn't released yet) -- reference
+  // shows an em-dash for the time-based metrics rather than a misleading
+  // "0.00 hrs", since a shift that was never logged isn't the same as one
+  // that logged zero productive hours.
+  const dayHasActivity = !!dayRow && (dayRow.goh !== 0 || dayRow.noh !== 0)
+  const dayEfficiencyPct = dayHasActivity && dayRow.goh > 0 ? (dayRow.noh / dayRow.goh) * 100 : 0
+  const day = dayRow
+    ? {
+        volume: fmtCoverCy(dayRow.cy),
+        area: fmtCoverSf(dayRow.sf),
+        operating: dayHasActivity ? fmtCoverHrs(dayRow.noh) : null,
+        delay: dayHasActivity ? fmtCoverHrs(Math.max(0, dayRow.goh - dayRow.noh)) : null,
+        efficiency: dayHasActivity ? fmtCoverPct(dayEfficiencyPct) : null,
+      }
+    : { volume: null, area: null, operating: null, delay: null, efficiency: null }
+
+  const week = windowStats(days.filter((d) => d.date >= weekStart && d.date <= dateISO))
+  const projectTotal = windowStats(days.filter((d) => d.date <= dateISO))
+
+  const METRIC_ROWS = [
+    ['Total Volume Removed', 'volume', 'CY'],
+    ['Total Area Covered', 'area', 'SF'],
+    ['Operating Hours', 'operating', 'hrs'],
+    ['Delay Hours', 'delay', 'hrs'],
+    ['Efficiency', 'efficiency', '%'],
+  ]
+  return {
+    rows: METRIC_ROWS.map(([label, key, unit]) => ({
+      label,
+      unit,
+      day: day[key],
+      week: week[key],
+      project: projectTotal[key],
+    })),
+  }
+}
+
+function dateOnlyPdf(iso) {
+  return iso ? String(iso).slice(0, 10) : null
+}
+function fmtFlow1(n) {
+  return n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+}
+function fmtFlow0(n) {
+  return Math.round(n).toLocaleString('en-US')
+}
+
+// Matches the reference app's buildFlowStats()/PipeLengthsBody exactly.
+// Flow Stats is per-equipment (jfb_hydraulic_flow_stats has its own
+// equipment_id): Previous Total Flow is every one of this equipment's
+// daily_total_gal entries through yesterday, Project Total is through
+// today -- both always show a real number even if today has no new
+// reading, as long as SOME history exists (matches reference's own
+// "return null only when there's neither today's values nor any history"
+// rule, rather than hiding totals just because today wasn't logged yet).
+// Pipe Lengths is project-wide (jfb_hydraulic_pipe_configurations has no
+// equipment_id column), so every equipment's sheet gets the same segment
+// list for the day, same as reference's own project-wide pipeRows.
+export async function buildFlowAndPipeByEquipmentParam({ appSlug, projectId, dateISO }) {
+  const [flowRes, pipeRes] = await Promise.all([
+    fetchDomainRecords({ domain: 'jfb_hydraulic_flow_stats', system: 'core', appSlug, filters: { project_id: projectId }, limit: 5000 }),
+    fetchDomainRecords({ domain: 'jfb_hydraulic_pipe_configurations', system: 'core', appSlug, filters: { project_id: projectId }, limit: 500 }),
+  ])
+  const flowRows = flowRes?.data ?? []
+  const pipeRows = pipeRes?.data ?? []
+
+  const byEquipment = new Map()
+  for (const r of flowRows) {
+    if (!byEquipment.has(r.equipment_id)) byEquipment.set(r.equipment_id, [])
+    byEquipment.get(r.equipment_id).push(r)
+  }
+
+  const flowStatsByEquipment = {}
+  for (const [equipmentId, rows] of byEquipment) {
+    const todaysRow = rows.find((r) => dateOnlyPdf(r.log_date) === dateISO) ?? null
+    const hasHistory = rows.some((r) => dateOnlyPdf(r.log_date) < dateISO)
+    const hasTodayValue = !!todaysRow && (todaysRow.avg_line_velocity != null || todaysRow.avg_flow_rate != null || todaysRow.daily_total_gal != null)
+    if (!hasTodayValue && !hasHistory) continue
+
+    const projectTotalGal = rows
+      .filter((r) => dateOnlyPdf(r.log_date) <= dateISO)
+      .reduce((a, r) => a + (Number(r.daily_total_gal) || 0), 0)
+    const dailyTotalGal = Number(todaysRow?.daily_total_gal) || 0
+
+    flowStatsByEquipment[equipmentId] = {
+      avgVelocityFps: todaysRow?.avg_line_velocity != null ? fmtFlow1(Number(todaysRow.avg_line_velocity)) : null,
+      avgFlowRateGpm: todaysRow?.avg_flow_rate != null ? fmtFlow0(Number(todaysRow.avg_flow_rate)) : null,
+      dailyTotalGal: todaysRow?.daily_total_gal != null ? fmtFlow0(dailyTotalGal) : null,
+      previousTotalGal: fmtFlow0(Math.max(0, projectTotalGal - dailyTotalGal)),
+      projectTotalGal: fmtFlow0(projectTotalGal),
+    }
+  }
+
+  const todaysPipeRows = pipeRows.filter((r) => dateOnlyPdf(r.log_date) === dateISO)
+  const pipeSegments = todaysPipeRows.map((r) => ({ id: r.id, name: r.segment_name, lengthFt: fmtFlow0(Number(r.length_ft) || 0) }))
+  const pipeTotalLength = fmtFlow0(todaysPipeRows.reduce((a, r) => a + (Number(r.length_ft) || 0), 0))
+
+  return { flowStatsByEquipment, pipeSegments, pipeTotalLength }
 }
 
 // Ported from the non-native app's validateForPdf: blocks PDF generation

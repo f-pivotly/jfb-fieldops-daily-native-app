@@ -129,17 +129,17 @@ function ProductionPlanCard({ project, onSave }) {
         <TextInput
           label="Expected GOH/day" size="xs" type="number" w={140}
           value={form.expectedGohPerDay}
-          onChange={(e) => setForm((f) => ({ ...f, expectedGohPerDay: e.currentTarget.value }))}
+          onChange={(e) => { const v = e.currentTarget.value; setForm((f) => ({ ...f, expectedGohPerDay: v })) }}
         />
         <TextInput
           label="Production days/week" size="xs" type="number" w={160}
           value={form.productionDaysPerWeek}
-          onChange={(e) => setForm((f) => ({ ...f, productionDaysPerWeek: e.currentTarget.value }))}
+          onChange={(e) => { const v = e.currentTarget.value; setForm((f) => ({ ...f, productionDaysPerWeek: v })) }}
         />
         <TextInput
           label="Production start date" size="xs" type="date" w={160}
           value={form.productionStartDate}
-          onChange={(e) => setForm((f) => ({ ...f, productionStartDate: e.currentTarget.value }))}
+          onChange={(e) => { const v = e.currentTarget.value; setForm((f) => ({ ...f, productionStartDate: v })) }}
         />
         <Button size="xs" loading={saving} onClick={save} style={{ background: '#0F2744', border: 'none' }}>Save plan</Button>
       </Group>

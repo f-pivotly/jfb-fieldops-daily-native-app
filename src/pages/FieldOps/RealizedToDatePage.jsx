@@ -43,7 +43,28 @@ export default function RealizedToDatePage() {
     let cancelled = false
     const startDate = project.production_start_date || (project.start_date ? project.start_date.slice(0, 10) : '2000-01-01')
     executeDataView('dvw-jfb-realized-daily-totals', { p_project_id: project.id, p_start_date: startDate })
-      .then((rows) => { if (!cancelled) setDailyTotals(rows) })
+      // The view's date column is `report_date`; buildRealizedReport (ported
+      // from the non-native app's ProductionDayInput) expects `date`. Without
+      // this rename every row's `d.date` is undefined, which crashes deep
+      // inside the report computation (mondayStartISO/daysBetween calling
+      // .split on undefined) the moment a project has real released reports.
+      // cy/sf/goh/noh also need Number(...): node-postgres returns Postgres
+      // numeric/decimal columns as strings (precision-preserving driver
+      // default, no type parser overrides it here), and buildRealizedReport
+      // does raw arithmetic on these with no defensive coercion of its own --
+      // fed strings, `runningCy += d.cy` silently concatenates instead of
+      // adding, corrupting every accumulated total into a garbled string
+      // that later fails wherever the render calls .toFixed() on it.
+      .then((rows) => {
+        if (cancelled) return
+        setDailyTotals(rows.map((r) => ({
+          date: r.report_date,
+          cy: Number(r.cy) || 0,
+          sf: Number(r.sf) || 0,
+          goh: Number(r.goh) || 0,
+          noh: Number(r.noh) || 0,
+        })))
+      })
       .catch((err) => { if (!cancelled) setDailyTotalsError(err.message) })
     return () => { cancelled = true }
   }, [project?.id, project?.production_start_date, project?.start_date])
@@ -126,6 +147,7 @@ export default function RealizedToDatePage() {
           recordData: {
             project_id: projectId,
             report_slug: 'rpt-jfb-realized-to-date',
+            report_type: 'realized_to_date',
             generated_at: new Date().toISOString(),
             generated_by_user_id: me.id,
             generated_by_email: me.email,

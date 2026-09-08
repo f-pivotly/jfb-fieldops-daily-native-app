@@ -1,0 +1,268 @@
+{
+  "schema": [
+    {
+      "pii": false,
+      "name": "project_id",
+      "slug": "project_id",
+      "type": "uuid",
+      "label": "Project Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": true,
+        "target_attr": "id",
+        "target_domain": "jfb_projects",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "project_id",
+      "description": "One row per project. The project this water monitoring configuration belongs to.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "provider",
+      "slug": "provider",
+      "type": "text",
+      "label": "Provider",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "text",
+      "column_name": "provider",
+      "description": "Data source for turbidity readings: 'hydrovu' (fixed-site) or 'wqdatalive' (NexSens, tidal sites). Defaults to 'hydrovu'.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "timezone",
+      "slug": "timezone",
+      "type": "text",
+      "label": "Timezone",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "text",
+      "column_name": "timezone",
+      "description": "IANA timezone the reporting window (window_start/window_end) is expressed in. Defaults to 'America/New_York'.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "window_start",
+      "slug": "window_start",
+      "type": "text",
+      "label": "Window Start",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "text",
+      "column_name": "window_start",
+      "description": "Local time-of-day (HH:MM:SS) the daily reporting window opens. Defaults to '06:00:00'.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "window_end",
+      "slug": "window_end",
+      "type": "text",
+      "label": "Window End",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "text",
+      "column_name": "window_end",
+      "description": "Local time-of-day (HH:MM:SS) the daily reporting window closes. Defaults to '18:00:00'.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "interval_minutes",
+      "slug": "interval_minutes",
+      "type": "integer",
+      "label": "Interval (minutes)",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "integer",
+      "column_name": "interval_minutes",
+      "description": "Expected spacing between readings, in minutes. Defaults to 15.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "locations",
+      "slug": "locations",
+      "type": "jsonb",
+      "label": "Monitor Locations",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "jsonb",
+      "column_name": "locations",
+      "description": "Array of monitor locations: {role, label, hydrovu_location_id?, wqdatalive_device_id?, wqdatalive_device_name?, display_coords}. role is 'background'|'early_warning'|'compliance'|'upstream'|'downstream' -- the FUNCTIONAL role for fixed-site providers (HydroVu), or the PHYSICAL position for tidal sites (WQData LIVE) where the functional role is instead assigned per tide phase at report time.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "thresholds",
+      "slug": "thresholds",
+      "type": "jsonb",
+      "label": "Thresholds",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "jsonb",
+      "column_name": "thresholds",
+      "description": "Turbidity limit lines. Absolute/x-background style: {early_warning_ntu?, compliance_4hr_ntu?, compliance_1hr_ntu?, background_multiplier?}. Background-relative style (Penobscot TLC): {early_warning_delta_ntu?, compliance_delta_ntu?} -- when either delta is set the chart renders in 'delta mode' (line = background + delta) and skips the absolute/x-background lines.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "mode",
+      "slug": "mode",
+      "type": "text",
+      "label": "Mode",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "mode",
+      "description": "'background' = baseline collection only (monitor series, no criterion lines or exceedance). 'compliance' = criterion lines + exceedance, plus the tide-aware background/compliance switch on tidal sites. Defaults to 'compliance'.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "aerial_path",
+      "slug": "aerial_path",
+      "type": "text",
+      "label": "Aerial Image Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "aerial_path",
+      "description": "Annotated aerial site map showing monitor positions. Null = no aerial block on the page.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "active",
+      "slug": "active",
+      "type": "boolean",
+      "label": "Active",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "boolean",
+      "column_name": "active",
+      "description": "Whether the Water Quality tab is shown for this project. This row's existence with active = true is the tab visibility gate -- a missing row, or one with active = false, hides the tab entirely and skips the Water Quality PDF page.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    }
+  ],
+  "archive": true,
+  "contact": {
+    "name": "System Administrator"
+  },
+  "multi_tenant": false,
+  "xref_enabled": true,
+  "access_control": {
+    "model": "all_systems",
+    "read_access": true,
+    "delete_access": true,
+    "insert_access": true,
+    "update_access": true,
+    "hard_delete_allowed": true,
+    "direct_write_enabled": true
+  },
+  "archive_policy": {
+    "retention_days": 365,
+    "max_record_versions": 10000
+  },
+  "track_versions": true,
+  "domain_table_name": "jfb_water_monitoring_config",
+  "slug": "jfb_water_monitoring_config",
+  "domain_name_singular": "jfb_water_monitoring_config",
+  "default_conflict_resolution": {
+    "code": "lww",
+    "human_readable": "Last Write Wins"
+  }
+}

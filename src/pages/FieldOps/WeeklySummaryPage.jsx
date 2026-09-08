@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { Box, ScrollArea, Text, Group, Button, Stack, Textarea, SimpleGrid, Switch, Modal } from '@mantine/core'
 import {
-  executeDataView, uploadAttachment, deleteAttachment, readWrittenRecordId,
+  executeDataView, deleteAttachment, readWrittenRecordId,
   executeReport, api, createDomainRecord, fetchCurrentUser, fetchFileById,
 } from '../../data'
 import { useAppConfig } from '../../contexts/appConfigContext'
@@ -11,6 +11,8 @@ import { useReports } from '../../hooks/useReports'
 import { useDomainData } from '../../hooks/useDomainData'
 import { useWeeklySummaries } from '../../hooks/useWeeklySummaries'
 import { useWeeklySummaryPhotos } from '../../hooks/useWeeklySummaryPhotos'
+import { useAttachmentUpload } from '../../hooks/useAttachmentUpload'
+import { useAsyncAction } from '../../hooks/useAsyncAction'
 import PhotoSlot from './reportEditorTabs/components/PhotoSlot'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import SafeError from '../../components/SafeError'
@@ -53,6 +55,29 @@ function fmtHours(n) {
 }
 function signedNum(n) {
   return `${n >= 0 ? '+' : '-'}${fmtNum(Math.abs(n))}`
+}
+
+// Matches the reference app's WeeklySummaryDocument.tsx delay chart exactly
+// (itself copied from RealizedToDateDocument.tsx, same pattern already
+// ported for native's own Realized To-Date report in realizedPdfData.js):
+// a 2-column bar chart, bar width proportional to the single largest delay
+// code's hours (report.delaySummary is already sorted descending), split
+// left/right by Math.ceil(length / 2).
+function buildWeeklyDelayChartParams(report) {
+  const maxDelay = report.delaySummary[0]?.hours ?? 1
+  const delayRows = report.delaySummary.map((d) => ({
+    description: d.description,
+    hours: fmtHours(d.hours),
+    pct: `${(d.pct * 100).toFixed(0)}%`,
+    barPct: Math.round((d.hours / maxDelay) * 100),
+  }))
+  const half = Math.ceil(delayRows.length / 2)
+  return {
+    weeklyDelayRowsLeft: delayRows.slice(0, half),
+    weeklyDelayRowsRight: delayRows.slice(half),
+    weeklyDelayTotalHours: fmtHours(report.delayTotalHours),
+    hasWeeklyDelays: delayRows.length > 0,
+  }
 }
 
 const TODAY_ISO = new Date().toISOString().slice(0, 10)
@@ -127,9 +152,13 @@ export default function WeeklySummaryPage() {
   const [photoUploading, setPhotoUploading] = useState({ 1: false, 2: false })
   const [photoSlotErrors, setPhotoSlotErrors] = useState({ 1: null, 2: null })
   const [removingSlot, setRemovingSlot] = useState(null)
-  const [downloadingPdf, setDownloadingPdf] = useState(false)
-  const [pdfError, setPdfError] = useState(null)
   const photoFor = (n) => photos.find((p) => p.week_start === weekStart && p.photo_number === n) ?? null
+
+  // Shared across both slots -- only its upload() is used, since busy/error
+  // here are per-slot keyed maps (photoUploading/photoSlotErrors), not one
+  // instance's own state.
+  const photoUpload = useAttachmentUpload()
+  const { busy: downloadingPdf, error: pdfError, run: runDownloadPdf } = useAsyncAction()
 
   async function handlePhotoUpload(slot, file, label) {
     setPhotoUploading((u) => ({ ...u, [slot]: true }))
@@ -161,12 +190,14 @@ export default function WeeklySummaryPage() {
       }
       if (!recordId) throw new Error('Could not resolve the saved photo record.')
 
-      const uploadRes = await uploadAttachment({ coreRecordId: recordId, domain: PHOTO_DOMAIN, file: withUniqueName(file, recordId) })
-      await updatePhoto(recordId, { photo_file_path: uploadRes.fileId })
-
-      if (previousFileId && previousFileId !== uploadRes.fileId) {
-        await deleteAttachment({ fileId: previousFileId, domain: PHOTO_DOMAIN, coreRecordId: recordId })
-      }
+      await photoUpload.upload({
+        recordId,
+        domain: PHOTO_DOMAIN,
+        field: 'photo_file_path',
+        file: withUniqueName(file, recordId),
+        previousFileId,
+        update: updatePhoto,
+      })
     } catch (e) {
       setPhotoSlotErrors((er) => ({ ...er, [slot]: e?.message || 'Upload failed.' }))
     } finally {
@@ -221,9 +252,7 @@ export default function WeeklySummaryPage() {
 
   async function handleDownloadPdf() {
     if (!report) return
-    setDownloadingPdf(true)
-    setPdfError(null)
-    try {
+    await runDownloadPdf(async () => {
       const narrativeSections = buildNarrativeSectionsParam(sections, summaries, weekStart)
       const weeklyPhotoAssets = await buildPhotoAssetsParam(photos, weekStart)
       // Only rendered for dredge-configured projects -- buildWeeklyChartAssetsParam
@@ -266,12 +295,7 @@ export default function WeeklySummaryPage() {
             toDateVariance: hasPlan ? signedNum(p.toDateVariance) : null,
             toDateVariancePositive: hasPlan ? p.toDateVariance >= 0 : null,
           },
-          weeklyDelays: report.delaySummary.map((d) => ({
-            description: d.description,
-            hours: fmtHours(d.hours),
-            pct: `${(d.pct * 100).toFixed(0)}%`,
-          })),
-          weeklyDelayTotalHours: fmtHours(report.delayTotalHours),
+          ...buildWeeklyDelayChartParams(report),
         },
       })
       const fileRes = await api.get(result.downloadUrl, { responseType: 'blob' })
@@ -298,6 +322,7 @@ export default function WeeklySummaryPage() {
             project_id: projectId,
             report_date: weekStart,
             report_slug: REPORT_SLUG,
+            report_type: 'weekly',
             generated_at: new Date().toISOString(),
             generated_by_user_id: me.id,
             generated_by_email: me.email,
@@ -310,11 +335,7 @@ export default function WeeklySummaryPage() {
       } catch (logErr) {
         console.error('Failed to log report generation:', logErr.message)
       }
-    } catch (err) {
-      setPdfError(err.message)
-    } finally {
-      setDownloadingPdf(false)
-    }
+    })
   }
 
   // null = checking, N = dredges with coverage (week or prior) this range,

@@ -1,16 +1,21 @@
 import { Box, Text, SimpleGrid, Table, Stack, Group, Button, TextInput, NumberInput, Textarea, Select, Checkbox, FileButton, UnstyledButton } from '@mantine/core'
 import { useState, useEffect } from 'react'
 import { IconPlus, IconTrash, IconEye } from '@tabler/icons-react'
-import { uploadAttachment, downloadAttachment, fetchDomainRecords, createDomainRecord, updateDomainRecord, readWrittenRecordId, executeDataView, fetchCurrentUser } from '../../../data'
+import { downloadAttachment, createDomainRecord, updateDomainRecord, readWrittenRecordId, executeDataView, fetchCurrentUser } from '../../../data'
 import { fetchNoaaDailySummary } from '../../../lib/noaaWeather'
 import { useCultureTenants } from '../../../hooks/useCultureTenants'
 import { useProject } from '../../../hooks/useProject'
 import { useReportSafety } from '../../../hooks/useReportSafety'
 import { useReportSafetyForm } from '../../../hooks/useReportSafetyForm'
 import { useReportCrewSummary } from '../../../hooks/useReportCrewSummary'
+import { useAsyncAction } from '../../../hooks/useAsyncAction'
 import { useFieldOpsAction } from '../../../contexts/fieldOpsAccessContext'
 import { useAppConfig } from '../../../contexts/appConfigContext'
 import SiteEquipmentTab from '../projectSettingsTabs/SiteEquipmentTab'
+import { usePrefillOffer } from './hooks/usePrefillOffer'
+import { useSignatureUpload } from './hooks/useSignatureUpload'
+import { useCrewSeeding } from './hooks/useCrewSeeding'
+import { priorReportsFor, findMostRecentCrewSummary, findMostRecentPlanOfDay, fetchUserSignature, formatMonthDay } from './hooks/safetyHistoryLookups'
 
 // Daily Safety Updates (including Culture Tenant), Sign-off (both
 // preparer and SSHO name/signature), Crew Summary, and Climate Summary
@@ -47,103 +52,6 @@ const DAILY_UPDATE_COLUMNS = {
   incidents: 'incidents_to_report',
   planOfDay: 'plan_of_day',
   nextDaySummary: 'next_day_summary',
-}
-
-// Last-resort seed when a project has no prior report with any crew rows
-// at all. Mirrors the reference app's DEFAULT_CREW_CATEGORIES (db.ts) --
-// category + sort_order only; count/hours always start at 0.
-const DEFAULT_CREW_CATEGORY_SEED = [
-  { category: 'Brennan Management, Survey, Safety', sort_order: 10 },
-  { category: 'Brennan Dredge Crew', sort_order: 20 },
-  { category: 'Subcontractors', sort_order: 30 },
-  { category: 'Mechanics', sort_order: 40 },
-]
-
-const MAX_PRIOR_REPORT_CANDIDATES = 15
-
-// Prior reports for the same project, most recent first, capped like the
-// reference app's report_dates lookups (fetchMostRecentCrewCategoriesBefore
-// / fetchMostRecentCrewSummaryBefore both use .limit(15)).
-function priorReportsFor(reports, report) {
-  if (!report?.report_date) return []
-  return reports
-    .filter((r) => r.id !== report.id && r.report_date && r.report_date < report.report_date)
-    .sort((a, b) => (a.report_date < b.report_date ? 1 : -1))
-    .slice(0, MAX_PRIOR_REPORT_CANDIDATES)
-}
-
-async function fetchCrewRowsForReport(reportId, appSlug) {
-  const res = await fetchDomainRecords({
-    domain: 'jfb_report_crew_summary_v2', system: 'core', appSlug,
-    filters: { report_id: reportId }, limit: 1000,
-  })
-  return Array.isArray(res) ? res : (res?.data ?? [])
-}
-
-// Mirrors fetchMostRecentCrewCategoriesBefore: walks backward through
-// prior reports and returns the first one with any crew rows at all,
-// keeping only category + sort_order (not count/hours) -- used to seed a
-// brand-new report's crew categories.
-async function findMostRecentCrewCategories(candidates, appSlug) {
-  for (const r of candidates) {
-    const rows = await fetchCrewRowsForReport(r.id, appSlug)
-    if (rows.length > 0) {
-      return rows.map((row) => ({ category: row.category, sort_order: row.sort_order ?? 0 }))
-    }
-  }
-  return null
-}
-
-// Mirrors fetchMostRecentCrewSummaryBefore: walks backward through prior
-// reports and returns the first one with at least one hours>0 row,
-// skipping all-zero "off day" reports -- used by the "Use crew from M/D"
-// pre-fill button.
-async function findMostRecentCrewSummary(candidates, appSlug) {
-  for (const r of candidates) {
-    const rows = await fetchCrewRowsForReport(r.id, appSlug)
-    if (rows.some((row) => (Number(row.hours) || 0) > 0)) {
-      return { rows, reportDate: r.report_date }
-    }
-  }
-  return null
-}
-
-async function fetchSafetyRowForReport(reportId, appSlug) {
-  const res = await fetchDomainRecords({
-    domain: 'jfb_report_safety_v2', system: 'core', appSlug,
-    filters: { report_id: reportId }, limit: 1,
-  })
-  const rows = Array.isArray(res) ? res : (res?.data ?? [])
-  return rows[0] ?? null
-}
-
-// Mirrors fetchMostRecentPlanOfDayBefore: walks backward through prior
-// reports and returns the first one with a non-blank plan_of_day -- used
-// by the "Use plan from M/D" pre-fill button.
-async function findMostRecentPlanOfDay(candidates, appSlug) {
-  for (const r of candidates) {
-    const row = await fetchSafetyRowForReport(r.id, appSlug)
-    if (row?.plan_of_day?.trim()) {
-      return { content: row.plan_of_day, reportDate: r.report_date }
-    }
-  }
-  return null
-}
-
-async function fetchUserSignature(userId, appSlug) {
-  if (!userId) return null
-  const res = await fetchDomainRecords({
-    domain: 'jfb_user_signatures', system: 'core', appSlug,
-    filters: { user_id: userId }, limit: 1,
-  })
-  const rows = Array.isArray(res) ? res : (res?.data ?? [])
-  return rows[0] ?? null
-}
-
-function formatMonthDay(dateISO) {
-  const d = new Date(`${dateISO}T00:00:00Z`)
-  if (Number.isNaN(d.getTime())) return dateISO
-  return `${d.getUTCMonth() + 1}/${d.getUTCDate()}`
 }
 
 const EMPTY_CLIMATE = {
@@ -198,19 +106,8 @@ export default function SafetyTab({ project, report, reports = [] }) {
 
   // Shared save/error indicator for the whole tab, mirroring the reference
   // app's top-right "Saved ✓" label and top-of-tab red error banner --
-  // every save path below reports into these two via markSaved/markError.
-  const [savedAt, setSavedAt] = useState(null)
-  const [error, setError] = useState(null)
-  function markSaved() {
-    setError(null)
-    setSavedAt((n) => (n ?? 0) + 1)
-  }
-  function markError(message) {
-    setError(message)
-  }
-  function handleFieldBlur() {
-    flushSafetyField().then(markSaved).catch((err) => markError(err.message))
-  }
+  // every save path below reports into this via markSuccess/markError.
+  const { message: saved, error: saveError, markSuccess, markError } = useAsyncAction()
 
   const {
     reportSafety, loading: safetyLoading,
@@ -220,6 +117,10 @@ export default function SafetyTab({ project, report, reports = [] }) {
     onFieldChange: onSafetyFieldChange, flush: flushSafetyField,
     saveImmediate: saveSafetyImmediate, ensureRow: ensureSafetyRow,
   } = useReportSafetyForm({ reportId: report?.id, reportSafety, create: createReportSafety, update: updateReportSafety })
+
+  function handleFieldBlur() {
+    flushSafetyField().then(markSuccess).catch((err) => markError(err.message))
+  }
 
   const activeTenants = cultureTenants
     .filter((t) => t.active !== false)
@@ -269,7 +170,7 @@ export default function SafetyTab({ project, report, reports = [] }) {
 
   function selectTenant(id) {
     setTenantId(id)
-    saveSafetyImmediate('culture_tenant_id', id).then(markSaved).catch((err) => markError(err.message))
+    saveSafetyImmediate('culture_tenant_id', id).then(markSuccess).catch((err) => markError(err.message))
   }
 
   const {
@@ -277,12 +178,15 @@ export default function SafetyTab({ project, report, reports = [] }) {
     create: createCrewRow, update: updateCrewRow, remove: removeCrewRow,
   } = useReportCrewSummary(report?.id)
 
+  const { seeding: crewSeeding } = useCrewSeeding({
+    report, reports, appSlug: config.appSlug, crewLoading, crewSummary, createCrewRow,
+  })
+
   const [crew, setCrew] = useState([])
   const [crewSyncedFor, setCrewSyncedFor] = useState(null)
   // Seeding creates rows one at a time, so crewSummary can briefly hold
   // only some of the seeded rows -- crewSeeding gates the sync below so a
   // partial snapshot never gets locked in as "synced" mid-seed.
-  const [crewSeeding, setCrewSeeding] = useState(false)
   if (report?.id && !crewLoading && !crewSeeding && crewSummary.length > 0 && crewSyncedFor !== report.id) {
     setCrewSyncedFor(report.id)
     setCrew(
@@ -295,57 +199,16 @@ export default function SafetyTab({ project, report, reports = [] }) {
     )
   }
 
-  // Auto-seed: a brand-new report with no crew rows yet inherits category
-  // names (not values) from the project's most recent prior report --
-  // mirrors the reference app's real seed path, which treats the static
-  // default list as a last resort only. The "start seeding" decision is
-  // made during render (same one-shot-per-report pattern as crewSyncedFor
-  // above); the effect below only runs the async work itself, so it never
-  // calls setState synchronously in its own body.
-  const [crewSeededFor, setCrewSeededFor] = useState(null)
-  if (report?.id && !crewLoading && crewSummary.length === 0 && crewSeededFor !== report.id) {
-    setCrewSeededFor(report.id)
-    setCrewSeeding(true)
-  }
-  useEffect(() => {
-    if (!crewSeeding || !report?.id) return
-    let cancelled = false
-    const candidates = priorReportsFor(reports, report)
-    ;(async () => {
-      let seed = DEFAULT_CREW_CATEGORY_SEED
-      try {
-        const prior = await findMostRecentCrewCategories(candidates, config.appSlug)
-        if (prior && prior.length > 0) seed = prior
-      } catch (err) {
-        console.error('Crew category lookup failed, using defaults:', err.message)
-      }
-      for (const c of seed) {
-        await createCrewRow({ report_id: report.id, category: c.category, sort_order: c.sort_order, count: 0, hours: 0 })
-      }
-    })().finally(() => { if (!cancelled) setCrewSeeding(false) })
-    return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [crewSeeding, report?.id])
-
   const crewAllBlank = crew.length > 0 && crew.every((c) => (c.count ?? 0) === 0 && (c.hours ?? 0) === 0)
 
-  // "Use crew from M/D" pre-fill: only offered once every current crew
-  // row is blank, same gate as the reference app, so a real entry is
-  // never silently overwritten.
-  const [priorCrewSummary, setPriorCrewSummary] = useState(null)
-  useEffect(() => {
-    if (!report?.id || crewLoading || !crewAllBlank) return
-    let cancelled = false
-    const candidates = priorReportsFor(reports, report)
-    findMostRecentCrewSummary(candidates, config.appSlug)
-      .then((prior) => { if (!cancelled) setPriorCrewSummary(prior) })
-      .catch(() => { if (!cancelled) setPriorCrewSummary(null) })
-    return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [report?.id, crewLoading, crewAllBlank, reports, config.appSlug])
-
-  const [crewPrefillPreview, setCrewPrefillPreview] = useState(false)
-  const [crewInserting, setCrewInserting] = useState(false)
+  // "Use crew from M/D" pre-fill: only offered once every current crew row
+  // is blank, same gate as the reference app, so a real entry is never
+  // silently overwritten.
+  const crewOffer = usePrefillOffer({
+    enabled: !!report?.id && !crewLoading && crewAllBlank,
+    fetchOffer: () => findMostRecentCrewSummary(priorReportsFor(reports, report), config.appSlug),
+    deps: [report?.id, crewLoading, crewAllBlank, reports, config.appSlug],
+  })
 
   function updateCrew(id, patch) {
     setCrew((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)))
@@ -354,7 +217,7 @@ export default function SafetyTab({ project, report, reports = [] }) {
     const row = crew.find((c) => c.id === id)
     if (!row) return
     updateCrewRow(id, { category: row.category, count: row.count, hours: row.hours })
-      .then(markSaved)
+      .then(markSuccess)
       .catch((err) => {
         console.error('Failed to save crew row:', err.message)
         markError(err.message)
@@ -367,7 +230,7 @@ export default function SafetyTab({ project, report, reports = [] }) {
       const res = await createCrewRow({ report_id: report.id, category: '', count: 0, hours: 0, sort_order: nextSort })
       const newId = readWrittenRecordId(res)
       if (newId) setCrew((prev) => [...prev, { id: newId, category: '', count: 0, hours: 0, sort_order: nextSort }])
-      markSaved()
+      markSuccess()
     } catch (err) {
       console.error('Failed to add crew row:', err.message)
       markError(err.message)
@@ -377,34 +240,33 @@ export default function SafetyTab({ project, report, reports = [] }) {
     setCrew((prev) => prev.filter((c) => c.id !== id))
     try {
       await removeCrewRow(id)
-      markSaved()
+      markSuccess()
     } catch (err) {
       console.error('Failed to delete crew row:', err.message)
       markError(err.message)
     }
   }
   async function acceptCrewPrefill() {
-    if (!priorCrewSummary || crewInserting) return
-    setCrewInserting(true)
+    if (!crewOffer.offer || crewOffer.accepting) return
     try {
-      const priorByCategory = new Map(priorCrewSummary.rows.map((r) => [r.category, r]))
-      await Promise.all(
-        crew.map(async (row) => {
-          const prior = priorByCategory.get(row.category)
-          if (!prior) return
-          const count = prior.count ?? 0
-          const hours = Number(prior.hours) || 0
-          updateCrew(row.id, { count, hours })
-          await updateCrewRow(row.id, { count, hours })
-        }),
-      )
-      setCrewPrefillPreview(false)
-      markSaved()
+      await crewOffer.runAccept(async () => {
+        const priorByCategory = new Map(crewOffer.offer.rows.map((r) => [r.category, r]))
+        await Promise.all(
+          crew.map(async (row) => {
+            const prior = priorByCategory.get(row.category)
+            if (!prior) return
+            const count = prior.count ?? 0
+            const hours = Number(prior.hours) || 0
+            updateCrew(row.id, { count, hours })
+            await updateCrewRow(row.id, { count, hours })
+          }),
+        )
+      })
+      crewOffer.setPreviewOpen(false)
+      markSuccess()
     } catch (err) {
       console.error('Failed to insert crew from prior report:', err.message)
       markError(err.message)
-    } finally {
-      setCrewInserting(false)
     }
   }
 
@@ -413,26 +275,18 @@ export default function SafetyTab({ project, report, reports = [] }) {
   // deliberate, so the button reappears if a PE clears a pre-filled
   // field. Only the button's own visibility is gated on the field being
   // empty, at render time below.
-  const [priorPlanOfDay, setPriorPlanOfDay] = useState(null)
-  useEffect(() => {
-    if (!report?.id || safetyLoading) return
-    let cancelled = false
-    const candidates = priorReportsFor(reports, report)
-    findMostRecentPlanOfDay(candidates, config.appSlug)
-      .then((prior) => { if (!cancelled) setPriorPlanOfDay(prior) })
-      .catch(() => { if (!cancelled) setPriorPlanOfDay(null) })
-    return () => { cancelled = true }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [report?.id, safetyLoading, reports, config.appSlug])
-
-  const [planPrefillPreview, setPlanPrefillPreview] = useState(false)
+  const planOffer = usePrefillOffer({
+    enabled: !!report?.id && !safetyLoading,
+    fetchOffer: () => findMostRecentPlanOfDay(priorReportsFor(reports, report), config.appSlug),
+    deps: [report?.id, safetyLoading, reports, config.appSlug],
+  })
   function acceptPlanPrefill() {
-    if (!priorPlanOfDay) return
-    setUpdates((prev) => ({ ...prev, planOfDay: priorPlanOfDay.content }))
-    saveSafetyImmediate(DAILY_UPDATE_COLUMNS.planOfDay, priorPlanOfDay.content)
-      .then(markSaved)
+    if (!planOffer.offer) return
+    setUpdates((prev) => ({ ...prev, planOfDay: planOffer.offer.content }))
+    saveSafetyImmediate(DAILY_UPDATE_COLUMNS.planOfDay, planOffer.offer.content)
+      .then(markSuccess)
       .catch((err) => markError(err.message))
-    setPlanPrefillPreview(false)
+    planOffer.setPreviewOpen(false)
   }
 
   function setClimateField(key, value) {
@@ -539,7 +393,7 @@ export default function SafetyTab({ project, report, reports = [] }) {
           ? `Filled from NWS station ${summary.sourceLabel} (${summary.observationCount} hourly obs).`
           : `Filled from ${summary.sourceLabel} — date is outside the NWS 7-day window, used NOAA-derived archive as fallback.`,
       )
-      markSaved()
+      markSuccess()
     } catch (err) {
       setNoaaMessage(`NOAA fetch failed: ${err.message}`)
     } finally {
@@ -548,8 +402,6 @@ export default function SafetyTab({ project, report, reports = [] }) {
   }
 
   const [saveAsDefaultSignature, setSaveAsDefaultSignature] = useState(false)
-  const [signatureUrl, setSignatureUrl] = useState(null)
-  const [sshoSignatureUrl, setSshoSignatureUrl] = useState(null)
 
   const [currentUserId, setCurrentUserId] = useState(null)
   useEffect(() => {
@@ -568,7 +420,9 @@ export default function SafetyTab({ project, report, reports = [] }) {
   // its own -- it already reads that column. Scoped to the preparer
   // block only, not SSHO: "my saved signature" only makes sense for the
   // person currently filling out the report, and the SSHO is typically
-  // someone else.
+  // someone else. Kept separate from usePrefillOffer/useSignatureUpload:
+  // the fetched row is also consumed by preparerSignature's onUploaded
+  // "save as default" branch below, so it can't be an opaque offer value.
   const [userSignature, setUserSignature] = useState(null)
   useEffect(() => {
     if (!currentUserId) return
@@ -590,7 +444,38 @@ export default function SafetyTab({ project, report, reports = [] }) {
         if (!cancelled) markError(`Failed to load saved signature: ${err.message}`)
       })
     return () => { cancelled = true }
-  }, [userSignature?.signature_image_path])
+  }, [userSignature?.signature_image_path, markError])
+
+  const preparerSignature = useSignatureUpload({
+    existingFileId: reportSafety?.signature_image_path,
+    ensureRecordId: ensureSafetyRow,
+    updateRecord: updateReportSafety,
+    domain: 'jfb_report_safety_v2',
+    column: 'signature_image_path',
+    maxBytes: MAX_SIGNATURE_BYTES,
+    onUploaded: async (fileId, file) => {
+      if (!saveAsDefaultSignature || !currentUserId) return
+      if (userSignature?.id) {
+        await updateDomainRecord({
+          domain: 'jfb_user_signatures', system: 'core', appSlug: config.appSlug,
+          recordId: userSignature.id, recordData: { signature_image_path: fileId },
+        })
+        setUserSignature((prev) => ({ ...prev, signature_image_path: fileId }))
+      } else {
+        const res = await createDomainRecord({
+          domain: 'jfb_user_signatures', system: 'core', appSlug: config.appSlug,
+          recordData: { user_id: currentUserId, signature_image_path: fileId },
+        })
+        setUserSignature({ id: readWrittenRecordId(res), user_id: currentUserId, signature_image_path: fileId })
+      }
+      setUserSignatureUrl(URL.createObjectURL(file))
+    },
+    onSaved: markSuccess,
+    onError: (msg) => {
+      console.error('Failed to upload signature:', msg)
+      markError(msg)
+    },
+  })
 
   const [savedSignaturePreview, setSavedSignaturePreview] = useState(false)
   async function acceptSavedSignature() {
@@ -599,127 +484,42 @@ export default function SafetyTab({ project, report, reports = [] }) {
     if (!rowId) return
     try {
       await updateReportSafety(rowId, { signature_image_path: userSignature.signature_image_path })
-      setSignatureUrl(userSignatureUrl)
+      preparerSignature.setUrl(userSignatureUrl)
       setSavedSignaturePreview(false)
-      markSaved()
+      markSuccess()
     } catch (err) {
       console.error('Failed to use saved signature:', err.message)
       markError(err.message)
     }
   }
-  async function removeReportSignature() {
-    const rowId = await ensureSafetyRow()
-    if (!rowId) return
-    try {
-      await updateReportSafety(rowId, { signature_image_path: null })
-      setSignatureUrl(null)
-      markSaved()
-    } catch (err) {
-      console.error('Failed to remove signature:', err.message)
-      markError(err.message)
-    }
-  }
-  useEffect(() => {
-    if (!reportSafety?.signature_image_path) return
-    let cancelled = false
-    downloadAttachment(reportSafety.signature_image_path)
-      .then((blob) => { if (!cancelled) setSignatureUrl(URL.createObjectURL(blob)) })
-      .catch((err) => {
-        console.error('Failed to load signature:', err.message)
-        if (!cancelled) markError(`Failed to load signature: ${err.message}`)
-      })
-    return () => { cancelled = true }
-  }, [reportSafety?.signature_image_path])
-  useEffect(() => {
-    if (!reportSafety?.ssho_signature_image_path) return
-    let cancelled = false
-    downloadAttachment(reportSafety.ssho_signature_image_path)
-      .then((blob) => { if (!cancelled) setSshoSignatureUrl(URL.createObjectURL(blob)) })
-      .catch((err) => {
-        console.error('Failed to load SSHO signature:', err.message)
-        if (!cancelled) markError(`Failed to load SSHO signature: ${err.message}`)
-      })
-    return () => { cancelled = true }
-  }, [reportSafety?.ssho_signature_image_path])
 
-  const [signatureUploading, setSignatureUploading] = useState(false)
-  const [signatureError, setSignatureError] = useState(null)
-  async function handleSignatureFile(file) {
-    if (!file) return
-    if (file.size > MAX_SIGNATURE_BYTES) {
-      setSignatureError(`Signature image is ${(file.size / 1024).toFixed(0)} KB — must be ${MAX_SIGNATURE_BYTES / 1024} KB or smaller.`)
-      return
-    }
-    setSignatureError(null)
-    setSignatureUrl(URL.createObjectURL(file))
-    setSignatureUploading(true)
-    try {
-      const rowId = await ensureSafetyRow()
-      if (!rowId) return
-      const uploaded = await uploadAttachment({ coreRecordId: rowId, domain: 'jfb_report_safety_v2', file })
-      await updateReportSafety(rowId, { signature_image_path: uploaded.fileId })
-      if (saveAsDefaultSignature && currentUserId) {
-        if (userSignature?.id) {
-          await updateDomainRecord({
-            domain: 'jfb_user_signatures', system: 'core', appSlug: config.appSlug,
-            recordId: userSignature.id, recordData: { signature_image_path: uploaded.fileId },
-          })
-          setUserSignature((prev) => ({ ...prev, signature_image_path: uploaded.fileId }))
-        } else {
-          const res = await createDomainRecord({
-            domain: 'jfb_user_signatures', system: 'core', appSlug: config.appSlug,
-            recordData: { user_id: currentUserId, signature_image_path: uploaded.fileId },
-          })
-          setUserSignature({ id: readWrittenRecordId(res), user_id: currentUserId, signature_image_path: uploaded.fileId })
-        }
-        setUserSignatureUrl(URL.createObjectURL(file))
-      }
-      markSaved()
-    } catch (err) {
-      console.error('Failed to upload signature:', err.message)
-      markError(err.message)
-    } finally {
-      setSignatureUploading(false)
-    }
-  }
-  const [sshoSignatureUploading, setSshoSignatureUploading] = useState(false)
-  const [sshoSignatureError, setSshoSignatureError] = useState(null)
-  async function handleSshoSignatureFile(file) {
-    if (!file) return
-    if (file.size > MAX_SIGNATURE_BYTES) {
-      setSshoSignatureError(`Signature image is ${(file.size / 1024).toFixed(0)} KB — must be ${MAX_SIGNATURE_BYTES / 1024} KB or smaller.`)
-      return
-    }
-    setSshoSignatureError(null)
-    setSshoSignatureUrl(URL.createObjectURL(file))
-    setSshoSignatureUploading(true)
-    try {
-      const rowId = await ensureSafetyRow()
-      if (!rowId) return
-      const uploaded = await uploadAttachment({ coreRecordId: rowId, domain: 'jfb_report_safety_v2', file })
-      await updateReportSafety(rowId, { ssho_signature_image_path: uploaded.fileId })
-      markSaved()
-    } catch (err) {
-      console.error('Failed to upload SSHO signature:', err.message)
-      markError(err.message)
-    } finally {
-      setSshoSignatureUploading(false)
-    }
-  }
+  const sshoSignature = useSignatureUpload({
+    existingFileId: reportSafety?.ssho_signature_image_path,
+    ensureRecordId: ensureSafetyRow,
+    updateRecord: updateReportSafety,
+    domain: 'jfb_report_safety_v2',
+    column: 'ssho_signature_image_path',
+    maxBytes: MAX_SIGNATURE_BYTES,
+    onSaved: markSuccess,
+    onError: (msg) => {
+      console.error('Failed to upload SSHO signature:', msg)
+      markError(msg)
+    },
+  })
 
   const crewTotalCount = crew.reduce((sum, c) => sum + (Number(c.count) || 0), 0)
   const crewTotalHours = crew.reduce((sum, c) => sum + (Number(c.hours) || 0), 0)
 
-  const signaturePreviewLabel = signatureUrl ? 'Uploaded for this report' : 'No signature uploaded'
+  const signaturePreviewLabel = preparerSignature.url ? 'Uploaded for this report' : 'No signature uploaded'
 
   return (
     <Stack gap="lg">
-      {error && (
+      {saveError && (
         <Box style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, padding: '8px 12px' }}>
-          <Text size="sm" c="#b91c1c">{error}</Text>
+          <Text size="sm" c="#b91c1c">{saveError}</Text>
         </Box>
       )}
-      {savedAt && !error && (
+      {saved && !saveError && (
         <Text size="10px" tt="uppercase" c="green" ta="right" fw={600} style={{ letterSpacing: 0.5 }}>Saved ✓</Text>
       )}
 
@@ -763,12 +563,12 @@ export default function SafetyTab({ project, report, reports = [] }) {
             <Textarea size="xs" minRows={2} placeholder="N/A" value={updates.incidents} onChange={(e) => setUpdate('incidents', e.currentTarget.value)} onBlur={handleFieldBlur} />
           </Field>
           <Field label="Plan of the Day">
-            {!updates.planOfDay && priorPlanOfDay && !planPrefillPreview && (
-              <PrefillLink label={`Use plan from ${formatMonthDay(priorPlanOfDay.reportDate)}`} onClick={() => setPlanPrefillPreview(true)} />
+            {!updates.planOfDay && planOffer.offer && !planOffer.previewOpen && (
+              <PrefillLink label={`Use plan from ${formatMonthDay(planOffer.offer.reportDate)}`} onClick={() => planOffer.setPreviewOpen(true)} />
             )}
-            {planPrefillPreview && priorPlanOfDay && (
-              <PrefillPreviewBox reportDate={priorPlanOfDay.reportDate} onAccept={acceptPlanPrefill} onCancel={() => setPlanPrefillPreview(false)}>
-                <Text size="xs" mb={8}>{priorPlanOfDay.content}</Text>
+            {planOffer.previewOpen && planOffer.offer && (
+              <PrefillPreviewBox reportDate={planOffer.offer.reportDate} onAccept={acceptPlanPrefill} onCancel={() => planOffer.setPreviewOpen(false)}>
+                <Text size="xs" mb={8}>{planOffer.offer.content}</Text>
               </PrefillPreviewBox>
             )}
             <Textarea size="xs" minRows={3} placeholder="e.g. Dredging Operations" value={updates.planOfDay} onChange={(e) => setUpdate('planOfDay', e.currentTarget.value)} onBlur={handleFieldBlur} />
@@ -782,17 +582,17 @@ export default function SafetyTab({ project, report, reports = [] }) {
       </Section>
 
       <Section title="Crew Summary">
-        {crewAllBlank && priorCrewSummary && !crewPrefillPreview && (
-          <PrefillLink label={`Use crew from ${formatMonthDay(priorCrewSummary.reportDate)}`} onClick={() => setCrewPrefillPreview(true)} mb={8} />
+        {crewAllBlank && crewOffer.offer && !crewOffer.previewOpen && (
+          <PrefillLink label={`Use crew from ${formatMonthDay(crewOffer.offer.reportDate)}`} onClick={() => crewOffer.setPreviewOpen(true)} mb={8} />
         )}
-        {crewPrefillPreview && priorCrewSummary && (
-          <PrefillPreviewBox reportDate={priorCrewSummary.reportDate} onAccept={acceptCrewPrefill} onCancel={() => setCrewPrefillPreview(false)} accepting={crewInserting}>
+        {crewOffer.previewOpen && crewOffer.offer && (
+          <PrefillPreviewBox reportDate={crewOffer.offer.reportDate} onAccept={acceptCrewPrefill} onCancel={() => crewOffer.setPreviewOpen(false)} accepting={crewOffer.accepting}>
             <Table withTableBorder={false} verticalSpacing={2} fz="xs" mb={8}>
               <Table.Thead>
                 <Table.Tr><Table.Th>Staff</Table.Th><Table.Th ta="right">Count</Table.Th><Table.Th ta="right">Hours</Table.Th></Table.Tr>
               </Table.Thead>
               <Table.Tbody>
-                {priorCrewSummary.rows.map((r) => (
+                {crewOffer.offer.rows.map((r) => (
                   <Table.Tr key={r.id}>
                     <Table.Td>{r.category}</Table.Td>
                     <Table.Td ta="right">{r.count ?? 0}</Table.Td>
@@ -857,12 +657,12 @@ export default function SafetyTab({ project, report, reports = [] }) {
               <Group gap={8} align="flex-end">
                 <TextInput
                   size="xs" label="Latitude (-90 to 90)" placeholder="e.g. 43.804" value={location.latitude}
-                  onChange={(e) => setLocation((p) => ({ ...p, latitude: e.currentTarget.value }))}
+                  onChange={(e) => { const v = e.currentTarget.value; setLocation((p) => ({ ...p, latitude: v })) }}
                   onBlur={saveLocation}
                 />
                 <TextInput
                   size="xs" label="Longitude (-180 to 180)" placeholder="e.g. -91.155" value={location.longitude}
-                  onChange={(e) => setLocation((p) => ({ ...p, longitude: e.currentTarget.value }))}
+                  onChange={(e) => { const v = e.currentTarget.value; setLocation((p) => ({ ...p, longitude: v })) }}
                   onBlur={saveLocation}
                 />
                 {savingLocation && <Text size="10px" c="dimmed">Saving…</Text>}
@@ -925,7 +725,7 @@ export default function SafetyTab({ project, report, reports = [] }) {
             />
             <Text size="xs" fw={500} c="#374151" mb={4}>Electronic signature</Text>
             <Text size="xs" c="dimmed" mb={6}>{signaturePreviewLabel}</Text>
-            {!signatureUrl && userSignatureUrl && !savedSignaturePreview && (
+            {!preparerSignature.url && userSignatureUrl && !savedSignaturePreview && (
               <PrefillLink label="Use my saved signature" onClick={() => setSavedSignaturePreview(true)} mb={8} />
             )}
             {savedSignaturePreview && userSignatureUrl && (
@@ -937,26 +737,26 @@ export default function SafetyTab({ project, report, reports = [] }) {
                 </Group>
               </Box>
             )}
-            {signatureUrl && <img src={signatureUrl} alt="Signature" style={{ height: 40, display: 'block', marginBottom: 6 }} />}
+            {preparerSignature.url && <img src={preparerSignature.url} alt="Signature" style={{ height: 40, display: 'block', marginBottom: 6 }} />}
             <Group gap={12} align="center">
-              <FileButton onChange={handleSignatureFile} accept="image/png,image/jpeg,image/webp">
+              <FileButton onChange={preparerSignature.upload} accept="image/png,image/jpeg,image/webp">
                 {(props) => (
-                  <UnstyledButton {...props} disabled={signatureUploading}>
+                  <UnstyledButton {...props} disabled={preparerSignature.uploading}>
                     <Text size="xs" c="#0F2744" style={{ textDecoration: 'underline' }}>
-                      {signatureUploading ? 'Uploading…' : signatureUrl ? 'Replace signature' : 'Upload signature'}
+                      {preparerSignature.uploading ? 'Uploading…' : preparerSignature.url ? 'Replace signature' : 'Upload signature'}
                     </Text>
                   </UnstyledButton>
                 )}
               </FileButton>
               <Checkbox size="xs" label="Also save as my default signature" checked={saveAsDefaultSignature} onChange={(e) => setSaveAsDefaultSignature(e.currentTarget.checked)} />
             </Group>
-            {signatureUrl && (
-              <UnstyledButton onClick={removeReportSignature} mt={4}>
+            {preparerSignature.url && (
+              <UnstyledButton onClick={preparerSignature.remove} mt={4}>
                 <Text size="xs" c="red">Remove this report's signature</Text>
               </UnstyledButton>
             )}
             <Text size="10px" c="dimmed" mt={4}>PNG / JPG / WebP, ≤ {MAX_SIGNATURE_BYTES / 1024} KB</Text>
-            {signatureError && <Text size="10px" c="red" mt={2}>{signatureError}</Text>}
+            {preparerSignature.error && <Text size="10px" c="red" mt={2}>{preparerSignature.error}</Text>}
           </Box>
           {project?.show_ssho_field && (
             <Box pt={16} style={{ borderTop: '1px solid #e5e7eb' }}>
@@ -969,18 +769,18 @@ export default function SafetyTab({ project, report, reports = [] }) {
                 Prints below the Report Preparer line on the safety page with its own certification.
               </Text>
               <Text size="xs" fw={500} c="#374151" mb={4}>SSHO Electronic signature</Text>
-              {sshoSignatureUrl && <img src={sshoSignatureUrl} alt="SSHO signature" style={{ height: 40, display: 'block', marginBottom: 6 }} />}
-              <FileButton onChange={handleSshoSignatureFile} accept="image/png,image/jpeg,image/webp">
+              {sshoSignature.url && <img src={sshoSignature.url} alt="SSHO signature" style={{ height: 40, display: 'block', marginBottom: 6 }} />}
+              <FileButton onChange={sshoSignature.upload} accept="image/png,image/jpeg,image/webp">
                 {(props) => (
-                  <UnstyledButton {...props} disabled={sshoSignatureUploading}>
+                  <UnstyledButton {...props} disabled={sshoSignature.uploading}>
                     <Text size="xs" c="#0F2744" style={{ textDecoration: 'underline' }}>
-                      {sshoSignatureUploading ? 'Uploading…' : sshoSignatureUrl ? 'Replace signature' : 'Upload signature'}
+                      {sshoSignature.uploading ? 'Uploading…' : sshoSignature.url ? 'Replace signature' : 'Upload signature'}
                     </Text>
                   </UnstyledButton>
                 )}
               </FileButton>
               <Text size="10px" c="dimmed" mt={4}>PNG / JPG / WebP, ≤ {MAX_SIGNATURE_BYTES / 1024} KB</Text>
-              {sshoSignatureError && <Text size="10px" c="red" mt={2}>{sshoSignatureError}</Text>}
+              {sshoSignature.error && <Text size="10px" c="red" mt={2}>{sshoSignature.error}</Text>}
             </Box>
           )}
         </Stack>

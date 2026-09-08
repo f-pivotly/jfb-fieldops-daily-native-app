@@ -149,7 +149,14 @@ function rate(cy, goh) {
  */
 export function buildRealizedReport(project, days, delayRows, excluded, reasons, breaks, today, measure) {
   const sorted = [...days].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
-  const start = project.start_date
+  // project.start_date is a `timestamp with time zone` column -- comes back
+  // as e.g. "2026-06-01 00:00:00+00", not a plain YYYY-MM-DD date. The date
+  // helpers below all split on '-' expecting the latter; fed the raw
+  // timestamp they don't crash (there's still a string to split), they just
+  // silently produce NaN/garbage (e.g. every day landing in its own bogus
+  // "week" instead of grouping correctly). Normalize once here the same way
+  // the page's own dailyTotals fetch already does for this same field.
+  const start = project.start_date ? project.start_date.slice(0, 10) : project.start_date
   const goal = measure ? measure.goal : project.volume_goal ?? 0
   const bidRate = measure ? measure.bidRate : project.cy_goh_goal ?? 0
   const baselineCy = measure?.baselineCy ?? 0

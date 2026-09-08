@@ -111,7 +111,7 @@
       "required": false,
       "data_type": "numeric",
       "column_name": "avg_line_velocity",
-      "description": "Average line velocity, in feet per second. Combined with pipe_dia_inches, every other flow metric (flow rate, daily/project totals) derives from these two numbers -- nothing else needs to be stored.",
+      "description": "Average line velocity, in feet per second. Interchangeable with avg_flow_rate via pipe_dia_inches -- the PE enters whichever one they measured and the other derives at entry time.",
       "conflict_resolution": {
         "code": "lww"
       },
@@ -132,7 +132,28 @@
       "required": false,
       "data_type": "numeric",
       "column_name": "avg_flow_rate",
-      "description": "Average flow rate, in GPM. Interchangeable with avg_line_velocity via pipe_dia_inches -- the PE enters whichever one they measured and the other derives at render time.",
+      "description": "Average flow rate, in GPM. Interchangeable with avg_line_velocity via pipe_dia_inches -- the PE enters whichever one they measured and the other derives at entry time.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "daily_total_gal",
+      "slug": "daily_total_gal",
+      "type": "numeric",
+      "label": "Daily Total Flow",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "daily_total_gal",
+      "description": "Total gallons pumped through this equipment's line on this day, directly entered by the PE (matches the reference app's report_flow_stats.daily_total_gal -- NOT derived from avg_flow_rate, since that's an instantaneous reading with no reliable operating-duration source to multiply by). Summed across all of this equipment's rows through the report date to get Project Total; Previous Total is Project Total minus this day's value.",
       "conflict_resolution": {
         "code": "lww"
       },

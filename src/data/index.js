@@ -4,15 +4,21 @@ import { requestNewToken, setAuthToken } from '../helpers/pivotlyHelpers'
 const IS_LOCAL = true
 
 function resolveApiBase() {
+  console.log('[resolveApiBase] IS_LOCAL =', IS_LOCAL)
+  console.log('[resolveApiBase] window.__PIVOTLY_RUNTIME_CONFIG__ =', window.__PIVOTLY_RUNTIME_CONFIG__)
+
   const runtimeConfig = window.__PIVOTLY_RUNTIME_CONFIG__;
   if (!runtimeConfig?.apiBaseUrl) {
-    return import.meta.env.VITE_API_BASE_URL || 'https://dev.pivotly.com/vm/api/v3'
+    const fallback = import.meta.env.VITE_API_BASE_URL || 'https://dev.pivotly.com/vm/api/v3'
+    console.log('[resolveApiBase] no runtimeConfig.apiBaseUrl -> using fallback:', fallback, '(VITE_API_BASE_URL =', import.meta.env.VITE_API_BASE_URL, ')')
+    return fallback
   }
 
   let parentOrigin
   try {
     parentOrigin = window.parent.location.origin
-  } catch {
+  } catch (e) {
+    console.log('[resolveApiBase] window.parent.location.origin threw:', e.message)
     parentOrigin = ''
   }
   if (!parentOrigin && document.referrer) {
@@ -22,19 +28,25 @@ function resolveApiBase() {
       parentOrigin = ''
     }
   }
+  console.log('[resolveApiBase] parentOrigin =', parentOrigin, '| document.referrer =', document.referrer, '| window.location.href =', window.location.href)
 
   if (!parentOrigin) {
-    return import.meta.env.VITE_API_BASE_URL || 'https://dev.pivotly.com/vm/api/v3'
+    const fallback = import.meta.env.VITE_API_BASE_URL || 'https://dev.pivotly.com/vm/api/v3'
+    console.log('[resolveApiBase] no parentOrigin -> using fallback:', fallback)
+    return fallback
   }
 
   const apiPath = IS_LOCAL
     ? runtimeConfig.apiBaseUrl
     : '/vm' + runtimeConfig.apiBaseUrl
 
-  return parentOrigin + apiPath
+  const resolved = parentOrigin + apiPath
+  console.log('[resolveApiBase] apiPath =', apiPath, '-> resolved API_BASE_URL =', resolved)
+  return resolved
 }
 
 export const API_BASE_URL = resolveApiBase()
+console.log('[resolveApiBase] FINAL API_BASE_URL =', API_BASE_URL)
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
@@ -217,7 +229,15 @@ function uniqueFileName(name) {
   const dot = name.lastIndexOf('.')
   const base = dot > 0 ? name.slice(0, dot) : name
   const ext = dot > 0 ? name.slice(dot) : ''
-  return `${base}-${crypto.randomUUID().slice(0, 8)}${ext}`
+  // Strip anything outside printable ASCII -- the backend's download
+  // endpoint builds the Content-Disposition header from this name verbatim
+  // and crashes with a 500 (ERR_INVALID_CHAR) on any character outside
+  // 0x20-0x7E, e.g. the narrow no-break space (U+202F) macOS's Screenshot
+  // utility inserts before "AM"/"PM" in names like
+  // "Screenshot 2026-09-07 at 7.58.57 PM.png". Can't fix the backend
+  // handler itself, so the file just never gets a name it can choke on.
+  const safeBase = base.replace(/[^\x20-\x7E]/g, '_').trim() || 'file'
+  return `${safeBase}-${crypto.randomUUID().slice(0, 8)}${ext}`
 }
 
 export async function uploadAttachment({ coreRecordId, domain, file }) {

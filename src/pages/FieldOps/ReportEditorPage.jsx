@@ -3,9 +3,13 @@ import { useParams, Link } from 'react-router-dom'
 import { Box, ScrollArea, Grid, Text, Badge, Checkbox, Group, Stack, Button, Tabs } from '@mantine/core'
 import { REPORT_STATUS_LABEL, REPORT_STATUS_COLOR } from '../../config/reportStatus'
 import { shouldShowDredgeProgress } from '../../config/dredgeProgress'
+import { shouldShowWaterQuality } from '../../config/waterMonitoring'
+import { shouldShowAirQuality } from '../../config/airMonitoring'
 import { useProject } from '../../hooks/useProject'
 import { useReports } from '../../hooks/useReports'
 import { useEquipment } from '../../hooks/useEquipment'
+import { useWaterMonitoringConfig } from '../../hooks/useWaterMonitoringConfig'
+import { useAirMonitoringConfig } from '../../hooks/useAirMonitoringConfig'
 import { api, createDomainRecord, executeReport, fetchCurrentUser, fetchFileById } from '../../data'
 import { useAppConfig } from '../../contexts/appConfigContext'
 import { useFieldOpsAction } from '../../contexts/fieldOpsAccessContext'
@@ -15,8 +19,11 @@ import {
   buildPhotoAssetsParam,
   buildDredgeChartAssetsParam,
   buildSafetyPageDataParam,
-  buildProductionStatsByEquipmentParam,
+  buildProductionComboTotalsByEquipmentParam,
   buildCoverProductionTotalsParam,
+  buildFlowAndPipeByEquipmentParam,
+  buildDateTableParams,
+  buildEquipmentReportNumbers,
   buildCompletionChecklist,
   validatePdfIssues,
 } from './lib/reportPdfData'
@@ -28,6 +35,8 @@ import NarrativesTab from './reportEditorTabs/NarrativesTab'
 import MetricsTab from './reportEditorTabs/MetricsTab'
 import SafetyTab from './reportEditorTabs/SafetyTab'
 import DredgeProgressTab from './reportEditorTabs/DredgeProgressTab'
+import WaterQualityTab from './reportEditorTabs/WaterQualityTab'
+import AirQualityTab from './reportEditorTabs/AirQualityTab'
 
 const CONTENT_TABS = [
   { key: 'event_log', label: 'Event Log', Comp: EventLogTab },
@@ -39,6 +48,8 @@ const CONTENT_TABS = [
 ]
 
 const DREDGE_PROGRESS_TAB = { key: 'dredge_progress', label: 'Dredge Progress', Comp: DredgeProgressTab }
+const WATER_QUALITY_TAB = { key: 'water_quality', label: 'Water Quality', Comp: WaterQualityTab }
+const AIR_QUALITY_TAB = { key: 'air_quality', label: 'Air Quality', Comp: AirQualityTab }
 
 const CHECKLIST_LABELS = {
   event_log_reviewed: 'Event log reviewed',
@@ -83,7 +94,12 @@ export default function ReportEditorPage() {
   const canDownloadPdf = status === 'approved' || status === 'released'
   const canSubmitForReview = status === 'draft'
   const canUnlock = status === 'approved' || status === 'released'
-  const contentTabs = shouldShowDredgeProgress(project) ? [...CONTENT_TABS, DREDGE_PROGRESS_TAB] : CONTENT_TABS
+  const { config: waterConfig } = useWaterMonitoringConfig(project?.id)
+  const { config: airConfig } = useAirMonitoringConfig(project?.id)
+  let contentTabs = CONTENT_TABS
+  if (shouldShowDredgeProgress(project)) contentTabs = [...contentTabs, DREDGE_PROGRESS_TAB]
+  if (shouldShowWaterQuality(waterConfig)) contentTabs = [...contentTabs, WATER_QUALITY_TAB]
+  if (shouldShowAirQuality(airConfig)) contentTabs = [...contentTabs, AIR_QUALITY_TAB]
   const naItems = mobDay ? MOBILIZATION_NA_ITEMS : EMPTY_NA_ITEMS
   const checklistDone = !!checklist && Object.keys(CHECKLIST_LABELS).every((key) => naItems.has(key) || checklist[key])
 
@@ -130,15 +146,19 @@ export default function ReportEditorPage() {
       }
 
       const equipmentIds = equipment.map((eq) => eq.id)
-      const [dailyActivityData, photoAssets, dredgeChartAssets, safetyPageData, productionStatsByEquipment, productionTotals] = await Promise.all([
-        buildDailyActivityByEquipmentParam({ appSlug: config.appSlug, projectId, dateISO: date }),
+      const [dailyActivityData, photoAssets, dredgeChartAssets, safetyPageData, productionStatsByEquipment, productionTotals, flowAndPipe] = await Promise.all([
+        buildDailyActivityByEquipmentParam({ appSlug: config.appSlug, projectId, dateISO: date, equipmentIds }),
         buildPhotoAssetsParam({ appSlug: config.appSlug, reportId }),
         buildDredgeChartAssetsParam({ appSlug: config.appSlug, reportId }),
         buildSafetyPageDataParam({ appSlug: config.appSlug, projectId, reportId, dateISO: date, project }),
-        buildProductionStatsByEquipmentParam({ projectId, project, dateISO: date, equipmentIds }),
+        buildProductionComboTotalsByEquipmentParam({ appSlug: config.appSlug, projectId, reportId, dateISO: date }),
         buildCoverProductionTotalsParam({ projectId, project, dateISO: date }),
+        buildFlowAndPipeByEquipmentParam({ appSlug: config.appSlug, projectId, dateISO: date }),
       ])
       const { activitiesByEquipment: dailyActivityByEquipment, delaySummaryByEquipment, opSummaryByEquipment } = dailyActivityData
+      const { flowStatsByEquipment, pipeSegments, pipeTotalLength } = flowAndPipe
+      const dateTable = buildDateTableParams({ date, project })
+      const reportNumberByEquipment = buildEquipmentReportNumbers({ date, equipment })
       const result = await executeReport('rpt-jfb-daily-report', {
         parameters: {
           projectId,
@@ -156,6 +176,11 @@ export default function ReportEditorPage() {
           safetyPageData,
           productionStatsByEquipment,
           productionTotals,
+          flowStatsByEquipment,
+          pipeSegments,
+          pipeTotalLength,
+          reportNumberByEquipment,
+          ...dateTable,
         },
       })
       const fileRes = await api.get(result.downloadUrl, { responseType: 'blob' })
@@ -183,6 +208,7 @@ export default function ReportEditorPage() {
             project_id: projectId,
             report_date: date,
             report_slug: 'rpt-jfb-daily-report',
+            report_type: 'daily',
             generated_at: new Date().toISOString(),
             generated_by_user_id: me.id,
             generated_by_email: me.email,

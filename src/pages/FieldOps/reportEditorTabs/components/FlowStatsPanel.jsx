@@ -54,11 +54,22 @@ export function FlowStatsPanel({ projectId, equipmentId, reportDateISO }) {
   const baseDiameter = formatNum(todaysRow ? todaysRow.pipe_dia_inches : priorRow?.pipe_dia_inches)
   const baseVelocity = formatNum(todaysRow?.avg_line_velocity)
   const baseFlowRate = formatNum(todaysRow?.avg_flow_rate)
+  const baseDailyTotal = formatNum(todaysRow?.daily_total_gal)
 
   const diameter = 'diameter' in edits ? edits.diameter : baseDiameter
   const velocity = 'velocity' in edits ? edits.velocity : baseVelocity
   const flowRate = 'flowRate' in edits ? edits.flowRate : baseFlowRate
+  const dailyTotal = 'dailyTotal' in edits ? edits.dailyTotal : baseDailyTotal
   const carriedFrom = !todaysRow && !('diameter' in edits) && priorRow ? dateOnly(priorRow.log_date) : null
+
+  // Matches the reference app's buildFlowStats(): Project Total is every
+  // one of this equipment's daily_total_gal values through today, Previous
+  // Total is Project Total minus today's own entry (not entered separately).
+  const projectTotalGal = flowStats
+    .filter((r) => r.equipment_id === equipmentId && dateOnly(r.log_date) <= reportDateISO)
+    .reduce((a, r) => a + (Number(r.daily_total_gal) || 0), 0)
+  const dailyTotalGal = parseNum(dailyTotal) ?? 0
+  const previousTotalGal = Math.max(0, projectTotalGal - dailyTotalGal)
 
   function handleDiameterChange(v) {
     const d = parseNum(v)
@@ -93,14 +104,19 @@ export function FlowStatsPanel({ projectId, equipmentId, reportDateISO }) {
     setEdits((prev) => ({ ...prev, ...patch }))
   }
 
+  function handleDailyTotalChange(v) {
+    setEdits((prev) => ({ ...prev, dailyTotal: v }))
+  }
+
   async function handleBlur() {
     if (Object.keys(edits).length === 0) return
     const patch = {
       pipe_dia_inches: parseNum(diameter),
       avg_line_velocity: parseNum(velocity),
       avg_flow_rate: parseNum(flowRate),
+      daily_total_gal: parseNum(dailyTotal),
     }
-    const hasAnyValue = patch.pipe_dia_inches !== null || patch.avg_line_velocity !== null || patch.avg_flow_rate !== null
+    const hasAnyValue = patch.pipe_dia_inches !== null || patch.avg_line_velocity !== null || patch.avg_flow_rate !== null || patch.daily_total_gal !== null
     setEdits({})
     if (todaysRow) {
       await update(todaysRow.id, patch)
@@ -137,12 +153,9 @@ export function FlowStatsPanel({ projectId, equipmentId, reportDateISO }) {
           />
           <NumField label="Avg Line Velocity" unit="ft/s" value={velocity} onChange={handleVelocityChange} onBlurCommit={handleBlur} />
           <NumField label="Avg Flow Rate" unit="GPM" value={flowRate} onChange={handleFlowRateChange} onBlurCommit={handleBlur} />
-          <DerivedRow label="Daily Total Flow" unit="GAL" />
-          <DerivedRow label="Previous Total" unit="GAL" />
-          <DerivedRow label="Project Total" unit="GAL" />
-          <Text size="10px" c="dimmed" mt={4} fs="italic">
-            Totals aren't available yet — no operating-hours or flow-history source in this app.
-          </Text>
+          <NumField label="Daily Total Flow" unit="GAL" value={dailyTotal} onChange={handleDailyTotalChange} onBlurCommit={handleBlur} />
+          <DerivedRow label="Previous Total" unit="GAL" value={previousTotalGal} />
+          <DerivedRow label="Project Total" unit="GAL" value={projectTotalGal} />
         </Box>
       )}
     </Box>
@@ -273,11 +286,11 @@ function NumField({ label, unit, value, onChange, onBlurCommit, helper }) {
   )
 }
 
-function DerivedRow({ label, unit }) {
+function DerivedRow({ label, unit, value }) {
   return (
     <Group justify="space-between" py={2}>
       <Text size="11px" c="dimmed">{label} <Text span size="9px" c="dimmed" tt="uppercase">(calculated)</Text></Text>
-      <Text size="11px" c="dimmed" fw={600}>— {unit}</Text>
+      <Text size="11px" c="dimmed" fw={600}>{value.toLocaleString('en-US')} {unit}</Text>
     </Group>
   )
 }
