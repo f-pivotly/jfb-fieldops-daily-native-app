@@ -4,21 +4,15 @@ import { requestNewToken, setAuthToken } from '../helpers/pivotlyHelpers'
 const IS_LOCAL = true
 
 function resolveApiBase() {
-  console.log('[resolveApiBase] IS_LOCAL =', IS_LOCAL)
-  console.log('[resolveApiBase] window.__PIVOTLY_RUNTIME_CONFIG__ =', window.__PIVOTLY_RUNTIME_CONFIG__)
-
   const runtimeConfig = window.__PIVOTLY_RUNTIME_CONFIG__;
   if (!runtimeConfig?.apiBaseUrl) {
-    const fallback = import.meta.env.VITE_API_BASE_URL || 'https://dev.pivotly.com/vm/api/v3'
-    console.log('[resolveApiBase] no runtimeConfig.apiBaseUrl -> using fallback:', fallback, '(VITE_API_BASE_URL =', import.meta.env.VITE_API_BASE_URL, ')')
-    return fallback
+    return import.meta.env.VITE_API_BASE_URL || 'https://dev.pivotly.com/vm/api/v3'
   }
 
   let parentOrigin
   try {
     parentOrigin = window.parent.location.origin
-  } catch (e) {
-    console.log('[resolveApiBase] window.parent.location.origin threw:', e.message)
+  } catch {
     parentOrigin = ''
   }
   if (!parentOrigin && document.referrer) {
@@ -28,32 +22,25 @@ function resolveApiBase() {
       parentOrigin = ''
     }
   }
-  console.log('[resolveApiBase] parentOrigin =', parentOrigin, '| document.referrer =', document.referrer, '| window.location.href =', window.location.href)
 
   if (!parentOrigin) {
-    const fallback = import.meta.env.VITE_API_BASE_URL || 'https://dev.pivotly.com/vm/api/v3'
-    console.log('[resolveApiBase] no parentOrigin -> using fallback:', fallback)
-    return fallback
+    return import.meta.env.VITE_API_BASE_URL || 'https://dev.pivotly.com/vm/api/v3'
   }
 
   const apiPath = IS_LOCAL
     ? runtimeConfig.apiBaseUrl
     : '/vm' + runtimeConfig.apiBaseUrl
 
-  const resolved = parentOrigin + apiPath
-  console.log('[resolveApiBase] apiPath =', apiPath, '-> resolved API_BASE_URL =', resolved)
-  return resolved
+  return parentOrigin + apiPath
 }
 
-export const API_BASE_URL = resolveApiBase()
-console.log('[resolveApiBase] FINAL API_BASE_URL =', API_BASE_URL)
+const API_BASE_URL = resolveApiBase()
 
 export const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 15000,
   headers: { 'Content-Type': 'application/json' },
 })
-
 
 export const applyAuthToken = (token) => setAuthToken(api, token)
 
@@ -86,12 +73,6 @@ api.interceptors.response.use(
     return Promise.reject(error)
   }
 )
-
-export async function fetchNavItems(appSlug) {
-  const { data } = await api.get(`/native-apps/${appSlug}/resolve`)
-  console.log('Fetched nav items:', data)
-  return data?.data?.app?.pages
-}
 
 export async function fetchPageDetails(appSlug, pageSlug) {
   const { data } = await api.get(`/native-apps/${appSlug}/pages/${pageSlug}/resolve`)
@@ -156,23 +137,10 @@ export async function fetchDomainRecords({ domain, system, appSlug, limit = 25, 
   return data
 }
 
-export function readTotalRecords(res) {
-  return res?.pagination?.total_records ?? res?.meta?.total_records ?? 0
-}
-
 export function readWrittenRecordId(res) {
   const record = res?.data?.data?.data ?? res?.data?.data ?? res?.data ?? res
   return record?.id ?? record?.core_record_id ?? null
 }
-export async function fetchDomainRecordCount({ domain, system, appSlug, filters }) {
-  const res = await fetchDomainRecords({
-    domain, system, appSlug, filters,
-    limit: 1, offset: 0,
-    countMode: 'auto', forceMeta: true,
-  })
-  return readTotalRecords(res)
-}
-
 export async function createDomainRecord({ domain, system, appSlug, recordData }) {
   const { data } = await api.post('/core-data-write', {
     parameters: {
@@ -218,24 +186,10 @@ export async function deleteDomainRecord({ domain, system, appSlug, recordId }) 
   return data
 }
 
-// The backend stores the uploaded filename as-is in a column with a
-// uniqueness constraint scoped per attachment domain -- two uploads of a
-// same-named file (even for different projects/records) collide. Suffixing
-// a short random id keeps the name recognizable while guaranteeing
-// uniqueness; callers that need the true original name should save it
-// themselves (e.g. in a domain's own *_original_name column) since the
-// server only ever sees this suffixed one.
 function uniqueFileName(name) {
   const dot = name.lastIndexOf('.')
   const base = dot > 0 ? name.slice(0, dot) : name
   const ext = dot > 0 ? name.slice(dot) : ''
-  // Strip anything outside printable ASCII -- the backend's download
-  // endpoint builds the Content-Disposition header from this name verbatim
-  // and crashes with a 500 (ERR_INVALID_CHAR) on any character outside
-  // 0x20-0x7E, e.g. the narrow no-break space (U+202F) macOS's Screenshot
-  // utility inserts before "AM"/"PM" in names like
-  // "Screenshot 2026-09-07 at 7.58.57 PM.png". Can't fix the backend
-  // handler itself, so the file just never gets a name it can choke on.
   const safeBase = base.replace(/[^\x20-\x7E]/g, '_').trim() || 'file'
   return `${safeBase}-${crypto.randomUUID().slice(0, 8)}${ext}`
 }
@@ -249,9 +203,6 @@ export async function uploadAttachment({ coreRecordId, domain, file }) {
   return data?.data ?? data
 }
 
-// Lists attachments for a core record in a domain -- used right after
-// uploadAttachment to read back the storage_path the server assigned
-// (uploadAttachment's response only returns the new fileId).
 export async function getAttachments({ coreRecordId, domain, pageSize = 50 }) {
   const { data } = await api.get(`/attachments/${domain}/${coreRecordId}`, {
     params: { page: 0, pageSize },
@@ -266,8 +217,6 @@ export async function fetchPublicAsset(url) {
   return res.blob()
 }
 
-// For external (non-Pivotly) JSON APIs, e.g. the USGS basemap metadata call
-// in lib/dredge/aerial.js -- lint forbids fetch() outside this file.
 export async function fetchExternalJson(url) {
   const res = await fetch(url)
   if (!res.ok) throw new Error(`${url}: ${res.status}`)

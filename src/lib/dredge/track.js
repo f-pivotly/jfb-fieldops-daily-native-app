@@ -1,22 +1,6 @@
-// Trimble machine-TRACK support for mechanical dredging.
-//
-// The daily "Tracking" DXF is the machine's own position log and is the
-// mechanical equivalent of the HYPACK cutter track: every POLYLINE is ONE
-// BUCKET CYCLE -- dig at the bed, swing up, dump into the barge, return. Z is
-// the BUCKET TEETH, so "teeth at/below the local bed elevation" identifies
-// the digging vertices; everything higher is the bucket travelling.
-//
-// CRITICAL: never stamp a swath along the polyline PATH -- that traces the
-// swing arc over open water. Coverage = the bucket footprint stamped at the
-// DIGGING vertices only.
-//
-// Ported from jfb-fieldops-daily/src/lib/dredge/track.ts (types dropped to
-// JSDoc).
 import { close, fillHoles, dropSmallIslands, maskToPolys } from './coverage'
 import { snapToAlignment, ALIGNMENT_SNAP_FT } from './alignment'
-
-/** @typedef {{x: number, y: number, z: number}} TrackVertex */
-/** @typedef {TrackVertex[]} TrackCycle One bucket cycle: dig -> swing -> dump -> return, in file order. */
+import { sampleRef } from './designVolume'
 
 export const TRACK_DEFAULTS = {
   bucketWidthFt: 6,
@@ -25,11 +9,6 @@ export const TRACK_DEFAULTS = {
   minIslandSqFt: 150,
 }
 
-/** Parse a Trimble Tracking/Dredge-Track DXF into bucket cycles. Handles the
- *  classic POLYLINE/VERTEX/SEQEND form these files use, and drops the stray
- *  near-origin vertex Trimble emits (it makes CAD's zoom-extents span
- *  millions of ft so the drawing looks empty).
- * @param {string} txt @returns {TrackCycle[]} */
 export function parseTrackDxf(txt) {
   const raw = txt.split(/\r?\n/)
   const pr = []
@@ -61,9 +40,6 @@ export function parseTrackDxf(txt) {
     .filter((c) => c.length > 0)
 }
 
-/** Does this DXF look like a machine track (vs a drawn progress border)?
- *  Tracks have many short cycles with tens of feet of Z travel per cycle.
- * @param {TrackCycle[]} cycles */
 export function looksLikeTrack(cycles) {
   if (cycles.length < 20) return false
   let spanned = 0
@@ -75,16 +51,8 @@ export function looksLikeTrack(cycles) {
   return spanned >= Math.max(5, cycles.length * 0.2)
 }
 
-function sampleBed(bed, x, y) {
-  const gx = Math.round(x - bed.x0), gy = Math.round(y - bed.y0)
-  if (gx < 0 || gx >= bed.nx || gy < 0 || gy >= bed.ny) return NaN
-  return bed.val[gy * bed.nx + gx]
-}
+const sampleBed = sampleRef
 
-/** @typedef {{bucketWidthFt?: number, bedTolFt?: number, closeFt?: number, minIslandSqFt?: number, bed?: object|null, maxDigElev?: number|null}} TrackOptions */
-
-/** Build the day's dredged border from bucket cycles.
- * @param {TrackCycle[]} cycles @param {TrackOptions} [opts] */
 export function trackCoverage(cycles, opts = {}) {
   const bw = opts.bucketWidthFt ?? TRACK_DEFAULTS.bucketWidthFt
   const tol = opts.bedTolFt ?? TRACK_DEFAULTS.bedTolFt
@@ -137,9 +105,6 @@ export function trackCoverage(cycles, opts = {}) {
   }
   let m = fillHoles(close(mask, Math.max(1, Math.round(closeFt / R)), G), G)
   if (minIsland > 0) m = dropSmallIslands(m, G, Math.round(minIsland / (R * R)))
-  // Extend to a hard structure the teeth can't sit on (sheet-pile wall). Done
-  // AFTER the island filter so the snap can't resurrect dropped specks, and
-  // after fillHoles so it only ever reaches outward.
   let alignmentAddedSqFt = 0
   if (opts.alignment && opts.alignment.length) {
     const snapped = snapToAlignment(m, G, opts.alignment, opts.alignmentSnapFt ?? ALIGNMENT_SNAP_FT)

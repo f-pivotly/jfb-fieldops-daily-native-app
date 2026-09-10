@@ -6,8 +6,6 @@ import { readTrack } from './coverage'
 import { parseTrackDxf, looksLikeTrack, trackCoverage, TRACK_DEFAULTS } from './track'
 import { parseEarthworksCsv, coverageFromSurface, diffSurfaces, filenameDateISO } from './earthworks'
 
-// Downloads + gunzips + decodes the project's reference-survey grid, caching
-// it in refSurfaceRef by storage path so a re-generate doesn't re-fetch it.
 export async function loadRefSurface(path, refSurfaceRef) {
   if (!path) return null
   if (refSurfaceRef.current?.path === path) return refSurfaceRef.current.surface
@@ -17,10 +15,6 @@ export async function loadRefSurface(path, refSurfaceRef) {
   return surface
 }
 
-// The most recent banked full-surface export for this equipment BEFORE the
-// given date, or null. No new query -- progressRecords/reportDateById are
-// already fetched in this component for priorRings, so this is a plain
-// client-side filter+sort over data already in hand.
 export function findLatestPriorSurfaceRow(progressRecords, reportDateById, equipmentId, beforeISO) {
   return (progressRecords ?? [])
     .filter((r) => r.equipment_id === equipmentId && r.surface_export_path)
@@ -29,8 +23,6 @@ export function findLatestPriorSurfaceRow(progressRecords, reportDateById, equip
     .sort((a, b) => b.date.localeCompare(a.date))[0]?.row ?? null
 }
 
-// Downloads + gunzips + parses a banked surface export, caching it in
-// priorSurfaceRef by storage path so a re-generate doesn't re-fetch it.
 export async function loadPriorSurface(path, priorSurfaceRef) {
   if (!path) return null
   if (priorSurfaceRef.current?.path === path) return priorSurfaceRef.current.surface
@@ -41,15 +33,10 @@ export async function loadPriorSurface(path, priorSurfaceRef) {
   return surface
 }
 
-// Which end of the shape is the bucket is a fixed property of the uploaded
-// DXF, not something that changes day to day -- remembered per equipment in
-// localStorage (matching the source app) rather than in the domain.
 export function readFlipShape(equipmentId) {
   try { return equipmentId ? localStorage.getItem(`dredgeFlip:${equipmentId}`) === '1' : false } catch { return false }
 }
 
-// Downloads + parses the equipment's dredge-shape DXF, caching it in
-// dredgeShapeRef by storage path so a re-generate doesn't re-fetch it.
 export async function loadDredgeShape(path, dredgeShapeRef) {
   if (!path) return null
   if (dredgeShapeRef.current?.path === path) return dredgeShapeRef.current.shape
@@ -59,8 +46,6 @@ export async function loadDredgeShape(path, dredgeShapeRef) {
   return shape
 }
 
-// Downloads + parses the project's CSC / cell-grid DXF, caching it in
-// cellsRef by storage path so a re-generate doesn't re-fetch it.
 export async function loadCells(path, cellsRef) {
   if (!path) return []
   if (cellsRef.current?.path === path) return cellsRef.current.cells
@@ -70,8 +55,6 @@ export async function loadCells(path, cellsRef) {
   return cells
 }
 
-// Downloads + parses the project's hard-structure alignment DXF (sheet-pile
-// wall / bulkhead), caching it in alignmentRef by storage path.
 export async function loadAlignment(path, alignmentRef) {
   if (!path) return []
   if (alignmentRef.current?.path === path) return alignmentRef.current.lines
@@ -81,8 +64,6 @@ export async function loadAlignment(path, alignmentRef) {
   return lines
 }
 
-// Downloads + parses the project's mile-marker/stationing DXF, caching it in
-// referenceLinesRef by storage path so a re-generate doesn't re-fetch it.
 export async function loadReferenceLines(path, referenceLinesRef) {
   const empty = { segments: [], labels: [] }
   if (!path) return empty
@@ -93,16 +74,7 @@ export async function loadReferenceLines(path, referenceLinesRef) {
   return lines
 }
 
-// Resolves the day's coverage from whatever the project's data source is.
-// HYPACK (hydraulic): a point track, read from the RAW folder. Earthworks
-// (mechanical): a Tracking DXF (primary -- the machine's own bucket-position
-// log) and/or a surface CSV, reduced to coverage RINGS by track.js/
-// earthworks.js instead of a point track. Ported from the reference's
-// generateFromTrack/generateFromEarthworks, minus the hard-structure
-// alignment snap (alignment.ts -- a separate, still-unbuilt gap) and minus
-// full-surface day-over-day diffing (needs somewhere to bank each day's
-// surface for tomorrow -- jfb_dredge_progress has no field for that yet).
-export function dateMismatchWarning(file, reportDateISO) {
+function dateMismatchWarning(file, reportDateISO) {
   const nameDate = filenameDateISO(file.name)
   if (!nameDate || !reportDateISO || nameDate === reportDateISO) return ''
   return `Heads up: "${file.name}" looks dated ${nameDate} but this report is ${reportDateISO}. Using it anyway -- double-check you picked the right day's export.`
@@ -150,7 +122,8 @@ export async function resolveTodayCoverage(cfg, pickedFiles, reportDateISO, onPr
     const today = parseEarthworksCsv(csvText)
     let design = null
     if (cfg.earthworks_design_path) {
-      try { design = parseEarthworksCsv(await (await downloadAttachment(cfg.earthworks_design_path)).text()) } catch { /* optional */ }
+      // eslint-disable-next-line no-empty
+      try { design = parseEarthworksCsv(await (await downloadAttachment(cfg.earthworks_design_path)).text()) } catch { }
     }
     const cov = coverageFromSurface(today, {
       waterElev: Number(cfg.water_elev_ft),
@@ -158,22 +131,8 @@ export async function resolveTodayCoverage(cfg, pickedFiles, reportDateISO, onPr
       closeFt: tuning.closeFt,
       minIslandSqFt: tuning.islandSqFt,
     })
-    // Full-surface auto-detect (reference: generateFromEarthworks, cov.keptSqFt
-    // > 100_000 -- a day's digging is a few thousand sq ft, a whole-lake/site
-    // surface export is hundreds of thousands). Day-scoped: the export's
-    // cells ARE the day's bucket positions, charted directly (below).
-    // Full-surface: banked and diffed against the prior stored surface
-    // instead -- only full-surface exports are ever banked, a day-scoped
-    // file must never masquerade as one.
     if (cov.keptSqFt > 100_000) {
       if (!priorSurface) {
-        // Reference returns here with nothing rendered -- it can bank
-        // immediately, before any save. Native's uploadAttachment needs an
-        // existing jfb_dredge_progress row to attach to (see "save row,
-        // then attach" below), so there's no row to bank against until the
-        // PE actually saves. Rendering the surface's own footprint as
-        // today's coverage keeps the normal Generate -> Save flow working
-        // end to end instead of leaving a dead end with nothing to save.
         return {
           pts: [], headings: [], todayCoverageRings: cov.rings,
           notice: `This is a full-surface export and no earlier surface was stored, so it will be saved as the starting reference for ${reportDateISO} when you save this report. Not an error -- the next full-surface upload will chart against it.`,

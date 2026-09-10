@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { fetchRoleByCode } from '../data'
 
-// Resolves a Pivotly role's current id from its stable `code` (e.g.
-// "jfb_project_engineers"), so callers never hardcode a role's uuid — those
-// are per-environment and change if a role is ever deleted and recreated.
-// enabled=false skips the fetch entirely (e.g. caller lacks the role.list claim).
 export function useRoleByCode(code, { enabled = true } = {}) {
   const [roleId, setRoleId] = useState(null)
   const [loading, setLoading] = useState(true)

@@ -260,6 +260,48 @@
         "code": "lww"
       },
       "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "tons",
+      "slug": "tons",
+      "type": "numeric",
+      "label": "Tons",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "tons",
+      "description": "Tons placed, entered directly on capping rows (CY in `volume` is then derived as tons / conversion_factor). Null on dredging rows. Matches the non-native app's production_stats.tons.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "conversion_factor",
+      "slug": "conversion_factor",
+      "type": "numeric",
+      "label": "Conversion Factor",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "conversion_factor",
+      "description": "Tons-to-CY factor snapshotted onto this row at entry time (pre-fills from the project's cap_conversion_factor), so re-tuning the project default never shifts historical CY. Null on dredging rows, and on capping rows paid by the ton with no factor set. Matches the non-native app's production_stats.conversion_factor.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
     }
   ],
   "archive": true,

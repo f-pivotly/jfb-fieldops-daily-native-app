@@ -1,7 +1,3 @@
-import { useDomainData } from './useDomainData'
+import { makeListHook } from './domainHookFactory'
 
-export function useDelayCodes() {
-  const { records, loading, error, creating, updating, create, update, remove } =
-    useDomainData({ domain: 'jfb_delay_codes', system: 'core' })
-  return { delayCodes: records, loading, error, creating, updating, create, update, remove }
-}
+export const useDelayCodes = makeListHook('jfb_delay_codes', 'delayCodes', null)

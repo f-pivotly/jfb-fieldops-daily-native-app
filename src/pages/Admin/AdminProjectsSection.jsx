@@ -14,6 +14,7 @@ import {
 } from "@mantine/core";
 import { IconPlus, IconRefresh } from "@tabler/icons-react";
 import { useDomainData } from "../../hooks/useDomainData";
+import { readWrittenRecordId } from "../../data";
 import { usePicklist } from "../../hooks/usePicklist";
 import { useDomainAccess } from "../../contexts/adminAccessContext";
 import LoadingSpinner from "../../components/LoadingSpinner";
@@ -26,6 +27,8 @@ const EMPTY_FORM = {
   project_code: "",
   client_name: "",
   work_type: "",
+  prior_work_type: "",
+  placement_start_date: "",
   start_date: "",
   end_date: "",
   volume_goal: "",
@@ -38,8 +41,8 @@ const EMPTY_FORM = {
   is_tsca_zone_tracking: false,
   is_soil_type: true,
   is_pipe_tracking: true,
+  is_spreader_active: false,
 };
-
 
 function toFormValues(row, areaLevels = []) {
   const labelAt = (depth) => areaLevels.find((l) => l.depth === depth)?.label ?? "";
@@ -48,6 +51,8 @@ function toFormValues(row, areaLevels = []) {
     project_code: row.project_code ?? "",
     client_name: row.client_name ?? "",
     work_type: row.work_type ?? "",
+    prior_work_type: row.prior_work_type ?? "",
+    placement_start_date: row.placement_start_date ? String(row.placement_start_date).slice(0, 10) : "",
     start_date: row.start_date ? String(row.start_date).slice(0, 10) : "",
     end_date: row.end_date ? String(row.end_date).slice(0, 10) : "",
     volume_goal: row.volume_goal ?? "",
@@ -60,6 +65,7 @@ function toFormValues(row, areaLevels = []) {
     is_tsca_zone_tracking: row.is_tsca_zone_tracking ?? false,
     is_soil_type: row.is_soil_type ?? true,
     is_pipe_tracking: row.is_pipe_tracking ?? true,
+    is_spreader_active: row.is_spreader_active ?? false,
   };
 }
 
@@ -69,6 +75,8 @@ function toPayload(form) {
     project_code: form.project_code === "" ? null : Number(form.project_code),
     client_name: form.client_name.trim() || null,
     work_type: form.work_type || null,
+    prior_work_type: form.prior_work_type && form.placement_start_date ? form.prior_work_type : null,
+    placement_start_date: form.prior_work_type && form.placement_start_date ? form.placement_start_date : null,
     start_date: form.start_date || null,
     end_date: form.end_date || null,
     volume_goal: form.volume_goal === "" ? null : Number(form.volume_goal),
@@ -78,6 +86,7 @@ function toPayload(form) {
     is_tsca_zone_tracking: form.is_tsca_zone_tracking,
     is_soil_type: form.is_soil_type,
     is_pipe_tracking: form.is_pipe_tracking,
+    is_spreader_active: form.is_spreader_active,
   };
 }
 
@@ -150,7 +159,7 @@ export default function AdminProjectsSection({ onConfigure }) {
       await update(editRow.id, payload);
     } else {
       const res = await create({ ...payload, is_active: true });
-      projectId = res?.data?.id;
+      projectId = readWrittenRecordId(res);
     }
     if (projectId && canEditAreaLevels) await syncAreaLevels(projectId);
     setModalOpen(false);
@@ -257,6 +266,22 @@ export default function AdminProjectsSection({ onConfigure }) {
           <NumberInput label="Project Code" required placeholder="e.g. 182601" hideControls value={form.project_code} onChange={(v) => setField("project_code", v)} />
           <TextInput label="Client" placeholder="Client name" value={form.client_name} onChange={(e) => setField("client_name", e.currentTarget.value)} />
           <Select label="Work Type" data={workTypeData} value={form.work_type} onChange={(v) => setField("work_type", v ?? "")} />
+          <Select
+            label="Prior Work Type"
+            description="Only for a project that changed discipline mid-job — reports before the date below print under this type instead."
+            data={workTypeData}
+            value={form.prior_work_type || null}
+            onChange={(v) => setField("prior_work_type", v ?? "")}
+            clearable
+          />
+          <TextInput
+            label="Phase Change From"
+            description="First report date the Work Type above applies to."
+            type="date"
+            value={form.placement_start_date}
+            onChange={(e) => setField("placement_start_date", e.currentTarget.value)}
+            disabled={!form.prior_work_type}
+          />
           <TextInput label="Start Date" type="date" value={form.start_date} onChange={(e) => setField("start_date", e.currentTarget.value)} />
           <TextInput label="Target End Date" type="date" value={form.end_date} onChange={(e) => setField("end_date", e.currentTarget.value)} />
           <NumberInput label={`Volume Goal (${form.primary_measure || FALLBACK_PRIMARY_MEASURE})`} placeholder="e.g. 85000" hideControls value={form.volume_goal} onChange={(v) => setField("volume_goal", v)} />
@@ -281,6 +306,7 @@ export default function AdminProjectsSection({ onConfigure }) {
           <Checkbox label="TSCA Zone Tracking" checked={form.is_tsca_zone_tracking} onChange={(e) => setField("is_tsca_zone_tracking", e.currentTarget.checked)} />
           <Checkbox label="Soil Type" checked={form.is_soil_type} onChange={(e) => setField("is_soil_type", e.currentTarget.checked)} />
           <Checkbox label="Pipe Tracking" checked={form.is_pipe_tracking} onChange={(e) => setField("is_pipe_tracking", e.currentTarget.checked)} />
+          <Checkbox label="Spreader Active" checked={form.is_spreader_active} onChange={(e) => setField("is_spreader_active", e.currentTarget.checked)} />
         </Group>
 
         <Group justify="flex-end">

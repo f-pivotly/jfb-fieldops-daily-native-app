@@ -9,11 +9,6 @@ import SafeError from '../../../components/SafeError'
 
 const emptyDraft = () => ({ category: 'brennan', description: '', mobilized_at: '', demobilized_at: '', sort_order: 10 })
 
-// A row is on site for a given report date when it's mobilized on/before
-// that date and either never demobilized or demobilized after it. Mirrors
-// the reference app's SiteEquipmentManager.isOnSiteForReport. reportDate
-// is optional -- Project Settings reuses this component with no date
-// context and should keep showing every row, unaffected.
 function isOnSiteForReport(row, reportDate) {
   if (!reportDate) return true
   if (row.mobilized_at && row.mobilized_at > reportDate) return false

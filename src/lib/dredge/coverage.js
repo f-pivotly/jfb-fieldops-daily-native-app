@@ -83,7 +83,7 @@ export function makeGrid(minX, minY, maxX, maxY, res) {
   const nx = Math.ceil((maxX - gx0) / R) + 1, ny = Math.ceil((maxY - gy0) / R) + 1;
   return { x0: gx0, y0: gy0, nx, ny, R };
 }
-export function rasterize(pts, G) {
+function rasterize(pts, G) {
   const grid = new Uint8Array(G.nx * G.ny); const r = Math.max(1, Math.round(PARAM.CUT_R / G.R));
   for (const [x, y] of pts) {
     const cx = Math.round((x - G.x0) / G.R), cy = Math.round((y - G.y0) / G.R);
@@ -108,7 +108,7 @@ function morph(src, r, dil, G) {
   return out;
 }
 export const dilate = (s, r, G) => morph(s, r, true, G);
-export const erode = (s, r, G) => morph(s, r, false, G);
+const erode = (s, r, G) => morph(s, r, false, G);
 export const close = (s, r, G) => erode(dilate(s, r, G), r, G);
 export const open = (s, r, G) => dilate(erode(s, r, G), r, G);
 
@@ -253,4 +253,19 @@ export function maskToPolys(mask, G, simplifyFt = PARAM.SIMPLIFY) {
   return traceMask(mask, G)
     .map((r) => (simplifyFt > 0 ? dp(r, simplifyFt / G.R) : r).map(([gx, gy]) => [G.x0 + gx * G.R, G.y0 + gy * G.R]))
     .filter((r) => r.length > 3 && ringArea(r) >= PARAM.MINAREA);
+}
+
+export function ordinal(d) {
+  const t = d % 100;
+  if (t >= 11 && t <= 13) return 'th';
+  return ({ 1: 'st', 2: 'nd', 3: 'rd' })[d % 10] ?? 'th';
+}
+
+export function pointInPoly(x, y, ring) {
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i], [xj, yj] = ring[j];
+    if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) inside = !inside;
+  }
+  return inside;
 }

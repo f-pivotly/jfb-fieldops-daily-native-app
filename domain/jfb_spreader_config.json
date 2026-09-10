@@ -1,0 +1,373 @@
+{
+  "schema": [
+    {
+      "pii": false,
+      "name": "project_id",
+      "slug": "project_id",
+      "type": "uuid",
+      "label": "Project Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": true,
+        "target_attr": "id",
+        "target_domain": "jfb_projects",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "project_id",
+      "description": "One row per project. The project this spreader chart config belongs to. Unlike the non-native app, the Spreader Progress tab is gated on jfb_projects.is_spreader_active rather than on this row's presence, so a project can be flagged as a spreader job before its boundaries are uploaded.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "spreader_name",
+      "slug": "spreader_name",
+      "type": "text",
+      "label": "Spreader Name",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "spreader_name",
+      "description": "The spreader rig's name, printed in the chart's title band (e.g. \"Neenah\").",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "layer_title",
+      "slug": "layer_title",
+      "type": "text",
+      "label": "Layer Title",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "layer_title",
+      "description": "Lift label printed in the chart's title band (e.g. \"Layer 1\").",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "aerial_path",
+      "slug": "aerial_path",
+      "type": "text",
+      "label": "Aerial Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "aerial_path",
+      "description": "Attachment fileId of the aerial image drawn behind the coverage. Optional -- the chart renders on a flat map colour without it, and unlike the placement grid a missing aerial never blocks the chart.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "aerial_original_name",
+      "slug": "aerial_original_name",
+      "type": "text",
+      "label": "Aerial Original Name",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "aerial_original_name",
+      "description": "Original filename of the uploaded aerial, shown in the settings tab so a PM can tell which image is loaded.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "aerial_storage_path",
+      "slug": "aerial_storage_path",
+      "type": "text",
+      "label": "Aerial Storage Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "aerial_storage_path",
+      "description": "Platform storage path of the uploaded aerial, retained alongside its fileId for traceability.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "aerial_georef",
+      "slug": "aerial_georef",
+      "type": "jsonb",
+      "label": "Aerial Georeference",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "jsonb",
+      "column_name": "aerial_georef",
+      "description": "World bounds of aerial_path as {wL,wR,wT,wB} in the project CRS -- the same shape jfb_dredge_config and jfb_placement_config use.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "boundaries",
+      "slug": "boundaries",
+      "type": "jsonb",
+      "label": "Subarea Boundaries",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "jsonb",
+      "column_name": "boundaries",
+      "description": "Subarea polygons as [{area, rings}] in world coords, where rings are closed [x,y] rings. Coverage is HARD-CLIPPED to these, so placement is never charted outside the footprint. Empty/absent means no coverage can be derived at all.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "planned_lanes",
+      "slug": "planned_lanes",
+      "type": "jsonb",
+      "label": "Planned Lanes",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "jsonb",
+      "column_name": "planned_lanes",
+      "description": "The operators' lane plan as [{c0,c1,w}] -- first and last cell centres plus broadcast width, since lanes are straight uniform strips. Present means the plan-snap coverage model is used (clean lane-aligned edges matching the PM's hand drawing); absent falls back to the directional model.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "plan_cell_len_ft",
+      "slug": "plan_cell_len_ft",
+      "type": "numeric",
+      "label": "Plan Cell Length Ft",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "plan_cell_len_ft",
+      "description": "Along-lane length of one planned cell, used by the plan-snap model to extend a lane's worked span by half a cell at each end.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "broadcast_ft",
+      "slug": "broadcast_ft",
+      "type": "numeric",
+      "label": "Broadcast Ft",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "broadcast_ft",
+      "description": "Legacy symmetric broadcast width. Retained for parity with the non-native app; the directional model does not use it.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "min_step_tons",
+      "slug": "min_step_tons",
+      "type": "numeric",
+      "label": "Min Step Tons",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "min_step_tons",
+      "description": "Minimum placed tons for a step to count as coverage. The spreader logs a step for every move including walking back to reposition, and those near-zero-tons steps must not paint coverage. 0 keeps every step.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "forward_throw_ft",
+      "slug": "forward_throw_ft",
+      "type": "numeric",
+      "label": "Forward Throw Ft",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "forward_throw_ft",
+      "description": "How far material carries IN FRONT of the frontmost step, since the spinner throws forward. Nothing is ever painted behind the latest step.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "cross_extra_ft",
+      "slug": "cross_extra_ft",
+      "type": "numeric",
+      "label": "Cross Extra Ft",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "cross_extra_ft",
+      "description": "Cross-lane spread beyond the step width/2 on each side.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "transition_ft",
+      "slug": "transition_ft",
+      "type": "numeric",
+      "label": "Transition Ft",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "transition_ft",
+      "description": "Transition-zone band width. Edge lanes are inset from the boundary so no sand lands outside it, but they broadcast to the boundary, so the strip between the outer coverage and the boundary IS complete and gets filled within this band. 0 disables it.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "active",
+      "slug": "active",
+      "type": "boolean",
+      "label": "Active",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "boolean",
+      "column_name": "active",
+      "description": "Whether this config is live. An inactive row stops coverage being derived without deleting the uploaded boundaries, lane plan and aerial.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    }
+  ],
+  "archive": true,
+  "contact": {
+    "name": "System Administrator"
+  },
+  "multi_tenant": false,
+  "xref_enabled": true,
+  "access_control": {
+    "model": "all_systems",
+    "read_access": true,
+    "delete_access": true,
+    "insert_access": true,
+    "update_access": true,
+    "hard_delete_allowed": true,
+    "direct_write_enabled": true
+  },
+  "archive_policy": {
+    "retention_days": 365,
+    "max_record_versions": 10000
+  },
+  "track_versions": true,
+  "domain_table_name": "jfb_spreader_config",
+  "slug": "jfb_spreader_config",
+  "domain_name_singular": "jfb_spreader_config",
+  "default_conflict_resolution": {
+    "code": "lww",
+    "human_readable": "Last Write Wins"
+  }
+}

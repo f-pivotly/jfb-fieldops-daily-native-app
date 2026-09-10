@@ -46,10 +46,6 @@ function fieldsToGeoref(f) {
   return { wL: Number(f.westX), wR: Number(f.eastX), wT: Number(f.northY), wB: Number(f.southY) }
 }
 
-// Must match the real, published domain slug -- core.fnc_file_attach
-// validates it against core.cfg_domain_info_cache_b and looks up the
-// target record in usdf.<domain>_b, so this can't be a cosmetic/renamed
-// label the way a plain storage namespace could be.
 const DREDGE_CONFIG_DOMAIN = 'jfb_dredge_config'
 const EQUIPMENT_CONFIG_DOMAIN = 'jfb_dredge_equipment_config'
 
@@ -120,8 +116,6 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
   const [previewGenerated, setPreviewGenerated] = useState(false)
   const previewCanvasRef = useRef(null)
 
-  // Six independent busy/message/error triples -- one per action below, each
-  // its own useAsyncAction instance so they don't share a spinner/message.
   const { busy: savingAll, message: saveMsg, error: saveError, run: runSaveAll } = useAsyncAction()
   const { busy: refUploading, message: refMsg, error: refError, run: runRefUpload, markSuccess: markRefProgress } = useAsyncAction()
   const { busy: aerialFetching, message: aerialFetchMsg, error: aerialFetchError, run: runAerialFetch, markError: markAerialError } = useAsyncAction()
@@ -129,10 +123,6 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
   const { busy: previewBusy, message: previewMsg, error: previewError, run: runPreview, markError: markPreviewError } = useAsyncAction()
   const { busy: dxfBusy, message: dxfMsg, error: dxfError, run: runDxf } = useAsyncAction()
 
-  // Every file field always stages here first, never uploads on pick --
-  // exact parity with the reference app (DredgeChartManager.tsx keeps bgFile/
-  // colorbarFile/aerialFile/etc. in local state regardless of whether cfg
-  // exists yet; only its one saveProject() ever uploads anything).
   const { stagedFiles, stagedTiles, stageFile, stageTiles, flushFiles, flushTiles } = useStagedFiles()
 
   const showVolumeRecovery = volumeMode !== '' || dataSource === 'earthworks'
@@ -176,22 +166,12 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
     })
   }
 
-  // Every field below always stages into stagedFiles and never uploads on
-  // pick -- matching the reference app exactly (DredgeChartManager.tsx's
-  // onBgPick/loadRefSurvey/autoFetchAerial all just set local File/Blob
-  // state; only its one saveProject() ever uploads anything). No gating on
-  // existingConfig either, for the same reason: nothing here needs the
-  // record to exist yet, only handleSaveBackground's flush loop does.
   function handleUploadImage(field, file) {
     if (!file) return
     setUploadErrors((e) => ({ ...e, [field]: '' }))
     stageFile(field, file)
   }
 
-  // Isopach upload: images pass through to handleUploadImage unchanged; a raw
-  // CSV/ASC grid export (X,Y,DIFF) is rendered to a colored PNG client-side
-  // and its georeference (computed from the data extent) fills in immediately
-  // -- same as the reference's onBgPick.
   async function handleIsopachFile(file) {
     if (!file) return
     if (!/\.(csv|asc)$/i.test(file.name)) {
@@ -210,10 +190,6 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
     }
   }
 
-  // Parses the surveyor's gridded .xyz into the compact reference grid the
-  // daily uses, then stages it -- matches the reference's loadRefSurvey()
-  // exactly (it also only stores the gzipped blob in local state and waits
-  // for Save).
   async function handleUploadReferenceSurvey(file) {
     if (!file) return
     await runRefUpload(async () => {
@@ -232,10 +208,6 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
     })
   }
 
-  // Pulls a georeferenced USGS aerial for the work-area bbox (the isopach
-  // georef) and stages it -- matches the reference's autoFetchAerial()
-  // exactly (it also only fills the aerial File + corner fields and tells
-  // the user to click Save).
   async function handleFetchAerial() {
     const bbox = fieldsToGeoref(georef)
     if (!bbox) {
@@ -259,13 +231,6 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
     })
   }
 
-  // Seeds prior coverage from an imported as-built border DXF -- stored as a
-  // jfb_dredge_progress row (no chart) for a baseline date, so progress-to-date
-  // and 2nd-pass overlap work going forward without reprocessing old RAW.
-  // Mirrors the reference's importPriorCoverage(): find-or-create the report
-  // for that date, then UPDATE an existing progress row's rings in place (e.g.
-  // backfilling onto a real dredging day) or INSERT a new one -- never touch
-  // chart_path/pose on an update, so a saved chart isn't wiped.
   async function importPriorBaseline() {
     if (!priorEqId) { markPriorError('Pick the dredge.'); return }
     if (!priorDate) { markPriorError('Pick the baseline date.'); return }
@@ -273,9 +238,6 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
     await runPrior(async () => {
       const rings = parseDxfPolylines(await priorFile.text())
       if (!rings.length) throw new Error('No closed polylines found in that DXF.')
-      // reports.find() rows are already flat domain records; a freshly-created
-      // one from ensureReport() comes back wrapped by the write API (readWrittenRecordId
-      // unwraps either shape safely -- see its use in PhotosTab.jsx for the same pattern).
       const existingReport = reports.find((r) => r.report_date === priorDate)
       const reportId = existingReport
         ? existingReport.id
@@ -297,10 +259,6 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
     })
   }
 
-  // Dry-run the chart from the saved settings alone -- no live RAW data.
-  // renderChart() frames off the isopach georef/tiles instead of a track when
-  // todayPts is empty (preview: true) -- see chart.js. Any imported baseline
-  // (see importPriorBaseline above) shows in green as progress-to-date.
   async function generatePreview() {
     if (!existingConfig) {
       markPreviewError('Save background & labels first, then preview.')
@@ -365,10 +323,6 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
     a.click()
   }
 
-  // Rebuilds a progress DXF per saved (report, equipment) day from its stored
-  // coverage/second-pass rings -- no server round trip beyond the data
-  // already loaded for this tab -- and bundles them into one .zip. Mirrors
-  // the reference's fetchAllDredgeDxfs()/downloadAllDxfs().
   async function handleDownloadAllDxfs() {
     await runDxf(async () => {
       const reportDateById = new Map(reports.map((r) => [r.id, r.report_date]))
@@ -648,7 +602,6 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
           />
         </Field>
 
-
         <Box>
           <Text size="xs" c="dimmed" mb={6}>Isopach georeference — the world coordinates (State Plane ft) of the isopach image corners. Leave blank if no isopach.</Text>
           <GeoreferenceGrid value={georef} onChange={setGeoref} />
@@ -764,12 +717,6 @@ function Field({ label, help, children }) {
   )
 }
 
-// Manages a list of {file_id, georef} tiles on one array field (isopach_tiles
-// or aerial_tiles). Mirrors the source's tiled-background concept: chart.js
-// draws every tile whose corners overlap the day's view instead of one fixed
-// image, for lake-sized projects one image can't cover. Newly added tiles
-// stage as {file, georef} in the parent's stagedTiles (no upload here) --
-// same "everything waits for Save" pattern as every other field on this tab.
 function TileManager({ label, help, tiles, stagedTiles, onStagedTilesChange, onRemoveSavedTile }) {
   const [georefFields, setGeorefFields] = useState({ westX: '', eastX: '', northY: '', southY: '' })
   const [error, setError] = useState('')
@@ -836,8 +783,8 @@ function FileControl({ accept, label, onChange, uploading, uploaded, staged, err
         <FileButton onChange={onChange ?? (() => {})} accept={accept}>
           {(props) => <Button {...props} variant="default" size="xs" loading={uploading}>Choose File</Button>}
         </FileButton>
-        {uploaded && !uploading && <Text size="xs" c="teal">Uploaded</Text>}
-        {!uploaded && staged && !uploading && <Text size="xs" c="orange">Staged — will upload on Save</Text>}
+        {uploaded && !uploading && !staged && <Text size="xs" c="teal">Uploaded</Text>}
+        {staged && !uploading && <Text size="xs" c="orange">Staged — will upload on Save</Text>}
       </Group>
       {error && <Text size="10px" c="red" mt={2}>{error}</Text>}
     </Box>
@@ -862,9 +809,6 @@ function EquipmentShapeRow({ equipment, projectId, existingEquipmentConfig, crea
   const { busy: saving, message: saveMsg, error: saveError, run: runSave } = useAsyncAction()
   const shapeUpload = useAttachmentUpload()
 
-  // Mirrors the reference's EquipmentRow exactly: the shape file always
-  // stages locally (handleUploadShape) and only this row's own Save
-  // uploads it, whether the row already exists or is being created here.
   async function handleSave() {
     await runSave(async () => {
       const recordData = {

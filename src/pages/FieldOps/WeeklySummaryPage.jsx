@@ -33,9 +33,6 @@ const REPORT_SLUG = 'rpt-jfb-weekly-summary'
 const SUMMARY_DEBOUNCE_MS = 1200
 const PHOTO_SLOTS = [1, 2]
 
-// Must match the real, published domain slug -- see the same note in
-// DredgeChartTab.jsx (core.fnc_file_attach validates this against
-// core.cfg_domain_info_cache_b, it can't be a cosmetic label).
 const PHOTO_DOMAIN = 'jfb_weekly_summary_photos'
 
 function withUniqueName(file, uniqueId) {
@@ -57,12 +54,6 @@ function signedNum(n) {
   return `${n >= 0 ? '+' : '-'}${fmtNum(Math.abs(n))}`
 }
 
-// Matches the reference app's WeeklySummaryDocument.tsx delay chart exactly
-// (itself copied from RealizedToDateDocument.tsx, same pattern already
-// ported for native's own Realized To-Date report in realizedPdfData.js):
-// a 2-column bar chart, bar width proportional to the single largest delay
-// code's hours (report.delaySummary is already sorted descending), split
-// left/right by Math.ceil(length / 2).
 function buildWeeklyDelayChartParams(report) {
   const maxDelay = report.delaySummary[0]?.hours ?? 1
   const delayRows = report.delaySummary.map((d) => ({
@@ -117,9 +108,6 @@ export default function WeeklySummaryPage() {
     create: createPhoto, update: updatePhoto, remove: removePhoto,
   } = useWeeklySummaryPhotos(projectId)
 
-  // Production (week + project-to-date CY/SF/GOH/NOH) and the week's delay
-  // summary -- same pre-aggregated data views the Realized To-Date report
-  // uses, rather than pulling raw jfb_daily_activities to the client.
   const [dailyTotals, setDailyTotals] = useState(null)
   const [dailyTotalsError, setDailyTotalsError] = useState(null)
   useEffect(() => {
@@ -154,9 +142,6 @@ export default function WeeklySummaryPage() {
   const [removingSlot, setRemovingSlot] = useState(null)
   const photoFor = (n) => photos.find((p) => p.week_start === weekStart && p.photo_number === n) ?? null
 
-  // Shared across both slots -- only its upload() is used, since busy/error
-  // here are per-slot keyed maps (photoUploading/photoSlotErrors), not one
-  // instance's own state.
   const photoUpload = useAttachmentUpload()
   const { busy: downloadingPdf, error: pdfError, run: runDownloadPdf } = useAsyncAction()
 
@@ -255,12 +240,6 @@ export default function WeeklySummaryPage() {
     await runDownloadPdf(async () => {
       const narrativeSections = buildNarrativeSectionsParam(sections, summaries, weekStart)
       const weeklyPhotoAssets = await buildPhotoAssetsParam(photos, weekStart)
-      // Only rendered for dredge-configured projects -- buildWeeklyChartAssetsParam
-      // does 6+ fetches plus a canvas render per equipment, not worth paying for
-      // on every non-dredge project's weekly PDF. equipmentFilter is cheap and
-      // always passed, matching rpt-jfb-daily-report's own equipment loop, which
-      // is ungated -- equipment with nothing to show just gets the "No dredge
-      // progress chart generated" fallback page.
       const weeklyChartAssets = dredgeConfigRecords.length > 0
         ? Object.values(await buildWeeklyChartAssetsParam({ appSlug: config.appSlug, projectId, weekStart, weekEnd }))
         : []
@@ -338,10 +317,6 @@ export default function WeeklySummaryPage() {
     })
   }
 
-  // null = checking, N = dredges with coverage (week or prior) this range,
-  // 0 = none yet. Mirrors reference's progressDredgeCount -- cheap coverage
-  // fetch only, not the full chart render (that only runs at PDF-download
-  // time, in handleDownloadPdf below).
   const [progressDredgeCount, setProgressDredgeCount] = useState(null)
 
   useEffect(() => {

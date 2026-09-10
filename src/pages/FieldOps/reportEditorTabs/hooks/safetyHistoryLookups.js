@@ -2,9 +2,6 @@ import { fetchDomainRecords } from '../../../../data'
 
 const MAX_PRIOR_REPORT_CANDIDATES = 15
 
-// Last-resort seed when a project has no prior report with any crew rows
-// at all. Mirrors the reference app's DEFAULT_CREW_CATEGORIES (db.ts) --
-// category + sort_order only; count/hours always start at 0.
 export const DEFAULT_CREW_CATEGORY_SEED = [
   { category: 'Brennan Management, Survey, Safety', sort_order: 10 },
   { category: 'Brennan Dredge Crew', sort_order: 20 },
@@ -12,9 +9,6 @@ export const DEFAULT_CREW_CATEGORY_SEED = [
   { category: 'Mechanics', sort_order: 40 },
 ]
 
-// Prior reports for the same project, most recent first, capped like the
-// reference app's report_dates lookups (fetchMostRecentCrewCategoriesBefore
-// / fetchMostRecentCrewSummaryBefore both use .limit(15)).
 export function priorReportsFor(reports, report) {
   if (!report?.report_date) return []
   return reports
@@ -23,7 +17,7 @@ export function priorReportsFor(reports, report) {
     .slice(0, MAX_PRIOR_REPORT_CANDIDATES)
 }
 
-export async function fetchCrewRowsForReport(reportId, appSlug) {
+async function fetchCrewRowsForReport(reportId, appSlug) {
   const res = await fetchDomainRecords({
     domain: 'jfb_report_crew_summary_v2', system: 'core', appSlug,
     filters: { report_id: reportId }, limit: 1000,
@@ -31,10 +25,6 @@ export async function fetchCrewRowsForReport(reportId, appSlug) {
   return Array.isArray(res) ? res : (res?.data ?? [])
 }
 
-// Mirrors fetchMostRecentCrewCategoriesBefore: walks backward through
-// prior reports and returns the first one with any crew rows at all,
-// keeping only category + sort_order (not count/hours) -- used to seed a
-// brand-new report's crew categories.
 export async function findMostRecentCrewCategories(candidates, appSlug) {
   for (const r of candidates) {
     const rows = await fetchCrewRowsForReport(r.id, appSlug)
@@ -45,10 +35,6 @@ export async function findMostRecentCrewCategories(candidates, appSlug) {
   return null
 }
 
-// Mirrors fetchMostRecentCrewSummaryBefore: walks backward through prior
-// reports and returns the first one with at least one hours>0 row,
-// skipping all-zero "off day" reports -- used by the "Use crew from M/D"
-// pre-fill button.
 export async function findMostRecentCrewSummary(candidates, appSlug) {
   for (const r of candidates) {
     const rows = await fetchCrewRowsForReport(r.id, appSlug)
@@ -59,7 +45,7 @@ export async function findMostRecentCrewSummary(candidates, appSlug) {
   return null
 }
 
-export async function fetchSafetyRowForReport(reportId, appSlug) {
+async function fetchSafetyRowForReport(reportId, appSlug) {
   const res = await fetchDomainRecords({
     domain: 'jfb_report_safety_v2', system: 'core', appSlug,
     filters: { report_id: reportId }, limit: 1,
@@ -68,9 +54,6 @@ export async function fetchSafetyRowForReport(reportId, appSlug) {
   return rows[0] ?? null
 }
 
-// Mirrors fetchMostRecentPlanOfDayBefore: walks backward through prior
-// reports and returns the first one with a non-blank plan_of_day -- used
-// by the "Use plan from M/D" pre-fill button.
 export async function findMostRecentPlanOfDay(candidates, appSlug) {
   for (const r of candidates) {
     const row = await fetchSafetyRowForReport(r.id, appSlug)

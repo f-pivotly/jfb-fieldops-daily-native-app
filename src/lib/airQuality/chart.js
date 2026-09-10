@@ -1,10 +1,4 @@
-// Canvas renderer for the Daily Air Monitoring charts (PM10 mg/m3). Ported
-// from the non-native app's src/lib/airQuality/chart.ts -- same two-chart
-// split (LLRA / Mineral Building Property), Alert/Action dotted lines, and
-// gap-bridging series (a briefly-offline sensor bends the line instead of
-// breaking it).
-
-export const AIR_COLORS = {
+const AIR_COLORS = {
   background: '#f28c1e',
   downwind: '#c00000',
   southBeach: '#f4a7c3',
@@ -116,10 +110,9 @@ export function renderAirChart(day, spec, opts = {}) {
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.font = '11px Arial'
-  ctx.fillText('milligrams per cubic meter (mg/m3)', 0, 0)
+  ctx.fillText('milligrams per cubic meter (mg/m³)', 0, 0)
   ctx.restore()
 
-  // Series -- bridge nulls (a briefly-offline sensor bends the line, doesn't break it).
   for (const s of spec.series) {
     ctx.strokeStyle = s.color
     ctx.lineWidth = s.lineWidth ?? 2.5
@@ -162,7 +155,6 @@ export function renderAirChart(day, spec, opts = {}) {
   return { dataUrl: canvas.toDataURL('image/png'), width, height }
 }
 
-/** Build the two standard chart specs (LLRA / MBP) from an AirDay + config. */
 export function buildAirChartSpecs(day, stations, thresholds) {
   const colorFor = (key, i) => {
     const named = {
@@ -199,7 +191,7 @@ export function buildAirChartSpecs(day, stations, thresholds) {
     yMax: ew != null ? Math.max(1.0, ew) : undefined,
     series: [
       ...(ew != null
-        ? [{ label: 'Early Warning', color: AIR_COLORS.earlyWarning, dash: [10, 7], lineWidth: 3, values: day.slots.map(() => ew) }]
+        ? [{ label: 'Early Warning (St. 4 & 5)', color: AIR_COLORS.earlyWarning, dash: [10, 7], lineWidth: 3, values: day.slots.map(() => ew) }]
         : []),
       ...seriesFor('mbp'),
     ],

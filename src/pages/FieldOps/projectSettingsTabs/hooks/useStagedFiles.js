@@ -2,12 +2,6 @@ import { useState } from 'react'
 import { uploadAttachment } from '../../../../data'
 import { useAttachmentUpload } from '../../../../hooks/useAttachmentUpload'
 
-// "Stage locally until Save" bookkeeping for the dredge-chart config form --
-// nothing uploads on pick, matching the reference app exactly; only one
-// Save flush loop uploads everything staged since the last save. Tiles are
-// an array-merge ({file_id, georef} appended to the existing list), not a
-// single-field pointer, so they go through plain uploadAttachment rather
-// than useAttachmentUpload.
 export function useStagedFiles() {
   const [stagedFiles, setStagedFiles] = useState({})
   const [stagedTiles, setStagedTiles] = useState({})

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Box, Text, Table, Group, Button, Modal, TextInput, Select, Switch, Badge } from '@mantine/core'
+import { Box, Text, Table, Group, Button, Modal, TextInput, Textarea, Select, Switch, Badge } from '@mantine/core'
 import { IconPlus, IconPencil, IconTrash, IconAlertTriangle } from '@tabler/icons-react'
 import { useEvents } from './hooks/useEvents'
 import { useFieldOpsAction } from '../../../contexts/fieldOpsAccessContext'
@@ -12,6 +12,8 @@ import { useProjectAttachments } from '../../../hooks/useProjectAttachments'
 import { useProjectLayers } from '../../../hooks/useProjectLayers'
 import { useWorkTypes } from '../../../hooks/useWorkTypes'
 import { equipmentWorkType, activeCategoryLabel } from '../lib/workType'
+import { UNATTRIBUTED_CATEGORY, findEventGaps, shiftTotals, fmtDurationMs, isUnattributed } from '../lib/eventTotals'
+import { WARNING_BG } from './components/WarningBanner'
 
 const SAMPLE = '(sampleData)'
 
@@ -53,6 +55,7 @@ const EMPTY_FORM = {
   attachmentId: '',
   tsca: '',
   layerId: '',
+  notes: '',
 }
 
 function hhmm(iso) {
@@ -82,16 +85,8 @@ function fmtDuration(startISO, endISO) {
   return `${h}h ${m}m`
 }
 
-function findGaps(sortedEvents) {
-  const gaps = []
-  for (let i = 0; i < sortedEvents.length - 1; i++) {
-    const end = new Date(sortedEvents[i].end_date_time)
-    const nextStart = new Date(sortedEvents[i + 1].start_date_time)
-    if (nextStart > end) {
-      gaps.push({ id: `gap-${sortedEvents[i].id}`, fromISO: sortedEvents[i].end_date_time, toISO: sortedEvents[i + 1].start_date_time })
-    }
-  }
-  return gaps
+function browserTimeZone() {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
 }
 
 function buildAreaJson(areaId, subAreaId, subSubAreaId) {
@@ -122,6 +117,7 @@ function payloadFromForm(f) {
     attachment_id: f.attachmentId || null,
     tsca: tscaFromForm(f.tsca),
     layer_id: f.layerId || null,
+    notes: f.notes?.trim() ? f.notes.trim() : null,
   }
 }
 
@@ -145,11 +141,6 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
   const masterDelayCodeById = new Map(masterDelayCodes.map((m) => [m.id, m]))
   const projectDelayCodeById = new Map(projectDelayCodes.map((r) => [r.id, r]))
 
-  // Work type in effect for the selected equipment on this report's date --
-  // mirrors the non-native app's EventLogTab.tsx, so the delay-code list
-  // below matches this unit's discipline (a project running two disciplines
-  // at once, e.g. a dredge and a placement excavator, must not let either
-  // log get tagged with the other's codes).
   const selectedEquipment = equipment.find((e) => e.id === selectedEquipmentId) ?? null
   const workType = equipmentWorkType(project, selectedEquipment, eventDate)
   const workTypeId = workTypes.find((w) => w.name === workType)?.id ?? null
@@ -176,10 +167,6 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
       group: 'Delay',
       items: projectDelayCodes
         .filter((r) => r.active !== false)
-        // A null work_type_id is a project-custom code with no master match
-        // and is always offered, matching the non-native app's
-        // fetchProjectDelayCodes() -- otherwise only codes matching this
-        // equipment's current discipline are shown.
         .filter((r) => {
           const wtId = effectiveDelayWorkTypeId(r)
           return wtId == null || wtId === workTypeId
@@ -200,13 +187,17 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
   const sorted = (showDeleted && canViewDeletedEvents ? equipmentEvents : activeSorted)
     .slice()
     .sort((a, b) => new Date(a.start_date_time) - new Date(b.start_date_time))
-  const gaps = findGaps(activeSorted)
+  const gaps = findEventGaps(activeSorted)
+  const gapAfterId = new Map(gaps.map((g) => [g.prevId, g]))
+  const totals = shiftTotals(activeSorted)
+  const unattributedCount = activeSorted.filter(isUnattributed).length
   const equipmentName = equipment.find((e) => e.id === selectedEquipmentId)?.name
 
   const [insertOpen, setInsertOpen] = useState(false)
   const [insertKey, setInsertKey] = useState(0)
   const [editRow, setEditRow] = useState(null)
   const [deleteRow, setDeleteRow] = useState(null)
+  const [hoverStrip, setHoverStrip] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
 
   function setField(key, value) {
@@ -225,14 +216,56 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
     setInsertOpen(true)
   }
 
-  function openInsertNext() {
-    const last = sorted.at(-1)
-    const lastTo = last ? hhmm(last.end_date_time) : '06:00'
-    openInsert({ from: lastTo, to: lastTo, operatorId: last?.operator_id ?? operators[0]?.id ?? null })
+  function contextFrom(row) {
+    if (!row) return {}
+    return {
+      operatorId: row.operator_id ?? null,
+      areaId: row.area?.area_id ?? '',
+      subAreaId: row.area?.sub_area_id ?? '',
+      subSubAreaId: row.area?.sub_sub_area_id ?? '',
+      passType: row.pass_type ?? '',
+      attachmentId: row.attachment_id ?? '',
+      tsca: tscaToForm(row.tsca),
+      layerId: row.layer_id ?? '',
+    }
   }
 
-  function openInsertForGap(gap) {
-    openInsert({ from: hhmm(gap.fromISO), to: hhmm(gap.toISO), operatorId: operators[0]?.id ?? null })
+  function openInsertNext() {
+    const last = activeSorted.at(-1)
+    const lastTo = last ? hhmm(last.end_date_time) : '06:00'
+    openInsert({
+      ...contextFrom(last),
+      operatorId: last?.operator_id ?? operators[0]?.id ?? null,
+      from: lastTo,
+      to: lastTo,
+    })
+  }
+
+  function openInsertAfter(row) {
+    const idx = activeSorted.findIndex((e) => e.id === row.id)
+    const next = idx >= 0 ? activeSorted[idx + 1] : null
+    const startMs = new Date(row.end_date_time).getTime()
+    const nextMs = next ? new Date(next.start_date_time).getTime() : null
+    const endMs = nextMs && nextMs > startMs ? (startMs + nextMs) / 2 : startMs + 15 * 60000
+    openInsert({
+      ...contextFrom(row),
+      operatorId: row.operator_id ?? operators[0]?.id ?? null,
+      from: hhmm(row.end_date_time),
+      to: hhmm(new Date(endMs).toISOString()),
+    })
+  }
+
+  async function insertGapPlaceholder(gap) {
+    if (!project || !selectedEquipmentId) return
+    await create({
+      project_id: project.id,
+      equipment_id: selectedEquipmentId,
+      start_date_time: gap.gapStart,
+      end_date_time: gap.gapEnd,
+      timezone: browserTimeZone(),
+      category: UNATTRIBUTED_CATEGORY,
+      operator_id: gap.prev.operator_id ?? null,
+    })
   }
 
   async function handleInsert() {
@@ -243,6 +276,7 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
       equipment_id: selectedEquipmentId,
       start_date_time: start,
       end_date_time: end,
+      timezone: browserTimeZone(),
       category: resolveCategoryForForm(form),
       ...payloadFromForm(form),
     })
@@ -263,6 +297,7 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
       attachmentId: row.attachment_id ?? '',
       tsca: tscaToForm(row.tsca),
       layerId: row.layer_id ?? '',
+      notes: row.notes ?? '',
     })
   }
 
@@ -272,6 +307,7 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
     await update(editRow.id, {
       start_date_time: start,
       end_date_time: end,
+      timezone: browserTimeZone(),
       category: resolveCategoryForForm(form),
       ...payloadFromForm(form),
     })
@@ -361,6 +397,15 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
           clearable
           mb={10}
         />
+        <Textarea
+          label="Notes"
+          placeholder="Optional"
+          autosize
+          minRows={2}
+          value={form.notes}
+          onChange={(e) => setField('notes', e.currentTarget.value)}
+          mb={10}
+        />
         {project?.is_tsca_zone_tracking && (
           <Select
             label="TSCA"
@@ -377,25 +422,30 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
 
   return (
     <Box>
-      {gaps.map((g) => (
+      {totals && (
         <Group
-          key={g.id}
-          justify="space-between"
+          gap={16}
           p={10}
           mb={10}
-          style={{ background: '#fbf1dd', border: '1px solid #e6cb87', borderRadius: 6 }}
+          wrap="wrap"
+          style={{ background: 'var(--mantine-color-gray-0)', border: '1px solid var(--mantine-color-gray-3)', borderRadius: 6 }}
         >
-          <Group gap={8}>
-            <IconAlertTriangle size={14} color="#b5740a" />
-            <Text size="xs" fw={600} c="#7a5206">
-              Unaccounted hours: {hhmm(g.fromISO)}–{hhmm(g.toISO)}
-            </Text>
-          </Group>
-          <Button size="xs" variant="default" leftSection={<IconPlus size={11} />} onClick={() => openInsertForGap(g)}>
-            Insert event
-          </Button>
+          <Text size="xs" c="dimmed">Shift <strong>{hhmm(totals.startISO)}–{hhmm(totals.endISO)}</strong></Text>
+          <Text size="xs" c="dimmed">Operational <strong>{totals.ops.toFixed(2)} h</strong></Text>
+          <Text size="xs" c="dimmed">Delay <strong>{totals.delay.toFixed(2)} h</strong></Text>
+          <Text size="xs" c="dimmed">Shift total <strong>{totals.shift.toFixed(2)} h</strong></Text>
+          {!totals.balanced && (
+            <Badge size="xs" color="orange" variant="light">
+              Doesn&apos;t reconcile — check for gaps or overlaps
+            </Badge>
+          )}
+          {unattributedCount > 0 && (
+            <Badge size="xs" color="orange">
+              {unattributedCount} placeholder{unattributedCount === 1 ? '' : 's'} need review before submitting
+            </Badge>
+          )}
         </Group>
-      ))}
+      )}
 
       <Group justify="space-between" mb={8}>
         <Group gap={12}>
@@ -430,7 +480,7 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
             <Table.Th>Operator</Table.Th>
             <Table.Th>Notes</Table.Th>
             <Table.Th>Source</Table.Th>
-            <Table.Th style={{ width: 64 }} />
+            <Table.Th style={{ width: 84 }} />
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -443,13 +493,25 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
           )}
           {sorted.map((e, i) => {
             const delayCode = resolveDelayCode(e.delay_code_id, projectDelayCodeById, masterDelayCodeById)
-            return (
-            <Table.Tr key={e.id} style={e.is_deleted ? { opacity: 0.5 } : undefined}>
+            return [
+            <Table.Tr
+              key={e.id}
+              style={{
+                ...(e.is_deleted ? { opacity: 0.5 } : null),
+                ...(isUnattributed(e) ? { background: '#fdf6e3' } : null),
+              }}
+            >
               <Table.Td>{i + 1}</Table.Td>
               <Table.Td>{hhmm(e.start_date_time)}</Table.Td>
               <Table.Td>{hhmm(e.end_date_time)}</Table.Td>
               <Table.Td>{fmtDuration(e.start_date_time, e.end_date_time)}</Table.Td>
-              <Table.Td>{e.category || delayCode?.code || '—'}</Table.Td>
+              <Table.Td>
+                {isUnattributed(e) ? (
+                  <Badge size="xs" color="orange" variant="light">Needs review</Badge>
+                ) : (
+                  e.category || delayCode?.code || '—'
+                )}
+              </Table.Td>
               <Table.Td>{resolveArea(e.area, areaNameById)}</Table.Td>
               <Table.Td>{e.pass_type ? (passTypeLabels[e.pass_type] ?? e.pass_type) : '—'}</Table.Td>
               <Table.Td>{tscaLabel(e.tsca)}</Table.Td>
@@ -470,8 +532,50 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
                   </Group>
                 )}
               </Table.Td>
-            </Table.Tr>
-            )
+            </Table.Tr>,
+            gapAfterId.has(e.id) && !e.is_deleted && (
+              <Table.Tr key={`gap-${e.id}`} style={{ background: WARNING_BG }}>
+                <Table.Td colSpan={12}>
+                  <Group justify="space-between" wrap="wrap" gap={8}>
+                    <Group gap={8}>
+                      <IconAlertTriangle size={13} color="#b5740a" />
+                      <Text size="xs" c="#7a5206">
+                        <strong>Unaccounted hours</strong>{' '}
+                        {hhmm(gapAfterId.get(e.id).gapStart)}–{hhmm(gapAfterId.get(e.id).gapEnd)} ·{' '}
+                        {fmtDurationMs(gapAfterId.get(e.id).durationMs)}
+                      </Text>
+                    </Group>
+                    <Button
+                      size="compact-xs"
+                      color="orange"
+                      leftSection={<IconPlus size={11} />}
+                      onClick={() => insertGapPlaceholder(gapAfterId.get(e.id))}
+                    >
+                      Insert event
+                    </Button>
+                  </Group>
+                </Table.Td>
+              </Table.Tr>
+            ),
+            <Table.Tr
+              key={`strip-${e.id}`}
+              onMouseEnter={() => setHoverStrip(e.id)}
+              onMouseLeave={() => setHoverStrip((cur) => (cur === e.id ? null : cur))}
+            >
+              <Table.Td colSpan={12} p={0} style={{ height: 18, borderTop: 'none' }}>
+                <Button
+                  variant="subtle"
+                  size="compact-xs"
+                  fullWidth
+                  leftSection={<IconPlus size={11} />}
+                  onClick={() => openInsertAfter(e)}
+                  style={{ opacity: hoverStrip === e.id ? 1 : 0, height: 18, transition: 'opacity 120ms' }}
+                >
+                  Insert event
+                </Button>
+              </Table.Td>
+            </Table.Tr>,
+            ]
           })}
         </Table.Tbody>
       </Table>
@@ -494,7 +598,9 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
 
       <Modal opened={!!deleteRow} onClose={() => setDeleteRow(null)} title={<Text fw={700} size="sm">Delete Event</Text>} size="sm">
         <Text size="sm" mb={16}>
-          {deleteRow ? `Delete the ${hhmm(deleteRow.start_date_time)}–${hhmm(deleteRow.end_date_time)} event? This can't be undone.` : ''}
+          {deleteRow
+            ? `Delete the ${hhmm(deleteRow.start_date_time)}–${hhmm(deleteRow.end_date_time)} event? It will be removed from the log and the report, but stays recoverable — anyone with permission can see it again with "Show deleted".`
+            : ''}
         </Text>
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => setDeleteRow(null)}>Cancel</Button>

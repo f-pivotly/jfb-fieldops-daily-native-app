@@ -62,9 +62,6 @@ export function FlowStatsPanel({ projectId, equipmentId, reportDateISO }) {
   const dailyTotal = 'dailyTotal' in edits ? edits.dailyTotal : baseDailyTotal
   const carriedFrom = !todaysRow && !('diameter' in edits) && priorRow ? dateOnly(priorRow.log_date) : null
 
-  // Matches the reference app's buildFlowStats(): Project Total is every
-  // one of this equipment's daily_total_gal values through today, Previous
-  // Total is Project Total minus today's own entry (not entered separately).
   const projectTotalGal = flowStats
     .filter((r) => r.equipment_id === equipmentId && dateOnly(r.log_date) <= reportDateISO)
     .reduce((a, r) => a + (Number(r.daily_total_gal) || 0), 0)

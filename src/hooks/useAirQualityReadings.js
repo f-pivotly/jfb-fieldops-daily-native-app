@@ -5,15 +5,6 @@ import { airWindowUtc } from '../lib/airQuality/data'
 
 const PAGE_SIZE = 1000
 
-// jfb_air_quality_readings, scoped to one report date's monitoring window.
-// Fetches server-side filtered by project_id + reading_at range and pages
-// through the result with offset rather than relying on useDomainData's
-// single-shot 1000-row cap -- a single day's readings for 5 stations at a
-// short interval can exceed 1000 rows on their own (same scaling note as
-// the reference app's own fetchAirQualityReadings, src/lib/queries.ts,
-// which paginates for the same reason). Without this, a project with more
-// than 1000 stored readings total would silently show partial/empty data
-// for any date, indistinguishable from "no readings yet".
 export function useAirQualityReadings(config, dateISO) {
   const { config: appConfig } = useAppConfig()
   const [fetched, setFetched] = useState({ key: null, readings: [], loading: false, error: null })
@@ -36,8 +27,6 @@ export function useAirQualityReadings(config, dateISO) {
     const { startUtc, endUtc } = airWindowUtc(config, dateISO)
     const filters = {
       project_id: projectId,
-      // +1ms so the exclusive `lt` upper bound still includes a reading
-      // landing exactly on the window's end instant.
       reading_at: { gte: startUtc.toISOString(), lt: new Date(endUtc.getTime() + 1).toISOString() },
     }
 

@@ -2,7 +2,7 @@ import { createContext, useContext } from "react";
 
 export const AdminAccessContext = createContext(null);
 
-export const NO_ACCESS = { canRead: false, canCreate: false, canUpdate: false, canDelete: false };
+const NO_ACCESS = { canRead: false, canCreate: false, canUpdate: false, canDelete: false };
 
 export function useDomainAccess(domain) {
   const ctx = useContext(AdminAccessContext);

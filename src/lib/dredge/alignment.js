@@ -1,40 +1,7 @@
-// Hard-structure alignment snap (sheet-pile wall, bulkhead, seawall, abutment).
-//
-// WHY: against a sheet-pile wall the operator cannot set the bucket teeth
-// right on the alignment -- the sheets are in the way, so the dig starts a
-// foot or two off. The strip IS dredged, though: the operator pulls the
-// bucket down the sheet and away. Machine-track coverage therefore stops
-// short of the wall and the chart under-reports a strip the PE knows is
-// complete.
-//
-// THE RULE -- fill an uncovered cell c iff
-//   (a) dist(c, coverage) + dist(c, alignment) <= snapFt
-//         i.e. c sits in a corridor no wider than snapFt between the two.
-//         Deliberately NOT "within snapFt of both", which would bridge gaps
-//         up to 2x snapFt wide.
-//   (b) c is not itself an alignment cell, and
-//   (c) the straight line from c to the covering cell does not cross the
-//       alignment -- so the fill stops at the NEAR face and can never land
-//       on the outboard/water side (a wall is drawn as two parallel lines,
-//       one per face; without (c) the fill jumps the sheet).
-//
-// Long unworked runs of wall attract nothing, because (a) needs nearby
-// coverage.
-//
-// Ported from jfb-fieldops-daily/src/lib/dredge/alignment.ts (types dropped
-// to JSDoc).
 import { fillHoles } from './coverage'
 
-/** @typedef {[number, number]} Pt */
-/** @typedef {{x0: number, y0: number, nx: number, ny: number, R: number}} Grid */
-
-/** Default snap distance (ft). */
 export const ALIGNMENT_SNAP_FT = 5
 
-/** Parse an alignment DXF into world-coord polylines.
- *  Unlike parseDxfPolylines this keeps OPEN geometry and applies no area
- *  filter -- an alignment is a line, so its ring area is ~0.
- * @param {string} txt @returns {Pt[][]} */
 export function parseAlignmentDxf(txt) {
   const raw = txt.split(/\r?\n/)
   const pr = []
@@ -83,16 +50,11 @@ export function parseAlignmentDxf(txt) {
       i = j - 1
     }
   }
-  // Drop paper-space leftovers (title blocks live at coords of a few dozen
-  // units; world coords here are ~tens of millions of ft). Same test
-  // parseDxfPolylines uses.
   const mag = (l) => Math.max(...l.map(([x, y]) => Math.max(Math.abs(x), Math.abs(y))))
   const worldMax = out.length ? Math.max(...out.map(mag)) : 0
   return worldMax > 100000 ? out.filter((l) => mag(l) > worldMax / 100) : out
 }
 
-/** Rasterize alignment polylines onto the grid (1 = alignment cell).
- * @param {Pt[][]} lines @param {Grid} G @returns {Uint8Array} */
 function rasterizeLines(lines, G) {
   const m = new Uint8Array(G.nx * G.ny)
   const put = (gx, gy) => {
@@ -104,11 +66,9 @@ function rasterizeLines(lines, G) {
       let y0 = Math.round((line[k][1] - G.y0) / G.R)
       const x1 = Math.round((line[k + 1][0] - G.x0) / G.R)
       const y1 = Math.round((line[k + 1][1] - G.y0) / G.R)
-      // Bresenham
       const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0)
       const sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1
       let err = dx - dy
-      // Guard: a stray vertex can make a segment span the whole project.
       if (dx + dy > 10 * (G.nx + G.ny)) continue
       for (;;) {
         put(x0, y0)
@@ -122,7 +82,6 @@ function rasterizeLines(lines, G) {
   return m
 }
 
-/** True if the segment a->b crosses an alignment cell (excluding the endpoints). */
 function blocked(ax, ay, bx, by, wall, G) {
   const dx = Math.abs(bx - ax), dy = Math.abs(by - ay)
   const sx = ax < bx ? 1 : -1, sy = ay < by ? 1 : -1
@@ -138,20 +97,12 @@ function blocked(ax, ay, bx, by, wall, G) {
   }
 }
 
-/** @typedef {{mask: Uint8Array, addedSqFt: number}} AlignmentSnapResult */
-
-/** Extend coverage to a hard structure it stops just short of. See the rule
- *  at the top of this file. Returns a NEW mask; `mask` is not mutated.
- * @param {Uint8Array} mask @param {Grid} G @param {Pt[][]} lines @param {number} snapFt
- * @returns {AlignmentSnapResult} */
 export function snapToAlignment(mask, G, lines, snapFt) {
   const cellFt = G.R
   const snapCells = snapFt / cellFt
   if (!lines.length || snapCells <= 0) return { mask, addedSqFt: 0 }
   const wall = rasterizeLines(lines, G)
 
-  // Distance (in cells) from each nearby cell to the alignment, by stamping a
-  // disk out from every alignment cell and keeping the minimum.
   const rc = Math.ceil(snapCells)
   const dwal = new Float32Array(G.nx * G.ny).fill(Infinity)
   for (let gy = 0; gy < G.ny; gy++) {
@@ -176,10 +127,10 @@ export function snapToAlignment(mask, G, lines, snapFt) {
   for (let gy = 0; gy < G.ny; gy++) {
     for (let gx = 0; gx < G.nx; gx++) {
       const i = gy * G.nx + gx
-      if (mask[i] || wall[i]) continue // rule (b)
+      if (mask[i] || wall[i]) continue
       const dw = dwal[i]
       if (!isFinite(dw)) continue
-      const budget = snapCells - dw // rule (a): remaining reach
+      const budget = snapCells - dw
       if (budget < 0) continue
       const br = Math.ceil(budget)
       let hit = false
@@ -191,7 +142,7 @@ export function snapToAlignment(mask, G, lines, snapFt) {
           if (x < 0 || x >= G.nx) continue
           if (!mask[y * G.nx + x]) continue
           if (Math.hypot(dx, dy) > budget) continue
-          if (blocked(gx, gy, x, y, wall, G)) continue // rule (c)
+          if (blocked(gx, gy, x, y, wall, G)) continue
           hit = true; break
         }
       }

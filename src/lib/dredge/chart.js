@@ -1,33 +1,15 @@
-import { makeGrid, coverageMask, rasterizePolys, maskToPolys, ringArea, component, open, dilate, distTransform, finalHeading } from './coverage'
+import { makeGrid, coverageMask, rasterizePolys, maskToPolys, ringArea, component, open, dilate, distTransform, finalHeading, pointInPoly, ordinal } from './coverage'
 import { prismVolume } from './designVolume'
 
 const COL = { pass1: '#e0852a', pass2: '#8a8a2a', residual: '#b3b3b3', progress: '#c4d99a', band: '#16314b', paper: '#fff', map: '#9aa6ac' }
 const FONT = 'Arial, "Segoe UI", sans-serif'
 const MONTHS = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
 
-function ordinal(d) {
-  const t = d % 100
-  if (t >= 11 && t <= 13) return 'th'
-  return ({ 1: 'st', 2: 'nd', 3: 'rd' })[d % 10] ?? 'th'
-}
-
-// --- Dredge shape DXF (ported from jfb-fieldops-daily's chart.ts) ---------
-// A hand-rolled DXF entity parser -- not a general-purpose one, just enough
-// to read a machine-shape export: BLOCKS (for INSERT resolution) + ENTITIES
-// (LWPOLYLINE/LINE/CIRCLE/INSERT). `src` on each polygon is the lowercased
-// block name it resolved from (undefined for loose geometry) -- used to
-// color machine parts (excavator) differently from mats.
-
-/** @typedef {{pts: [number, number][], closed: boolean, src?: string}} RawPoly */
-
-/** @param {string} txt @returns {{polys: RawPoly[], circle: {x: number, y: number} | null}} */
 export function parseDredge(txt) {
   const raw = txt.split(/\r?\n/); const pr = []
   for (let i = 0; i + 1 < raw.length; i += 2) pr.push([raw[i].trim(), raw[i + 1]])
   const polys = []; let circle
 
-  // Scan a run of entities (a BLOCK body or the ENTITIES section) collecting
-  // polylines/lines/inserts. Returns at the terminator ('ENDBLK'/'ENDSEC').
   const scanEntities = (start, terminators) => {
     const out = []
     const inserts = []
@@ -41,9 +23,6 @@ export function parseDredge(txt) {
         const v = []; let flag = 0; let j = i + 1
         for (; j < pr.length && pr[j][0] !== '0'; j++) { const [c, vv] = pr[j]; if (c === '10') v.push([parseFloat(vv), NaN]); else if (c === '20' && v.length) v[v.length - 1][1] = parseFloat(vv); else if (c === '70') flag = parseInt(vv, 10) || 0 }
         const pts = v.filter((p) => isFinite(p[1]))
-        // closed = the DXF flag, or the ring visually returning to its start.
-        // Exploded shapes carry long OPEN zigzag hatch polylines (deck mats) —
-        // treating those as closed fills them into giant false wedges.
         const closed = pts.length > 2 && (((flag & 1) === 1)
           || Math.hypot(pts[0][0] - pts[pts.length - 1][0], pts[0][1] - pts[pts.length - 1][1]) < 0.5)
         if (pts.length > 1) out.push({ pts, closed })
@@ -67,7 +46,6 @@ export function parseDredge(txt) {
     return { out, inserts, localCircle, end: i }
   }
 
-  // 1. BLOCKS section — collect each block's geometry (for INSERT resolution).
   const blocks = new Map()
   let i = 0
   while (i < pr.length && !(pr[i][0] === '2' && pr[i][1].trim() === 'BLOCKS')) i++
@@ -85,8 +63,6 @@ export function parseDredge(txt) {
     }
   }
 
-  // 2. ENTITIES — geometry + inserts; resolve inserts from the block table so
-  //    a once-exploded shape (nested machine/mats blocks intact) still draws.
   i = 0
   while (i < pr.length && !(pr[i][0] === '2' && pr[i][1].trim() === 'ENTITIES')) i++
   const ents = scanEntities(i + 1, ['ENDSEC'])
@@ -105,10 +81,6 @@ export function parseDredge(txt) {
   return { polys, circle }
 }
 
-/** Chain open polylines whose endpoints meet: exploded shapes often carry a
- *  hull outline as several open pieces (Torch Lake's barge = two open
- *  L-halves). Join within 0.25 ft; a chain that returns to its start closes.
- * @param {RawPoly[]} input @returns {RawPoly[]} */
 function chainOpenPolys(input) {
   const polys = input.map((p) => ({ pts: [...p.pts], closed: p.closed, src: p.src }))
   const TOL = 0.25
@@ -139,17 +111,6 @@ function chainOpenPolys(input) {
   return polys
 }
 
-/** @param {number} x @param {number} y @param {[number, number][]} ring */
-function pointInPoly(x, y, ring) {
-  let inside = false
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const [xi, yi] = ring[i], [xj, yj] = ring[j]
-    if (((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)) inside = !inside
-  }
-  return inside
-}
-
-/** @param {[number, number][]} ring @returns {[number, number]} */
 function ringCentroid(ring) {
   let a = 0, cx = 0, cy = 0
   for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
@@ -160,9 +121,6 @@ function ringCentroid(ring) {
   a *= 0.5; return [cx / (6 * a), cy / (6 * a)]
 }
 
-/** Parse all closed LWPOLYLINEs/POLYLINEs from a DXF into world-coord rings —
- *  used to import a team-drawn coverage border (e.g. seeding prior progress).
- * @param {string} txt @returns {[number, number][][]} */
 export function parseDxfPolylines(txt) {
   const raw = txt.split(/\r?\n/); const pr = []
   for (let i = 0; i + 1 < raw.length; i += 2) pr.push([raw[i].trim(), raw[i + 1]])
@@ -175,7 +133,6 @@ export function parseDxfPolylines(txt) {
       for (; j < pr.length && pr[j][0] !== '0'; j++) { const [c, vv] = pr[j]; if (c === '10') v.push([parseFloat(vv), NaN]); else if (c === '20' && v.length) v[v.length - 1][1] = parseFloat(vv) }
       const ring = v.filter((p) => isFinite(p[1])); if (ring.length > 2) polys.push(ring); i = j - 1
     } else if (pr[i][0] === '0' && tag === 'POLYLINE') {
-      // classic POLYLINE: vertices are separate VERTEX entities until SEQEND
       const v = []; let j = i + 1
       for (; j < pr.length; j++) {
         if (pr[j][0] === '0') { const t = (pr[j][1] || '').trim(); if (t === 'SEQEND') { j++; break } if (t === 'VERTEX') v.push([NaN, NaN]) }
@@ -184,23 +141,12 @@ export function parseDxfPolylines(txt) {
       const ring = v.filter((p) => isFinite(p[0]) && isFinite(p[1])); if (ring.length > 2) polys.push(ring); i = j - 1
     }
   }
-  // Junk filter: CAD DXFs carry title-block / legend / origin artifacts that
-  // pollute an imported baseline and blow up the chart extent. Those live at
-  // paper-sheet scale (coords of a few dozen units) or are true specks.
-  // Filter by SCALE, then a small speck floor -- not a big flat-area cutoff,
-  // since real mechanical-dredge parcels can legitimately be small.
   const ringMag = (r) => Math.max(...r.map(([x, y]) => Math.max(Math.abs(x), Math.abs(y))))
   const worldMax = polys.length ? Math.max(...polys.map(ringMag)) : 0
   const world = worldMax > 100000 ? polys.filter((r) => ringMag(r) > worldMax / 100) : polys
   return world.filter((r) => Math.abs(ringArea(r)) >= 25)
 }
 
-/** @typedef {{ring: [number, number][], label: string}} CscCell */
-
-/** Parse a CSC grid DXF: closed LWPOLYLINEs/POLYLINEs = cells; TEXT/MTEXT =
- *  cell numbers, associated to the cell whose polygon contains the text
- *  insertion point.
- * @param {string} txt @returns {CscCell[]} */
 export function parseCells(txt) {
   const raw = txt.split(/\r?\n/); const pr = []
   for (let i = 0; i + 1 < raw.length; i += 2) pr.push([raw[i].trim(), raw[i + 1]])
@@ -212,9 +158,6 @@ export function parseCells(txt) {
       const v = []; let flag = 0; let j = i + 1
       for (; j < pr.length && pr[j][0] !== '0'; j++) { const [c, vv] = pr[j]; if (c === '10') v.push([parseFloat(vv), NaN]); else if (c === '20' && v.length) v[v.length - 1][1] = parseFloat(vv); else if (c === '70') flag = parseInt(vv, 10) || 0 }
       const ring = v.filter((p) => isFinite(p[1]))
-      // cells are CLOSED boundaries -- accept the closed flag (bit 1) or a
-      // ring that visually closes on itself; open alignments (e.g. a
-      // sheet-pile wall line in the same drawing) are not cells.
       const closes = ring.length > 2 && ((flag & 1) === 1
         || Math.hypot(ring[0][0] - ring[ring.length - 1][0], ring[0][1] - ring[ring.length - 1][1]) < 1)
       if (closes) rings.push(ring); i = j - 1
@@ -232,19 +175,11 @@ export function parseCells(txt) {
       i = j - 1
     }
   }
-  // Drop paper-space leftovers (title blocks, notes, tables live near the
-  // sheet origin at coords of a few dozen units; real cells are in world
-  // coords -- hundreds of thousands to millions of ft).
   const mag = (x, y) => Math.max(Math.abs(x), Math.abs(y))
   const ringMag = (r) => Math.max(...r.map(([x, y]) => mag(x, y)))
   const worldMax = rings.length ? Math.max(...rings.map(ringMag)) : 0
   const worldRings = worldMax > 100000 ? rings.filter((r) => ringMag(r) > worldMax / 100) : rings
 
-  // Associate each TEXT with the SMALLEST ring that contains it (the real
-  // cell, not a group/site-boundary polygon that also encloses it), using
-  // each label once. Rings that claim no label are dropped from labeling but
-  // still returned (label ''), so callers can draw every outline. Strip
-  // MTEXT format codes but keep dashes so "DMU-1" stays readable.
   const clean = (s) => s.replace(/\\[A-Za-z][^;\\{}]*;?|[{}]/g, '').replace(/[^0-9A-Za-z-]/g, '')
   const labels = new Array(worldRings.length).fill('')
   for (const t of texts) {
@@ -259,13 +194,6 @@ export function parseCells(txt) {
   return worldRings.map((ring, k) => ({ ring, label: labels[k] }))
 }
 
-/** @typedef {{segments: [number, number][][], labels: {x: number, y: number, v: string}[]}} ReferenceLines */
-
-/** Parse a reference-line DXF (mile markers / stationing): OPEN LINE + polyline
- *  segments and TEXT/MTEXT labels, for a thin overlay. Unlike parseCells (closed
- *  cell polygons) these are open -- tick lines and station numbers. Every entity
- *  in ENTITIES is taken regardless of layer.
- * @param {string} txt @returns {ReferenceLines} */
 export function parseReferenceLines(txt) {
   const raw = txt.split(/\r?\n/); const pr = []
   for (let i = 0; i + 1 < raw.length; i += 2) pr.push([raw[i].trim(), raw[i + 1]])
@@ -294,9 +222,6 @@ export function parseReferenceLines(txt) {
   return { segments, labels }
 }
 
-/** Liang-Barsky: clip segment p->q to an axis-aligned rect. Returns the clipped
- *  endpoints, or null when the segment misses the rect entirely.
- * @param {[number, number]} p @param {[number, number]} q */
 function clipSegToRect(p, q, minX, minY, maxX, maxY) {
   const dx = q[0] - p[0], dy = q[1] - p[1]
   let t0 = 0, t1 = 1
@@ -310,14 +235,7 @@ function clipSegToRect(p, q, minX, minY, maxX, maxY) {
   return [[p[0] + t0 * dx, p[1] + t0 * dy], [p[0] + t1 * dx, p[1] + t1 * dy]]
 }
 
-/** Anchor point for a reference-line label whose own insertion point sits
- *  OUTSIDE the framed view (common on zoomed charts: the mile line crosses the
- *  view but its number sits at the line's off-view end). Finds the nearest
- *  segment (within maxDistFt of the label) that intersects the view and returns
- *  the midpoint of its in-view portion -- so the number rides its own line.
- *  Returns null when no nearby segment crosses the view.
- * @param {{x: number, y: number}} lb @param {[number, number][][]} segments */
-export function anchorRefLabelInView(lb, segments, minX, minY, maxX, maxY, maxDistFt = 600) {
+function anchorRefLabelInView(lb, segments, minX, minY, maxX, maxY, maxDistFt = 600) {
   let best = null, bestD = maxDistFt
   for (const seg of segments) {
     let d = Infinity
@@ -360,14 +278,6 @@ function autoCenterlines(mask, G, minCells = 250) {
   return lines
 }
 
-// Group coverage rings into spatially-separated work areas and return one
-// framing window per area (world ft). Two rings join when their bounding
-// boxes come within gapFt; a "major move" leaves a gap far larger than what
-// a single day's coverage normally bridges, so genuine separate areas fall
-// into separate windows. Returns [] for a single contiguous area (nothing to
-// split). Windows sorted left->right.
-// @param {[number, number][][]} rings @param {number} [gapFt]
-// @returns {{minX: number, minY: number, maxX: number, maxY: number}[]}
 export function detectClusterWindows(rings, gapFt = 400) {
   const boxes = rings
     .filter((r) => r.length >= 3)
@@ -377,7 +287,6 @@ export function detectClusterWindows(rings, gapFt = 400) {
       return { x0, y0, x1, y1 }
     })
   if (boxes.length < 2) return []
-  // Union-find over boxes within gapFt of each other (expanded-box overlap).
   const parent = boxes.map((_, i) => i)
   const find = (a) => (parent[a] === a ? a : (parent[a] = find(parent[a])))
   const near = (a, b) =>
@@ -395,7 +304,7 @@ export function detectClusterWindows(rings, gapFt = 400) {
   }
   const windows = [...groups.values()]
   if (windows.length < 2) return []
-  const PAD = 60 // small breathing room; the renderer's aspect-fit adds the rest
+  const PAD = 60
   for (const w of windows) { w.minX -= PAD; w.minY -= PAD; w.maxX += PAD; w.maxY += PAD }
   windows.sort((a, b) => a.minX - b.minX)
   return windows
@@ -416,50 +325,18 @@ export function renderChart(canvas, input) {
     advanceLines = [],
     autoAdvance = true,
     showAdvanceLine = true,
-    // Sweep-smoothing radius (ft) for the HYPACK point-track coverage mask --
-    // undefined lets coverageMask() fall back to its own PARAM.CLOSE_R default.
     closeFt,
-    // CSC/DMU cells (config.cells): clip today's + prior coverage to the
-    // cells union by default (open-water/isopach projects have no cells, so
-    // this is a no-op there). PE-selected activeCellLabels further restricts
-    // TODAY's coverage to only the cells the crew says they worked --
-    // progress-to-date (prior) is never clipped by this one.
     clipToCells = true,
     activeCellLabels = [],
-    // Volume: { mode: 'design-grade', ref, designElev, recoveryFactor? } for
-    // HYPACK/cutter-suction projects, or { mode: 'surface-diff', prior, today,
-    // recoveryFactor? } (SurfaceGrid pairs, see earthworks.js) for mechanical
-    // projects with a banked prior-day surface. Mirrors the reference's
-    // `volume` input.
     volume,
-    // Mechanical/Earthworks coverage: today's border as pre-built rings
-    // (from track.js's trackCoverage() or earthworks.js's
-    // coverageFromSurface()/diffSurfaces()) instead of a HYPACK point track.
-    // When set, todayPts is ignored for coverage (it's typically empty).
     todayCoverageRings = [],
-    // Dredge-shape icon (equipment DXF, pre-parsed by the caller via
-    // parseDredge() -- this function stays synchronous, unlike the source's
-    // async fetchText, so the caller resolves the shape once at generate-time
-    // the same way it already resolves images to ImageBitmaps).
     headings = [],
     dredgeShape = null,
     override = null,
     flipShape = false,
-    // Preview/weekly rollup: no live track. Must be explicit -- a genuinely
-    // empty/failed RAW parse should still throw, not silently render a blank
-    // preview-shaped chart.
     preview = false,
-    // Zoomed-view mode (one work area of a big-move day, from
-    // detectClusterWindows() below): frames directly to this window instead
-    // of the coverage-derived bbox, skipping the pad (the window already has
-    // its own). The aspect-ratio expansion below still runs.
     viewWindow = null,
-    // Weekly rollup: this week's coverage, rendered like "today" (pass1
-    // orange) but sourced from saved jfb_dredge_progress rows instead of a
-    // live track -- used together with preview: true and priorRings.
     highlightRings = [],
-    // Weekly rollup: overrides for the title band / big date in the header.
-    // Undefined falls back to the existing daily-report text.
     titleText,
     dateText,
   } = input
@@ -477,9 +354,6 @@ export function renderChart(canvas, input) {
       for (const [x, y] of ring) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y }
     }
   } else {
-    // No live track (preview/weekly): frame on the configured isopach site
-    // window plus any imported baseline coverage -- mirrors the source's
-    // WEEKLY-mode framing branch.
     const isoFrames = []
     if (config.bgGeoref) isoFrames.push(config.bgGeoref)
     if (config.isopachTiles?.length) isoFrames.push(...config.isopachTiles.map((t) => t.georef))
@@ -518,10 +392,6 @@ export function renderChart(canvas, input) {
 
   let G = makeGrid(minX, minY, maxX, maxY)
   const MAX_CELLS = 50_000_000
-  // A grid past MAX_CELLS coarsens (0.5 -> 1 -> 2 -> 4 ft) until it fits,
-  // instead of failing outright -- a legitimately large extent (a big dredge
-  // move, or a whole-lake preview) shouldn't lose the chart entirely. Mirrors
-  // the reference app's chart.ts.
   {
     let R = G.R
     while (Number.isFinite(G.nx * G.ny) && G.nx * G.ny > MAX_CELLS && R < 4) {
@@ -534,17 +404,6 @@ export function renderChart(canvas, input) {
   }
   const toGrid = ([x, y]) => [Math.round((x - G.x0) / G.R), Math.round((y - G.y0) / G.R)]
 
-  // CSC/DMU cells in view (hoisted above the mask pipeline so clip-to-cells
-  // and the per-cell breakdown below can use it; the drawing pass further
-  // down reuses this same list instead of re-filtering).
-  //
-  // cellsReferenceOnly: when set (and the project has cells at all), skip
-  // cells out of the grid/clip/breakdown pipeline entirely -- allCells stays
-  // empty, so everything below that keys off it (clip-to-cells,
-  // activeCellLabels, the per-cell breakdown, the outline+label draw block)
-  // no-ops unchanged. refCells instead carries every parsed cell (labeled or
-  // not) for a separate, purely visual outline+number overlay -- no grid
-  // built, so a whole-project overview doesn't trip the chart-extent guard.
   const rawCells = config.cells ?? []
   const refOnly = !!config.cellsReferenceOnly && rawCells.length > 0
   const allCells = refOnly ? [] : rawCells
@@ -565,16 +424,10 @@ export function renderChart(canvas, input) {
   const priorMask = rasterizePolys(priorRings, G)
   const highlightMask = rasterizePolys(highlightRings, G)
 
-  // Clip coverage to the cells union (only report area inside the cells).
-  // Guarded on allCells (does the PROJECT have cells at all), not drawnCells
-  // (cells in THIS view) -- a zoomed split-view window with zero cells in
-  // frame must still clip to nothing, not skip clipping outright.
   const cellsUnion = allCells.length ? rasterizePolys(drawnCells.map((c) => c.ring), G) : null
   if (cellsUnion && clipToCells) {
     for (let i = 0; i < todayMask.length; i++) if (!cellsUnion[i]) { todayMask[i] = 0; priorMask[i] = 0 }
   }
-  // PE-selected worked cells: TODAY's coverage counts only inside the DMUs
-  // the crew actually worked (progress-to-date is NOT clipped by this).
   if (activeCellLabels.length && drawnCells.length) {
     const sel = new Set(activeCellLabels)
     const workedUnion = rasterizePolys(drawnCells.filter((c) => sel.has(c.label)).map((c) => c.ring), G)
@@ -590,11 +443,6 @@ export function renderChart(canvas, input) {
     const comp = component(candidateMask, G, gx, gy)
     for (let i = 0; i < comp.length; i++) if (comp[i]) candidateMask[i] = 0
   }
-  // RESIDUAL: any of today's coverage inside a CSC the PE flagged COMPLETE.
-  // A finished cell can't receive 1st or 2nd pass -- re-entry there is
-  // residual by definition. Uses rawCells -- ALL cells regardless of view
-  // framing AND regardless of cellsReferenceOnly mode (refOnly leaves
-  // allCells empty on purpose; residual still has to work there).
   const completedSet = new Set(completedCellLabels)
   const completedUnion = completedSet.size && rawCells.length
     ? rasterizePolys(rawCells.filter((c) => completedSet.has(c.label)).map((c) => c.ring), G)
@@ -611,11 +459,6 @@ export function renderChart(canvas, input) {
 
   const rPix = gapFt / G.R
   const bridgeMask = new Uint8Array(todayMask.length)
-  // Bridge exists to close the seam between fresh coverage (today / weekly
-  // highlight) and the prior base. Skipped entirely when there's neither --
-  // a prior-only chart (weekly: a dredge with history but no work this
-  // week) must not run it, or the morphological close can merge separate
-  // prior blobs and round off their true boundaries.
   const hasToday = todayPts.length > 0 || todayCoverageRings.length > 0
   if (hasToday || highlightRings.length) {
     const allMask = new Uint8Array(todayMask.length)
@@ -640,9 +483,6 @@ export function renderChart(canvas, input) {
   const cellSqFt = G.R * G.R
   const countArea = (m) => { let c = 0; for (let i = 0; i < m.length; i++) c += m[i]; return c * cellSqFt }
 
-  // Design-grade CY, over the SAME first-pass-today mask coverage already
-  // uses for its own stats -- reportable = gross x recovery factor, since
-  // the cutter never takes the full prism everywhere it passes.
   const rf = volume?.recoveryFactor ?? 0.75
   let grossCy, adjustedCy, meanPrismFt, volumeNoDataSqFt
   if (volume?.mode === 'design-grade') {
@@ -652,10 +492,6 @@ export function renderChart(canvas, input) {
     meanPrismFt = Math.round(pv.meanPrismFt * 100) / 100
     volumeNoDataSqFt = Math.round(pv.noDataCells * cellSqFt)
   } else if (volume?.mode === 'surface-diff') {
-    // Mechanical (Earthworks): the drop from the prior stored surface to
-    // today's, measured only INSIDE today's coverage -- the surface export
-    // isn't reliable diffed whole-matrix, but inside the tracked border the
-    // drop is real. Rises are clamped out (dredging only removes material).
     const sampleSurf = (s, x, y) => {
       const gx = Math.round(x - s.x0), gy = Math.round(y - s.y0)
       if (gx < 0 || gx >= s.nx || gy < 0 || gy >= s.ny) return NaN
@@ -674,9 +510,6 @@ export function renderChart(canvas, input) {
     adjustedCy = Math.round(gross * rf * 10) / 10
   }
 
-  // Per-CSC-cell coverage breakdown (cells touched by coverage). Only cells
-  // with any progress-to-date (prior or today) are reported -- an untouched
-  // cell adds nothing worth a row.
   const cellBreakdown = []
   for (const c of drawnCells) {
     const cm = rasterizePolys([c.ring], G)
@@ -737,10 +570,6 @@ export function renderChart(canvas, input) {
     g.fill('evenodd')
   }
 
-  // Draws every tile whose georef overlaps the current view (e.g. a 2x2 grid:
-  // 1 tile in a quadrant, 2 at an edge, up to 4 near the center). Tiles are
-  // pre-resolved to ImageBitmaps by the caller (same reason renderChart stays
-  // synchronous elsewhere), unlike the source's async per-tile fetch.
   const drawTiles = (tiles) => {
     for (const t of tiles) {
       const gr = t.georef
@@ -753,14 +582,12 @@ export function renderChart(canvas, input) {
 
   g.save(); g.beginPath(); g.rect(ox, oy, mapW, mapH); g.clip()
   g.fillStyle = COL.map; g.fillRect(ox, oy, mapW, mapH)
-  // Layer 1 — aerial base: tiles if provided, else the single fetched image.
   if (config.aerialTiles?.length) {
     drawTiles(config.aerialTiles)
   } else if (config.aerialImage && config.aerialGeoref) {
     const AG = config.aerialGeoref
     g.drawImage(config.aerialImage, sx(AG.wL), sy(AG.wT), (AG.wR - AG.wL) * sc, (AG.wT - AG.wB) * sc)
   }
-  // Layer 2 — isopach / difference chart: tiles if provided, else single bgImage.
   if (config.isopachTiles?.length) {
     drawTiles(config.isopachTiles)
   } else if (config.bgImage && config.bgGeoref) {
@@ -768,16 +595,11 @@ export function renderChart(canvas, input) {
     g.drawImage(config.bgImage, sx(IMG.wL), sy(IMG.wT), (IMG.wR - IMG.wL) * sc, (IMG.wT - IMG.wB) * sc)
   }
   fillPolys(progressPolys, COL.progress)
-  // Weekly: this-week coverage in the 1st-pass orange over the prior base.
   if (highlightPolys.length) fillPolys(highlightPolys, COL.pass1)
   fillPolys(todayPolys, COL.pass1)
   fillPolys(secondPolys, COL.pass2)
   fillPolys(residualPolys, COL.residual)
 
-  // CSC / DMU cells: outline + label at centroid, drawn over coverage, under
-  // the dredge icon. drawnCells (in-view filtered) was computed above the
-  // mask pipeline, where clip-to-cells/activeCellLabels/the breakdown below
-  // also use it.
   if (drawnCells.length) {
     const cellPath = (c) => { g.beginPath(); g.moveTo(sx(c.ring[0][0]), sy(c.ring[0][1])); for (const v of c.ring.slice(1)) g.lineTo(sx(v[0]), sy(v[1])); g.closePath() }
     g.strokeStyle = 'rgba(255,255,255,0.75)'; g.lineWidth = 2.5
@@ -794,10 +616,6 @@ export function renderChart(canvas, input) {
     g.textAlign = 'left'
   }
 
-  // Reference-only CSC cells (cellsReferenceOnly): outline + number overlay
-  // only -- no grid, no clipping, no breakdown, same draw style as the
-  // drawnCells block above. Draw only the cells that intersect the framed
-  // view (the canvas clips the rest).
   if (refCells.length) {
     const inView = refCells.filter((c) => {
       let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
@@ -819,10 +637,6 @@ export function renderChart(canvas, input) {
     g.textAlign = 'left'
   }
 
-  // Reference lines (mile markers / stationing): thin open segments + small
-  // labels, drawn only where they touch the framed view. White halo under a
-  // dark line keeps them legible on aerial or water. Purely visual overlay --
-  // not used in any coverage/volume calculation.
   const refLines = config.referenceLines
   if (refLines && (refLines.segments.length || refLines.labels.length)) {
     const inView = (pts) => {
@@ -850,20 +664,12 @@ export function renderChart(canvas, input) {
     g.textAlign = 'left'
   }
 
-  // Dredge icon — pattern placement (leading edge / gyro heading) or explicit
-  // override. Earthworks/mechanical projects have no track or heading to
-  // place from, so there the icon only draws with a manual (two-click)
-  // placement -- ported from the source's chart.ts, same positions/dialects.
   let dredgePose = null
   if (dredgeShape && dredgeShape.polys.length) {
     const dpoly = dredgeShape.polys, circle = dredgeShape.circle
     let sternRef = circle ? [circle.x, circle.y] : dpoly[0].pts[0]
     let cutterRef = sternRef, md = -1
     for (const p of dpoly) for (const v of p.pts) { const dd = Math.hypot(v[0] - sternRef[0], v[1] - sternRef[1]); if (dd > md) { md = dd; cutterRef = v } }
-    // AUTO-ORIENT (mechanical shapes): the bucket end is the end the machine
-    // (excavator block, i.e. block-sourced non-mat geometry) sits nearer —
-    // deterministic, no flip click needed. Shapes without a machine block
-    // keep the farthest-vertex guess (+ the manual flip).
     const machinePts = dpoly.filter((p) => p.src && !/mat/.test(p.src)).flatMap((p) => p.pts)
     if (machinePts.length) {
       let mx = 0, my = 0; for (const v of machinePts) { mx += v[0]; my += v[1] }
@@ -900,13 +706,6 @@ export function renderChart(canvas, input) {
       const rot = targetAng - nativeAng, cosR = Math.cos(rot), sinR = Math.sin(rot)
       const tf = ([x, y]) => { const dx = x - cutterRef[0], dy = y - cutterRef[1]; return [cutterPt[0] + dx * cosR - dy * sinR, cutterPt[1] + dx * sinR + dy * cosR] }
       const path = (pts, close) => { const q0 = tf(pts[0]); g.moveTo(sx(q0[0]), sy(q0[1])); for (const v of pts.slice(1)) { const q = tf(v); g.lineTo(sx(q[0]), sy(q[1])) } if (close) g.closePath() }
-      // TWO shape dialects, auto-detected. Exploded shapes (Torch Lake barge)
-      // carry open hatch linework that must NOT be closed into fill wedges —
-      // chain endpoint-touching opens into rings; if that yields a DOMINANT
-      // closed hull (>=30% of the shape's footprint), render open/closed-aware:
-      // red hull, gray details over it, opens stroked. Otherwise (Fountain
-      // Lake style: hull outline never closes) keep the legacy close-everything
-      // rendering that those shapes were tuned on.
       let bx0 = Infinity, bx1 = -Infinity, by0 = Infinity, by1 = -Infinity
       for (const p of dpoly) for (const v of p.pts) { if (v[0] < bx0) bx0 = v[0]; if (v[0] > bx1) bx1 = v[0]; if (v[1] < by0) by0 = v[1]; if (v[1] > by1) by1 = v[1] }
       const bboxArea = Math.max(1, (bx1 - bx0) * (by1 - by0))
@@ -915,9 +714,6 @@ export function renderChart(canvas, input) {
       if (bigChained && ringArea(bigChained.pts) >= 0.3 * bboxArea) {
         const closedPolys = chained.filter((p) => p.closed)
         const openPolys = chained.filter((p) => !p.closed)
-        // Solid icon: red hull first, details OVER it, outlines on top.
-        // Parts are colored by their source block — crane mats brown, the
-        // machine (CAT/excavator) CAT yellow, loose deck details gray.
         const MAT = '#8a6b47', MACHINE = '#e8b800', DETAIL = '#b9c2cc'
         const fillFor = (p) => (!p.src ? DETAIL : /mat/.test(p.src) ? MAT : MACHINE)
         const strokeFor = (p) => (p.src && /mat/.test(p.src) ? '#5f4526' : '#1a1a1a')
@@ -934,7 +730,6 @@ export function renderChart(canvas, input) {
           if (strokes.length) { g.strokeStyle = col; g.lineWidth = 0.9; g.beginPath(); for (const { p, c } of strokes) path(p.pts, c); g.stroke() }
         }
       } else {
-        // Legacy: close + fill everything (gray, evenodd), largest ring red.
         const big = dpoly.reduce((m, p) => ringArea(p.pts) > ringArea(m ? m.pts : []) ? p : m, null)
         g.fillStyle = '#b9c2cc'; g.beginPath(); for (const p of dpoly) path(p.pts, true); g.fill('evenodd')
         if (big) { g.fillStyle = '#c0392b'; g.beginPath(); path(big.pts, true); g.fill() }
@@ -989,8 +784,6 @@ export function renderChart(canvas, input) {
   g.textAlign = 'left'
   g.font = `13px ${FONT}`
   g.fillText(config.stationText ? `Area: ${config.area}: ${config.stationText}` : `Area: ${config.area}`, side, 88)
-  // Skipped entirely when there's no value -- weekly per-contract charts
-  // pass materials: undefined to keep the header clean.
   if (config.materials) g.fillText(`Material Encountered:  ${config.materials}`, side, 106)
 
   const leg = [['1st Pass Dredging', COL.pass1], ['2nd Pass Dredging', COL.pass2], ['Residual Dredging', COL.residual], ['Progress to Date', COL.progress]]
@@ -1042,12 +835,6 @@ export function renderChart(canvas, input) {
   }
 }
 
-// HYPACK/point-track variant: rasterizes today's coverage from the raw track
-// (same coverageMask() the chart render itself uses) so the DXF's 1st/2nd
-// pass split matches the on-screen chart exactly, trimming incidental
-// overlap with the prior baseline. Use buildProgressDxfFromRings() instead
-// for Earthworks/mechanical projects, whose coverage is already rings, not a
-// point track.
 export function buildProgressDxf(todayPts, priorRings = [], secondPassRings = [], closeFt) {
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
   for (const [x, y] of todayPts) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y }

@@ -5,9 +5,6 @@ import { fetchPageDetails } from "../data";
 
 const ADMIN_PAGE_SLUG = "apg-jfb-admin";
 
-// Resolves the apg-jfb-admin page once per Admin session and exposes each
-// declared domain's DAC-backed read/create/update/delete flags. Fails closed:
-// while loading, or for any domain not in the resolved map, every flag is false.
 export function AdminAccessProvider({ children }) {
   const { config, ready } = useAppConfig();
   const [accessMap, setAccessMap] = useState({});
@@ -35,7 +32,6 @@ export function AdminAccessProvider({ children }) {
         setAccessMap(map);
       })
       .catch(() => {
-        // Fail closed: leave accessMap empty (every domain resolves to NO_ACCESS).
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);

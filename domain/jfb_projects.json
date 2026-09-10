@@ -461,6 +461,90 @@
         "code": "lww"
       },
       "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "cap_conversion_factor",
+      "slug": "cap_conversion_factor",
+      "type": "numeric",
+      "label": "Cap Conversion Factor",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "cap_conversion_factor",
+      "description": "Default tons-to-CY conversion factor for capping production entry (CY = tons / factor). Pre-fills the Factor column on new capping production rows; left null on projects paid by the ton, where CY/thickness simply don't compute. Matches the non-native app's projects.cap_conversion_factor.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "placement_start_date",
+      "slug": "placement_start_date",
+      "type": "date",
+      "label": "Placement Start Date",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "date",
+      "column_name": "placement_start_date",
+      "description": "First report date of a mid-job work-type change -- reports on/after it resolve to work_type, earlier ones to prior_work_type. NULL (the default, and every project that never changes phase) means work_type applies to every date. Meaningless without prior_work_type also set. Matches the non-native app's projects.placement_start_date.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "prior_work_type",
+      "slug": "prior_work_type",
+      "type": "text",
+      "label": "Prior Work Type",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "prior_work_type",
+      "description": "What this project's work_type was before placement_start_date. Set only alongside placement_start_date, so flipping a project's work_type mid-contract doesn't reprint its historical dailies under the new discipline. One of 'Hydraulic Dredging', 'Mechanical Dredging', 'Hydraulic Capping', 'Mechanical Capping' when set. Matches the non-native app's projects.prior_work_type.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "is_spreader_active",
+      "slug": "is_spreader_active",
+      "type": "boolean",
+      "label": "Is Spreader Active",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "boolean",
+      "column_name": "is_spreader_active",
+      "description": "Whether this project runs a spreader barge, gating the Spreader Progress tab. Spreader placement is a per-project rig choice rather than a discipline, so it cannot be inferred from work_type the way the placement and dredge tabs are. Null/false hides the tab. Replaces the non-native app's reliance on spreader_config.active.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
     }
   ],
   "archive": true,

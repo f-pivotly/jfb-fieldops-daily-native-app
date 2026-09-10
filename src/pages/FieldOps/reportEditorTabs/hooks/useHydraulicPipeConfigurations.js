@@ -1,7 +1,3 @@
-import { useDomainData } from '../../../../hooks/useDomainData'
+import { makeListHook } from '../../../../hooks/domainHookFactory'
 
-export function useHydraulicPipeConfigurations(projectId) {
-  const { records, loading, error, creating, updating, create, update, remove } =
-    useDomainData({ domain: 'jfb_hydraulic_pipe_configurations', system: 'core', projectId })
-  return { pipeSegments: records, loading, error, creating, updating, create, update, remove }
-}
+export const useHydraulicPipeConfigurations = makeListHook('jfb_hydraulic_pipe_configurations', 'pipeSegments', 'project')

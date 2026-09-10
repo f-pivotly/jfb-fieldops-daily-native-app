@@ -5,10 +5,6 @@ import { fetchPageDetails } from "../data";
 
 const FIELDOPS_PAGE_SLUG = "apg-jfb-fieldops";
 
-// Resolves the apg-jfb-fieldops page once per FieldOps session and exposes
-// each declared action's resolved `enabled` flag (e.g. manage_team,
-// view_operator_hours) — the same page-resolve response useVisibleProjects
-// already needed, now shared instead of re-fetched per hook.
 export function FieldOpsAccessProvider({ children }) {
   const { config, ready } = useAppConfig();
   const [actionMap, setActionMap] = useState({});
@@ -44,7 +40,6 @@ export function FieldOpsAccessProvider({ children }) {
         setAccessMap(domainMap);
       })
       .catch(() => {
-        // Fail closed: leave actionMap/accessMap empty (everything resolves to false).
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);

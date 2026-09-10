@@ -1,17 +1,18 @@
 import { fetchDomainRecords, fetchPicklistValues, downloadAttachment, executeDataView } from '../../../data'
 import { renderWeeklyProgressCharts } from '../../../lib/dredge/weeklyChart'
 import { buildCombosFromActivities, comboNOH, isUnassigned } from '../../../lib/productionCombos'
-import { prettyDate } from './realizedToDate'
+import { equipmentWorkType, isProductiveActivity } from './workType'
+import { prettyDate, blobToDataUri, fmtNum, fmtHrs } from './realizedToDate'
+import { UNATTRIBUTED_CATEGORY, shiftTotals } from './eventTotals'
 
-// Ported from the non-native app's src/lib/dates.ts (isoCalWeek/projectWeekNumber).
-// Feeds the cover, production sheet, and safety sheet date tables' Cal. Wk# /
-// Prod. Wk# columns, which the CSS (.meta-date-table .weekday,
-// .sheet-date-table .weekday) was already built for but the template never
-// populated -- these all shipped as hardcoded em-dashes until now.
+function isCappingEquipment(project, equipment, dateISO) {
+  return equipmentWorkType(project, equipment, dateISO).toLowerCase().includes('cap')
+}
+
 function isoCalWeek(dateISO) {
   const [y, m, d] = dateISO.split('-').map(Number)
   const dt = new Date(Date.UTC(y, m - 1, d))
-  const dayNum = dt.getUTCDay() || 7 // Sun (0) -> 7
+  const dayNum = dt.getUTCDay() || 7
   dt.setUTCDate(dt.getUTCDate() + 4 - dayNum)
   const yearStart = Date.UTC(dt.getUTCFullYear(), 0, 1)
   return Math.ceil(((dt.getTime() - yearStart) / 86_400_000 + 1) / 7)
@@ -32,8 +33,6 @@ function weekdayName(dateISO) {
   return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'long' })
 }
 
-// {weekday, calWeek, projectWeek, reportNameCompact} shared by the cover,
-// every per-equipment production sheet, and the safety sheet's date tables.
 export function buildDateTableParams({ date, project }) {
   return {
     weekday: weekdayName(date),
@@ -44,9 +43,6 @@ export function buildDateTableParams({ date, project }) {
   }
 }
 
-// Ported from the non-native app's loadProductionSheetData.ts: each
-// equipment's "Report #:" is a 6-digit YYMMDD (not the 8-digit
-// reportNameCompact above) plus that equipment's initials.
 function nameInitials(name) {
   const words = (name ?? '').trim().split(/\s+/).filter(Boolean)
   if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase()
@@ -54,10 +50,6 @@ function nameInitials(name) {
   return 'XX'
 }
 
-// {equipmentId: "YYMMDD" + initials}, looked up per-equipment sheet as
-// `../parameters.reportNumberByEquipment`. Native's jfb_equipments has no
-// equipment_number column, so unlike reference's Report #, there's no
-// separate stored id to fall back to -- this compact form is the only one.
 export function buildEquipmentReportNumbers({ date, equipment }) {
   const compact = date.replaceAll('-', '').slice(2)
   const result = {}
@@ -65,15 +57,6 @@ export function buildEquipmentReportNumbers({ date, equipment }) {
     result[eq.id] = compact + nameInitials(eq.name)
   }
   return result
-}
-
-function blobToDataUri(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onloadend = () => resolve(reader.result)
-    reader.onerror = reject
-    reader.readAsDataURL(blob)
-  })
 }
 
 export async function buildPhotoAssetsParam({ appSlug, reportId }) {
@@ -93,32 +76,56 @@ export async function buildPhotoAssetsParam({ appSlug, reportId }) {
   return Object.fromEntries(entries)
 }
 
-// Keyed by equipment_id, matching how the report template looks up
-// dailyActivityByEquipment -- `{{#with (lookup ../parameters.dredgeChartAssets this.id)}}`
-// inside its {{#each equipment}} loop.
-export async function buildDredgeChartAssetsParam({ appSlug, reportId }) {
-  const progressRes = await fetchDomainRecords({
-    domain: 'jfb_dredge_progress', system: 'core', appSlug,
-    filters: { report_id: reportId }, limit: 50,
-  })
-  const rows = (progressRes?.data ?? []).filter((r) => r.chart_path)
+export async function buildDredgeChartAssetsParam({ appSlug, reportId, project, equipment, dateISO }) {
+  const [progressRes, placementRes, spreaderRes] = await Promise.all([
+    fetchDomainRecords({
+      domain: 'jfb_dredge_progress', system: 'core', appSlug,
+      filters: { report_id: reportId }, limit: 50,
+    }),
+    fetchDomainRecords({
+      domain: 'jfb_placement_progress', system: 'core', appSlug,
+      filters: { report_id: reportId }, limit: 50,
+    }).catch(() => null),
+    fetchDomainRecords({
+      domain: 'jfb_spreader_progress', system: 'core', appSlug,
+      filters: { report_id: reportId }, limit: 50,
+    }).catch(() => null),
+  ])
+  const chartByEquipmentId = new Map(
+    (progressRes?.data ?? []).filter((r) => r.chart_path).map((r) => [String(r.equipment_id), r.chart_path]),
+  )
+  const placementChartByEquipmentId = new Map(
+    (placementRes?.data ?? []).filter((r) => r.chart_path).map((r) => [String(r.equipment_id), r.chart_path]),
+  )
+  const spreaderChartByEquipmentId = new Map(
+    (spreaderRes?.data ?? []).filter((r) => r.chart_path).map((r) => [String(r.equipment_id), r.chart_path]),
+  )
 
   const entries = await Promise.all(
-    rows.map(async (r) => {
-      const blob = await downloadAttachment(r.chart_path)
-      const dataUri = await blobToDataUri(blob)
-      return [String(r.equipment_id), { dataUri }]
-    }),
+    (equipment ?? [])
+      .map((eq) => {
+        const capping = isCappingEquipment(project, eq, dateISO)
+        const chartPath = capping
+          ? placementChartByEquipmentId.get(String(eq.id)) ??
+            spreaderChartByEquipmentId.get(String(eq.id)) ??
+            null
+          : chartByEquipmentId.get(String(eq.id)) ?? null
+        return { eq, include: !capping || !!chartPath, chartPath }
+      })
+      .filter((c) => c.include)
+      .map(async ({ eq, chartPath }) => {
+        const dataUri = chartPath ? await blobToDataUri(await downloadAttachment(chartPath)) : null
+        return [String(eq.id), {
+          dataUri,
+          equipmentName: eq.name,
+          projectName: project?.name ?? '',
+          dateISO,
+        }]
+      }),
   )
   return Object.fromEntries(entries)
 }
 
-// Keyed by equipment_id, same lookup convention as buildDredgeChartAssetsParam
-// -- `{{#with (lookup ../parameters.weeklyChartAssets this.id)}}` inside the
-// weekly report's own {{#each equipment}} loop. Unlike the daily chart (which
-// re-serves the PE's saved chart_path attachment for that one day), the
-// weekly chart is a fresh client-side render every time -- "this week
-// highlighted over prior" can't be reconstructed from any single stored PNG.
 export async function buildWeeklyChartAssetsParam({ appSlug, projectId, weekStart, weekEnd }) {
   return renderWeeklyProgressCharts({ appSlug, projectId, weekStartISO: weekStart, weekEndISO: weekEnd })
 }
@@ -178,22 +185,6 @@ export function utcDayRange(dateISO) {
   return { gte, lt }
 }
 
-// Matches the two productive-tile labels workType.js writes -- everything
-// else on jfb_daily_activities.category is a delay code's own text, and a
-// null category with no delay_code_id is a legacy row saved before the
-// category column existed.
-const PRODUCTIVE_CATEGORIES = new Set(['ACTIVE DREDGING', 'ACTIVE PLACEMENT'])
-
-function isProductiveActivity(a) {
-  if (a.category && PRODUCTIVE_CATEGORIES.has(a.category)) return true
-  return !a.category && !a.delay_code_id
-}
-
-// Ported from the non-native app's buildDelaySummary (loadProductionSheetData.ts):
-// groups an equipment's non-productive activities by label, with the
-// chronologically first/last STARTUP/SHUTDOWN-category row broken out into
-// its own "Startup"/"ShutDown" row (native's operator app auto-gap feature
-// writes this exact category value). Sorted by minutes descending.
 function buildDelaySummary(activities, projectDelayCodeById, masterDelayCodeById) {
   const sorted = activities.slice().sort((x, y) => new Date(x.start_date_time) - new Date(y.start_date_time))
   const delays = sorted.filter((a) => !isProductiveActivity(a))
@@ -224,10 +215,6 @@ function buildDelaySummary(activities, projectDelayCodeById, masterDelayCodeById
     .sort((a, b) => b.minutes - a.minutes)
 }
 
-// Dominant operator (most logged minutes that day) + shift bounds (earliest
-// start / latest end) for one equipment's activities. Free byproduct of the
-// activity rows buildDailyActivityByEquipmentParam already fetches -- no
-// extra data view needed, just an operator id -> name map.
 function summarizeOperatorShift(rows, operatorNameById) {
   if (rows.length === 0) return { operator: '—', shiftFrom: '—', shiftTo: '—' }
   const minutesByOperator = new Map()
@@ -252,29 +239,17 @@ function summarizeOperatorShift(rows, operatorNameById) {
   }
 }
 
-// Reference (ProductionSheetPage.tsx selectActivityDensity) pads the Daily
-// Activity grid to a fixed 15 rows only on sparse days (<=12 real rows);
-// above that it renders exactly the real row count with no padding, because
-// padding on busy days pushed the Delay Summary strip below onto an
-// otherwise-empty extra page (reference's own postmortem: Lake Pepin
-// 2026-08-03, Torch Lake 2026-08-04). Never truncate real rows.
-const ACTIVITY_GRID_ROWS = 15
-function padActivityRows(rows) {
-  if (rows.length > 12) return rows
+const ACTIVITY_GRID_ROWS = { dredge: { max: 12, target: 15 }, capping: { max: 10, target: 12 } }
+function padActivityRows(rows, grid) {
+  if (rows.length > grid.max) return rows
   const padded = rows.slice()
-  for (let i = padded.length; i < ACTIVITY_GRID_ROWS; i++) {
+  for (let i = padded.length; i < grid.target; i++) {
     padded.push({ num: i + 1, from: '', to: '', minutes: '', area: '', pass: '', event: '', notes: '' })
   }
   return padded
 }
 
-// Returns { activitiesByEquipment, delaySummaryByEquipment, opSummaryByEquipment },
-// all keyed by equipment_id -- the report template looks up each the same way,
-// e.g. `{{#with (lookup ../parameters.dailyActivityByEquipment this.id)}}`.
-// `equipmentIds` (all equipment on the project, not just ones with activity
-// today) guarantees every sheet gets a padded 15-row grid, including
-// equipment with zero logged activity for the day.
-export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, dateISO, equipmentIds }) {
+export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, project, dateISO, equipment }) {
   const { gte, lt } = utcDayRange(dateISO)
 
   const [activityRes, areaLabelRows, projectDelayRes, masterDelayRes, passTypeRows, operatorRes] = await Promise.all([
@@ -283,10 +258,6 @@ export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, d
       filters: { project_id: projectId, start_date_time: { gte, lt } },
       limit: 1000,
     }),
-    // Server-side equivalent of the old resolveArea()/areaNameById join --
-    // resolves area/sub_area/sub_sub_area uuids to jfb_project_areas.name
-    // in one query. Date range padded the same as the activity fetch above
-    // so it covers every row sameCalendarDay() might keep after filtering.
     executeDataView('dvw-jfb-activity-area-labels', {
       p_project_id: projectId,
       p_start_date: gte.slice(0, 10),
@@ -310,8 +281,12 @@ export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, d
 
   const activities = (activityRes?.data ?? []).filter((a) => sameCalendarDay(a.start_date_time, dateISO, a.timezone))
 
+  const cappingEquipmentIds = new Set(
+    (equipment ?? []).filter((eq) => isCappingEquipment(project, eq, dateISO)).map((eq) => eq.id),
+  )
+
   const byEquipment = new Map()
-  for (const id of equipmentIds ?? []) byEquipment.set(id, [])
+  for (const eq of equipment ?? []) byEquipment.set(eq.id, [])
   for (const a of activities) {
     if (!byEquipment.has(a.equipment_id)) byEquipment.set(a.equipment_id, [])
     byEquipment.get(a.equipment_id).push(a)
@@ -321,35 +296,37 @@ export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, d
   const delaySummaryByEquipment = {}
   const opSummaryByEquipment = {}
   for (const [equipmentId, rows] of byEquipment) {
+    const isCapping = cappingEquipmentIds.has(equipmentId)
     const sorted = rows.slice().sort((x, y) => new Date(x.start_date_time) - new Date(y.start_date_time))
-    activitiesByEquipment[equipmentId] = padActivityRows(sorted.map((a, i) => ({
+    const listed = isCapping ? sorted.filter((a) => !isProductiveActivity(a)) : sorted
+    activitiesByEquipment[equipmentId] = padActivityRows(listed.map((a, i) => ({
       num: i + 1,
       from: hhmm(a.start_date_time),
       to: hhmm(a.end_date_time),
       minutes: durationMinutes(a.start_date_time, a.end_date_time) ?? '—',
       area: areaLabelByActivityId.get(a.id) ?? '—',
       pass: a.pass_type ? (passTypeLabels[a.pass_type] ?? a.pass_type) : '—',
-      // Prefer the persisted category (the productive-tile label or delay
-      // code text, set at save time by the operator/admin apps); fall back
-      // to resolving delay_code_id directly for rows saved before category
-      // existed.
       event: a.category || resolveDelayCode(a.delay_code_id, projectDelayCodeById, masterDelayCodeById),
       notes: a.notes || '',
-    })))
+    })), isCapping ? ACTIVITY_GRID_ROWS.capping : ACTIVITY_GRID_ROWS.dredge)
     delaySummaryByEquipment[equipmentId] = buildDelaySummary(rows, projectDelayCodeById, masterDelayCodeById)
     opSummaryByEquipment[equipmentId] = summarizeOperatorShift(sorted, operatorNameById)
   }
   return { activitiesByEquipment, delaySummaryByEquipment, opSummaryByEquipment }
 }
 
-function fmtHrs(n) {
-  return (n ?? 0).toFixed(2)
-}
-function fmtNum(n) {
-  return Math.round(n ?? 0).toLocaleString()
-}
 function fmtPct(n) {
   return `${Math.round(n)}%`
+}
+
+function fmtDec(n, digits) {
+  const v = Number(n)
+  if (!Number.isFinite(v)) return '—'
+  return v.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits })
+}
+function ratio(numerator, denominator) {
+  if (!denominator || !Number.isFinite(denominator)) return 0
+  return numerator / denominator
 }
 
 function shapeComboStats(goh, noh, delay, volume, area) {
@@ -367,28 +344,236 @@ function shapeComboStats(goh, noh, delay, volume, area) {
   }
 }
 
-// Matches the reference app's ProductionSheetPage.tsx exactly: one "Total"
-// column (the equipment's whole day) plus one column per work combo (area +
-// pass + tsca + attachment) actually logged that day -- NOT a Day/Week/
-// Project-Total time-window breakdown (that was this native port's own
-// invention and has been replaced to match reference). "Standard" is
-// reference's own fallback column label for a day with zero real combos,
-// not a real category -- reused here for the same case.
-//
-// Activities (jfb_daily_activities, via buildCombosFromActivities) are the
-// SOLE source of combo identity, mirroring reference's buildCombosFromEvents
-// -- jfb_production_stats rows are only ever matched onto an already-built
-// combo, never used to originate a new column. A stats row that doesn't
-// match any activity combo (e.g. a tsca/pass/area mismatch between logging
-// and stats entry) is dropped from the per-combo breakdown, same as
-// reference silently drops it, rather than surfacing as its own column with
-// no real identity. It still counts toward Total below, matching
-// reference's Total (summed straight from every stats row, independent of
-// the combo breakdown) -- so entered production is never silently lost from
-// the day's total even when it can't be attributed to a specific combo.
-export async function buildProductionComboTotalsByEquipmentParam({ appSlug, projectId, reportId, dateISO }) {
+const SF_PER_ACRE = 43560
+
+const CAP_METRIC_ROWS = [
+  ['Gross Operating Hours (GOH)', 'goh'],
+  ['Net Operating Hours (NOH)', 'noh'],
+  ['Efficiency', 'efficiency'],
+  ['Tons/GOH', 'tonsPerGoh'],
+  ['Tons/NOH', 'tonsPerNoh'],
+  ['Area (SF)', 'areaSf'],
+  ['Acres', 'acres'],
+  ['Design Tons', 'designTons'],
+  ['Tons Placed', 'tonsPlaced'],
+  ['CY Placed', 'cyPlaced'],
+  ['Estimated Inches', 'estInches'],
+  ['Material Placed', 'material'],
+  ['Pass', 'passText'],
+  ['Area', 'areaLabel'],
+]
+
+const CAP_CY_DERIVED_ROWS = new Set(['cyPlaced', 'estInches', 'designTons'])
+
+function areaKeyOfCombo(c) {
+  return [c.areaId ?? '', c.subAreaId ?? '', c.subSubAreaId ?? ''].join('|')
+}
+function areaKeyOfStat(s) {
+  const combo = Array.isArray(s.area_level_combinations) ? s.area_level_combinations : []
+  return [combo[0]?.area_id ?? '', combo[1]?.area_id ?? '', combo[2]?.area_id ?? ''].join('|')
+}
+function hasCapProduction(s) {
+  return s.tons != null || s.volume != null || s.area != null
+}
+
+function designCyPerSf(areaId, areaById) {
+  const area = areaId ? areaById.get(areaId) : null
+  const cy = area?.volume_goal_cy ?? null
+  const sf = area?.area_goal_sf ?? null
+  if (cy == null || sf == null || Number(sf) === 0) return 0
+  return Number(cy) / Number(sf)
+}
+
+function joinUnique(values) {
+  const set = new Set()
+  for (const v of values) {
+    const t = typeof v === 'string' ? v.trim() : v
+    if (t) set.add(String(t))
+  }
+  return set.size === 0 ? '—' : [...set].join(', ')
+}
+
+function shapeCapStats(raw) {
+  const acres = raw.areaSf > 0 ? raw.areaSf / SF_PER_ACRE : 0
+  const estInches = raw.areaSf > 0 ? (raw.cyPlaced * 324) / raw.areaSf : 0
+  return {
+    goh: fmtHrs(raw.goh),
+    noh: fmtHrs(raw.noh),
+    efficiency: fmtPct(raw.goh > 0 ? (raw.noh / raw.goh) * 100 : 0),
+    tonsPerGoh: fmtDec(ratio(raw.tonsPlaced, raw.goh), 1),
+    tonsPerNoh: fmtDec(ratio(raw.tonsPlaced, raw.noh), 1),
+    areaSf: fmtDec(raw.areaSf, 0),
+    acres: fmtDec(acres, 1),
+    designTons: fmtDec(raw.designTons, 1),
+    tonsPlaced: fmtDec(raw.tonsPlaced, 1),
+    cyPlaced: fmtDec(raw.cyPlaced, 1),
+    estInches: fmtDec(estInches, 2),
+    material: raw.material || '—',
+    passText: raw.passText || '—',
+    areaLabel: raw.areaLabel || '—',
+  }
+}
+
+function buildCappingColumns({ acts, eqStats, project, labels }) {
+  const { areaById, areaNameById, layerById, materialNameById, passLabels } = labels
+
+  const combos = buildCombosFromActivities(acts, { passKeyOf: (a) => a.layer_id })
+  const groups = new Map()
+  for (const c of combos) {
+    const key = areaKeyOfCombo(c)
+    let g = groups.get(key)
+    if (!g) {
+      g = {
+        key,
+        areaL1Id: c.areaId ?? null,
+        areaText: [c.areaId, c.subAreaId, c.subSubAreaId]
+          .filter(Boolean)
+          .map((id) => areaNameById.get(id) ?? '—')
+          .join(' / '),
+        unassigned: isUnassigned(c) || (!c.areaId && !c.subAreaId && !c.subSubAreaId),
+        goh: 0,
+        noh: 0,
+      }
+      groups.set(key, g)
+    }
+    g.goh += c.timeHours
+    g.noh += comboNOH(c)
+  }
+
+  const layerRank = (layerId) => layerById.get(layerId)?.sort_order ?? Number.MAX_SAFE_INTEGER
+  const detailOf = (st) => {
+    if (!st) return ''
+    const pass = st.pass_value ? (passLabels[st.pass_value] ?? st.pass_value) : ''
+    return pass || layerById.get(st.layer_id)?.layer_name || ''
+  }
+
+  function mkColumn(key, g, st, goh, noh) {
+    const areaSf = Number(st?.area) || 0
+    const tonsPlaced = Number(st?.tons) || 0
+    const cyPlaced = Number(st?.volume) || 0
+    const factor = st?.conversion_factor ?? project?.cap_conversion_factor ?? null
+    const designTons = factor ? areaSf * designCyPerSf(g.areaL1Id, areaById) * Number(factor) : 0
+    const areaText = g.unassigned ? 'Unassigned' : (g.areaText || '—')
+    const detail = detailOf(st)
+    return {
+      key,
+      columnLabel: detail ? `${areaText} | ${detail}` : areaText,
+      layerId: st?.layer_id ?? null,
+      layerRank: layerRank(st?.layer_id),
+      areaText,
+      raw: {
+        goh,
+        noh,
+        areaSf,
+        tonsPlaced,
+        cyPlaced,
+        designTons,
+        material: materialNameById.get(st?.material_id) ?? '—',
+        passText: st?.pass_value ? (passLabels[st.pass_value] ?? st.pass_value) : '—',
+        areaLabel: areaText,
+      },
+    }
+  }
+
+  const produced = eqStats.filter(hasCapProduction)
+  const statsByArea = new Map()
+  for (const s of produced) {
+    const key = areaKeyOfStat(s)
+    const list = statsByArea.get(key)
+    if (list) list.push(s)
+    else statsByArea.set(key, [s])
+  }
+
+  const hoursByAreaLayer = new Map()
+  let anyEventLayer = false
+  for (const c of combos) {
+    if (!c.passKey) continue
+    anyEventLayer = true
+    const k = `${areaKeyOfCombo(c)}||${c.passKey}`
+    const cur = hoursByAreaLayer.get(k) ?? { goh: 0, noh: 0 }
+    cur.goh += c.timeHours
+    cur.noh += comboNOH(c)
+    hoursByAreaLayer.set(k, cur)
+  }
+
+  const columns = []
+  for (const [key, g] of groups) {
+    const areaStats = statsByArea.get(key) ?? []
+    if (g.unassigned && areaStats.length === 0 && g.goh <= 0.001) continue
+    const rowsForArea = areaStats.length > 0 ? areaStats : [null]
+
+    const measured = anyEventLayer && areaStats.length > 0
+      ? areaStats.map((st) => (st.layer_id ? hoursByAreaLayer.get(`${key}||${st.layer_id}`) ?? null : null))
+      : null
+    const useMeasured = measured !== null && measured.every((h) => h !== null)
+
+    const totalTons = rowsForArea.reduce((a, s) => a + (Number(s?.tons) || 0), 0)
+    rowsForArea.forEach((st, i) => {
+      const share = rowsForArea.length <= 1
+        ? 1
+        : (totalTons > 0 ? (Number(st?.tons) || 0) / totalTons : 1 / rowsForArea.length)
+      const goh = useMeasured ? measured[i].goh : g.goh * share
+      const noh = useMeasured ? measured[i].noh : g.noh * share
+      columns.push(mkColumn(st ? `${key}##${st.id}` : key, g, st, goh, noh))
+    })
+  }
+
+  columns.sort(
+    (a, b) =>
+      a.areaText.localeCompare(b.areaText) || a.layerRank - b.layerRank || a.columnLabel.localeCompare(b.columnLabel),
+  )
+
+  const totalGoh = [...groups.values()].reduce((a, g) => a + g.goh, 0)
+  const totalNoh = [...groups.values()].reduce((a, g) => a + g.noh, 0)
+  const total = {
+    goh: totalGoh,
+    noh: totalNoh,
+    areaSf: produced.reduce((a, s) => a + (Number(s.area) || 0), 0),
+    tonsPlaced: produced.reduce((a, s) => a + (Number(s.tons) || 0), 0),
+    cyPlaced: produced.reduce((a, s) => a + (Number(s.volume) || 0), 0),
+    designTons: columns.reduce((a, c) => a + c.raw.designTons, 0),
+    material: joinUnique(produced.map((s) => materialNameById.get(s.material_id))),
+    passText: joinUnique(produced.map((s) => (s.pass_value ? (passLabels[s.pass_value] ?? s.pass_value) : null))),
+    areaLabel: joinUnique(columns.map((c) => c.areaText)),
+  }
+
+  return { columns, total }
+}
+
+function shapeCappingSheet({ acts, eqStats, project, labels }) {
+  const { columns, total } = buildCappingColumns({ acts, eqStats, project, labels })
+  const derivesCy =
+    project?.cap_conversion_factor != null || columns.some((c) => c.raw.cyPlaced !== 0)
+  const metricRows = derivesCy
+    ? CAP_METRIC_ROWS
+    : CAP_METRIC_ROWS.filter(([, key]) => !CAP_CY_DERIVED_ROWS.has(key))
+
+  const shaped = columns.length > 0
+    ? columns.map((c) => ({ columnLabel: c.columnLabel, ...shapeCapStats(c.raw) }))
+    : [{
+        columnLabel: 'Standard',
+        ...shapeCapStats({ goh: 0, noh: 0, areaSf: 0, tonsPlaced: 0, cyPlaced: 0, designTons: 0, material: '—', passText: '—', areaLabel: '—' }),
+      }]
+  const shapedTotal = shapeCapStats(total)
+
+  return {
+    columns: shaped.map((c) => c.columnLabel),
+    rows: metricRows.map(([label, key]) => ({
+      label,
+      total: shapedTotal[key],
+      values: shaped.map((c) => c[key]),
+    })),
+    headline: {
+      goh: fmtHrs(total.goh),
+      noh: fmtHrs(total.noh),
+      delay: fmtHrs(Math.max(0, total.goh - total.noh)),
+    },
+  }
+}
+
+export async function buildProductionComboTotalsByEquipmentParam({ appSlug, projectId, project, reportId, dateISO, equipment }) {
   const { gte, lt } = utcDayRange(dateISO)
-  const [activityRes, statsRes, areaRes, passTypeRows, attachmentRes] = await Promise.all([
+  const [activityRes, statsRes, areaRes, passTypeRows, attachmentRes, layerRes, materialRes] = await Promise.all([
     fetchDomainRecords({
       domain: 'jfb_daily_activities', system: 'core', appSlug,
       filters: { project_id: projectId, start_date_time: { gte, lt } },
@@ -398,6 +583,8 @@ export async function buildProductionComboTotalsByEquipmentParam({ appSlug, proj
     fetchDomainRecords({ domain: 'jfb_project_areas', system: 'core', appSlug, filters: { project_id: projectId }, limit: 1000 }),
     fetchPicklistValues('pkl-jfb-pass-type'),
     fetchDomainRecords({ domain: 'jfb_project_attachments', system: 'core', appSlug, filters: { project_id: projectId }, limit: 200 }),
+    fetchDomainRecords({ domain: 'jfb_project_layers', system: 'core', appSlug, filters: { project_id: projectId }, limit: 200 }),
+    fetchDomainRecords({ domain: 'jfb_project_materials', system: 'core', appSlug, filters: { project_id: projectId }, limit: 200 }),
   ])
 
   const areaNameById = new Map((areaRes?.data ?? []).map((a) => [a.id, a.name]))
@@ -405,6 +592,20 @@ export async function buildProductionComboTotalsByEquipmentParam({ appSlug, proj
     (passTypeRows || []).filter((r) => r.is_active !== false).map((r) => [r.value, r.label ?? r.value]),
   )
   const attachmentNameById = new Map((attachmentRes?.data ?? []).map((a) => [a.id, a.name]))
+  const cappingLabels = {
+    areaById: new Map((areaRes?.data ?? []).map((a) => [a.id, a])),
+    areaNameById,
+    passLabels,
+    layerById: new Map(
+      (layerRes?.data ?? []).map((l) => [l.id, { ...l, layer_name: l.layer_report_name || l.layer_name }]),
+    ),
+    materialNameById: new Map(
+      (materialRes?.data ?? []).map((m) => [m.id, m.material_report_name || m.material_name]),
+    ),
+  }
+  const cappingEquipmentIds = new Set(
+    (equipment ?? []).filter((eq) => isCappingEquipment(project, eq, dateISO)).map((eq) => eq.id),
+  )
 
   function comboLabel(c) {
     if (isUnassigned(c)) return 'Standard'
@@ -413,16 +614,8 @@ export async function buildProductionComboTotalsByEquipmentParam({ appSlug, proj
     if (c.passKey) parts.push(passLabels[c.passKey] ?? c.passKey)
     return parts.length ? parts.join(' | ') : 'Standard'
   }
-  // Natural-key match only (area + pass + tsca) -- deliberately excludes
-  // attachment, mirroring reference's statsForCombo(). Production stats
-  // don't reliably carry the same attachment a PE logged on the activity
-  // side, so matching on it would drop real volume/area for no reason.
   function statsMatchCombo(s, c) {
     const areaId = s.area_level_combinations?.[0]?.area_id ?? null
-    // Same tsca bucketing as comboKey() (productionCombos.js): null and
-    // false are the same "not flagged" bucket, only true is distinct. Must
-    // match here too, or a stats row with tsca=false silently stops
-    // matching a combo whose activities left tsca unset (null).
     const statsTscaBucket = s.tsca === true ? 'y' : 'n'
     const comboTscaBucket = c.tsca === true ? 'y' : 'n'
     return areaId === c.areaId
@@ -434,6 +627,7 @@ export async function buildProductionComboTotalsByEquipmentParam({ appSlug, proj
   const statsRows = statsRes?.data ?? []
 
   const byEquipment = new Map()
+  for (const eq of equipment ?? []) byEquipment.set(eq.id, { activities: [], stats: [] })
   for (const a of activities) {
     if (!byEquipment.has(a.equipment_id)) byEquipment.set(a.equipment_id, { activities: [], stats: [] })
     byEquipment.get(a.equipment_id).activities.push(a)
@@ -446,6 +640,10 @@ export async function buildProductionComboTotalsByEquipmentParam({ appSlug, proj
 
   const result = {}
   for (const [equipmentId, { activities: acts, stats: eqStats }] of byEquipment) {
+    if (cappingEquipmentIds.has(equipmentId)) {
+      result[equipmentId] = shapeCappingSheet({ acts, eqStats, project, labels: cappingLabels })
+      continue
+    }
     const actCombos = buildCombosFromActivities(acts, { passKeyOf: (a) => a.pass_type })
 
     const rawCombos = actCombos.map((c) => {
@@ -460,11 +658,6 @@ export async function buildProductionComboTotalsByEquipmentParam({ appSlug, proj
     const totalGoh = rawCombos.reduce((a, r) => a + r.goh, 0)
     const totalNoh = rawCombos.reduce((a, r) => a + r.noh, 0)
     const totalDelay = rawCombos.reduce((a, r) => a + r.delay, 0)
-    // Total volume/area sums every stats row for this equipment/report,
-    // independent of the combo breakdown -- matches reference's Total (which
-    // never derives from the per-combo columns), so a stats row that can't
-    // be attributed to any activity combo still counts toward the day's
-    // total instead of vanishing.
     const totalVolume = eqStats.reduce((a, s) => a + (Number(s.volume) || 0), 0)
     const totalArea = eqStats.reduce((a, s) => a + (Number(s.area) || 0), 0)
     const totalAreaLabel = [...new Set(rawCombos.map((r) => areaNameById.get(r.c.areaId)).filter(Boolean))].join(', ') || '—'
@@ -478,11 +671,6 @@ export async function buildProductionComboTotalsByEquipmentParam({ appSlug, proj
       : [{ columnLabel: 'Standard', areaLabel: '—', ...shapeComboStats(0, 0, 0, 0, 0) }]
     const total = { areaLabel: totalAreaLabel, ...shapeComboStats(totalGoh, totalNoh, totalDelay, totalVolume, totalArea) }
 
-    // Row-oriented on purpose: this Handlebars engine has no way to look up
-    // "column N of this row" by index, so each metric becomes one row with
-    // a `values` array already in the same order as `columns` -- the
-    // template just walks {{#each rows}}...{{#each this.values}} in lockstep
-    // with the header's {{#each columns}}.
     const METRIC_ROWS = [
       ['Gross Operating Hours (GOH)', 'goh'],
       ['Net Operating Hours (NOH)', 'noh'],
@@ -503,19 +691,12 @@ export async function buildProductionComboTotalsByEquipmentParam({ appSlug, proj
         total: total[key],
         values: combos.map((c) => c[key]),
       })),
-      // Whole-day headline figures for the sheet's big Operating/Delay/Total
-      // Hours stat boxes -- those need one named value each, not a row walk.
       headline: { goh: total.goh, noh: total.noh, delay: total.delay },
     }
   }
   return result
 }
 
-// Ported from the non-native app's src/lib/dates.ts weekStartISO -- Sunday
-// of the week containing dateISO. Deliberately NOT mondayStartISO: reference
-// uses a different week boundary for this cover table than it does for the
-// Weekly Summary report (which runs Monday-Sunday production weeks), so this
-// stays local rather than becoming a third caller of mondayStartISO.
 function sundayStartISO(dateISO) {
   const [y, m, d] = dateISO.split('-').map(Number)
   const dt = new Date(y, m - 1, d)
@@ -526,12 +707,11 @@ function sundayStartISO(dateISO) {
   return `${yy}-${mm}-${dd}`
 }
 
-function fmtCoverHrs(n) {
+function fmtCover2dp(n) {
   return n == null ? null : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
-function fmtCoverPct(n) {
-  return n == null ? null : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-}
+const fmtCoverHrs = fmtCover2dp
+const fmtCoverPct = fmtCover2dp
 function fmtCoverCy(n) {
   return n == null ? null : n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 }
@@ -539,30 +719,6 @@ function fmtCoverSf(n) {
   return n == null ? null : Math.round(n).toLocaleString('en-US')
 }
 
-// Matches the non-native app's cover-page "Project Production Table"
-// exactly: 5 fixed metric rows (Total Volume Removed / Total Area Covered /
-// Operating Hours / Delay Hours / Efficiency), each with Day/Week/Project
-// Total columns -- replaces this native port's own earlier invention (a raw
-// per-production-stats-row list plus one "Total (All Passes)" line).
-//
-// Sourced from dvw-jfb-realized-daily-totals (the same per-day cy/sf/goh/noh
-// view Weekly Summary and Realized To-Date already use), fetched once for
-// the whole project history and reduced client-side into Day/Week/Project
-// windows -- Week is Sunday-of-this-week through today (sundayStartISO,
-// reference's own boundary for THIS table), Project is every day up to and
-// including today. Per an explicit product decision, this reuses that view
-// as-is (released reports only) rather than reference's own unrestricted
-// (draft+approved+released) historical rollup, for consistency with how
-// Weekly Summary/Realized To-Date already scope their own history -- an
-// approved-but-not-yet-released day's own numbers won't show until release.
-//
-// Operating Hours (noh) and Delay Hours (goh-noh) come from
-// jfb_daily_activities via the view's own goh/noh convention (every activity
-// counts toward GOH; only activities with no delay_code_id count toward
-// NOH), which is functionally the reference app's own "shift span minus
-// delay" definition whenever a shift has no unlogged gaps. Efficiency is a
-// ratio of SUMMED goh/noh over each window, not an average of daily
-// efficiencies, matching reference's own rollup formula.
 export async function buildCoverProductionTotalsParam({ projectId, project, dateISO }) {
   const projectStart = project?.production_start_date || (project?.start_date ? project.start_date.slice(0, 10) : '2000-01-01')
   const weekStart = sundayStartISO(dateISO)
@@ -591,10 +747,6 @@ export async function buildCoverProductionTotalsParam({ projectId, project, date
   }
 
   const dayRow = days.find((d) => d.date === dateISO) ?? null
-  // No activities logged today (or the day isn't released yet) -- reference
-  // shows an em-dash for the time-based metrics rather than a misleading
-  // "0.00 hrs", since a shift that was never logged isn't the same as one
-  // that logged zero productive hours.
   const dayHasActivity = !!dayRow && (dayRow.goh !== 0 || dayRow.noh !== 0)
   const dayEfficiencyPct = dayHasActivity && dayRow.goh > 0 ? (dayRow.noh / dayRow.goh) * 100 : 0
   const day = dayRow
@@ -638,17 +790,6 @@ function fmtFlow0(n) {
   return Math.round(n).toLocaleString('en-US')
 }
 
-// Matches the reference app's buildFlowStats()/PipeLengthsBody exactly.
-// Flow Stats is per-equipment (jfb_hydraulic_flow_stats has its own
-// equipment_id): Previous Total Flow is every one of this equipment's
-// daily_total_gal entries through yesterday, Project Total is through
-// today -- both always show a real number even if today has no new
-// reading, as long as SOME history exists (matches reference's own
-// "return null only when there's neither today's values nor any history"
-// rule, rather than hiding totals just because today wasn't logged yet).
-// Pipe Lengths is project-wide (jfb_hydraulic_pipe_configurations has no
-// equipment_id column), so every equipment's sheet gets the same segment
-// list for the day, same as reference's own project-wide pipeRows.
 export async function buildFlowAndPipeByEquipmentParam({ appSlug, projectId, dateISO }) {
   const [flowRes, pipeRes] = await Promise.all([
     fetchDomainRecords({ domain: 'jfb_hydraulic_flow_stats', system: 'core', appSlug, filters: { project_id: projectId }, limit: 5000 }),
@@ -691,11 +832,6 @@ export async function buildFlowAndPipeByEquipmentParam({ appSlug, projectId, dat
   return { flowStatsByEquipment, pipeSegments, pipeTotalLength }
 }
 
-// Ported from the non-native app's validateForPdf: blocks PDF generation
-// until narratives are filled, at least 2 photos are uploaded, every photo
-// has a label, and no photo is an unconvertible HEIC/HEIF file. Reuses the
-// already-built narrativeSections param so narrative content isn't fetched
-// twice.
 export async function validatePdfIssues({ appSlug, reportId, narrativeSections }) {
   const issues = []
 
@@ -743,9 +879,6 @@ function naOr(value) {
   return trimmed || 'N/A'
 }
 
-// "75 °F" / "0.30 IN" / "—" when null -- matches the reference app's PDF
-// ClimateSubRow fallback exactly (an em dash, distinct from the "N/A" the
-// Daily Safety Updates rows use).
 function fmtClimate(value, unit, decimals) {
   if (value === null || value === undefined || value === '') return '—'
   const num = Number(value)
@@ -753,15 +886,6 @@ function fmtClimate(value, unit, decimals) {
   return `${decimals != null ? num.toFixed(decimals) : Math.round(num)} ${unit}`
 }
 
-// Builds the one caller-resolved parameter the report template binds its
-// whole Safety page to -- same "resolve client-side, pass as JSON" pattern
-// as narrativeSections/dailyActivityByEquipment above, chosen for the same
-// reason: Culture Tenant needs a join (report_safety.culture_tenant_id ->
-// culture_tenants), Equipment needs an as-of-this-date mobilize/demob
-// window filter, and Precip MTD/Project Total need a project-lifetime sum
-// -- none expressible as a single domain-query source or in this engine's
-// Handlebars (no eq/date-math helpers), so all three are resolved here
-// via the same dvw-jfb-precip-sums data view SafetyTab.jsx itself calls.
 export async function buildSafetyPageDataParam({ appSlug, projectId, reportId, dateISO, project }) {
   const [safetyRes, cultureRes, crewRes, equipmentRes, categoryLabelRows, precipSumRows, crewHoursRows] = await Promise.all([
     fetchDomainRecords({ domain: 'jfb_report_safety_v2', system: 'core', appSlug, filters: { report_id: reportId }, limit: 1 }),
@@ -788,9 +912,6 @@ export async function buildSafetyPageDataParam({ appSlug, projectId, reportId, d
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
     .map((r) => ({ category: r.category || '—', count: r.count ?? 0, hours: Number(r.hours) || 0 }))
 
-  // "On site" = mobilized on/before this report's date and not yet
-  // demobilized (or demobilized on/after this date) -- same window
-  // SiteEquipmentTab's own mobilize/demobilize fields define.
   const equipmentRows = (equipmentRes?.data ?? [])
     .filter((r) => {
       if (!r.mobilized_at || r.mobilized_at > dateISO) return false
@@ -809,13 +930,6 @@ export async function buildSafetyPageDataParam({ appSlug, projectId, reportId, d
       : Promise.resolve(null),
   ])
 
-  // Project-lifetime crew-hours totals, PDF-only (not shown anywhere on
-  // screen) -- mirrors the reference app's SafetyPage.tsx crewTotals
-  // exactly: todayHours/totalCount from this report's own crew rows,
-  // totalProjectHours from summing every crew row the project has ever
-  // had (dvw-jfb-crew-hours-total, no date filter, matching
-  // fetchProjectCrewHistory's own project_id-only scope), and
-  // previousProjectHours = max(0, total - today).
   const todayHours = crewRows.reduce((sum, r) => sum + r.hours, 0)
   const totalCount = crewRows.reduce((sum, r) => sum + r.count, 0)
   const totalProjectHours = Number(crewHoursRows?.[0]?.total_hours) || 0
@@ -863,12 +977,6 @@ export async function buildSafetyPageDataParam({ appSlug, projectId, reportId, d
   }
 }
 
-// Ported from the non-native app's live-computed ChecklistState. Two
-// adaptations forced by schema differences, noted where they diverge:
-// native has no "UNATTRIBUTED" gap-marker category, so event_log_reviewed
-// only checks that activities exist for the day (reference also requires
-// zero unresolved gap placeholders); transitions_added is permanently true
-// on both apps since native has no TRANSITION marker-event concept at all.
 export async function buildCompletionChecklist({ appSlug, projectId, reportId, dateISO }) {
   const { gte, lt } = utcDayRange(dateISO)
 
@@ -901,12 +1009,104 @@ export async function buildCompletionChecklist({ appSlug, projectId, reportId, d
 
   const narrativesFilled = narrativeSections.filter((s) => s.content.trim().length > 0).length
 
+  const unattributed = activities.filter((a) => a.category === UNATTRIBUTED_CATEGORY).length
+
   return {
-    event_log_reviewed: activities.length > 0,
+    event_log_reviewed: activities.length > 0 && unattributed === 0,
     transitions_added: true,
     production_stats_entered: productionEntered > 0,
     photos_complete: acceptedPhotos >= 2,
     narratives_complete: narrativeSections.length > 0 && narrativesFilled >= narrativeSections.length,
     metrics_entered: manualMetrics.length === 0 || metricValues.length >= manualMetrics.length,
   }
+}
+
+/**
+ * The 5 PM-review checks (PMReviewPanel), distinct from the 6-item PE-facing
+ * completion checklist above -- same idea, different thresholds, and this
+ * one is never na'd out to "always passes" the way the old placeholder was.
+ * Mirrors the non-native app's PMReviewPanel.tsx effect exactly, including
+ * running as its own independent fetch rather than sharing data with
+ * buildCompletionChecklist -- the reference app doesn't share between them
+ * either, so neither does this.
+ */
+export async function buildPmReviewChecklist({ appSlug, projectId, reportId, dateISO, equipment }) {
+  const { gte, lt } = utcDayRange(dateISO)
+
+  const [activityRes, productionRes, narrativeSections, photosRes] = await Promise.all([
+    fetchDomainRecords({
+      domain: 'jfb_daily_activities', system: 'core', appSlug,
+      filters: { project_id: projectId, start_date_time: { gte, lt } },
+      limit: 1000,
+    }),
+    fetchDomainRecords({ domain: 'jfb_production_stats', system: 'core', appSlug, filters: { report_id: reportId }, limit: 500 }),
+    buildNarrativeSectionsParam({ appSlug, projectId, reportId }),
+    fetchDomainRecords({ domain: 'jfb_report_photos', system: 'core', appSlug, filters: { report_id: reportId }, limit: 50 }),
+  ])
+
+  const activities = (activityRes?.data ?? []).filter((a) => sameCalendarDay(a.start_date_time, dateISO, a.timezone))
+
+  const checks = []
+
+  checks.push({
+    key: 'event_log',
+    label: 'Event log present',
+    status: activities.length > 0 ? 'pass' : 'fail',
+    detail: activities.length > 0 ? `${activities.length} events across ${equipment.length} equipment` : 'No events synced',
+  })
+
+  const imbalanced = []
+  for (const eq of equipment) {
+    const eqEvents = activities.filter((a) => a.equipment_id === eq.id)
+    const totals = shiftTotals(eqEvents)
+    if (totals && !totals.balanced) {
+      const imbalanceMinutes = Math.round((totals.ops + totals.delay - totals.shift) * 60)
+      imbalanced.push(`${eq.name} (${imbalanceMinutes > 0 ? '+' : ''}${imbalanceMinutes} min)`)
+    }
+  }
+  checks.push({
+    key: 'shift_balance',
+    label: 'Operational + Delay = Shift duration',
+    status: activities.length === 0 ? 'na' : imbalanced.length === 0 ? 'pass' : 'fail',
+    detail: activities.length === 0 ? 'No events to check' : imbalanced.length === 0 ? 'All equipment balanced' : `Imbalanced: ${imbalanced.join('; ')}`,
+  })
+
+  const production = productionRes?.data ?? []
+  const statsWithValues = production.filter((p) => p.volume !== null && p.volume !== undefined)
+  checks.push({
+    key: 'production',
+    label: 'Production stats entered',
+    status: statsWithValues.length > 0 ? 'pass' : 'fail',
+    detail: statsWithValues.length > 0 ? `${statsWithValues.length} row${statsWithValues.length === 1 ? '' : 's'} with values` : 'No production rows have a value entered',
+  })
+
+  const narrativesFilled = narrativeSections.filter((s) => s.content.trim().length > 0).length
+  checks.push({
+    key: 'narratives',
+    label: 'Narratives complete',
+    status: narrativesFilled >= narrativeSections.length ? 'pass' : 'fail',
+    detail: `${narrativesFilled} of ${narrativeSections.length} sections written`,
+  })
+
+  const photos = (photosRes?.data ?? []).filter((p) => p.photo_file_path)
+  const labeled = photos.filter((p) => p.label?.trim())
+  const rejected = photos.filter((p) => p.pm_comment)
+  let photoStatus
+  let photoDetail
+  if (photos.length < 2) {
+    photoStatus = 'fail'
+    photoDetail = `${photos.length} of 2 uploaded`
+  } else if (labeled.length < 2) {
+    photoStatus = 'fail'
+    photoDetail = `${labeled.length} of 2 photos labeled`
+  } else if (rejected.length > 0) {
+    photoStatus = 'fail'
+    photoDetail = `${rejected.length} photo${rejected.length === 1 ? '' : 's'} rejected — awaiting replacement`
+  } else {
+    photoStatus = 'pass'
+    photoDetail = 'Both photos uploaded + labeled'
+  }
+  checks.push({ key: 'photos', label: 'Both photos uploaded + labeled', status: photoStatus, detail: photoDetail })
+
+  return checks
 }

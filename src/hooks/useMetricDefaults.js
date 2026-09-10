@@ -1,7 +1,3 @@
-import { useDomainData } from './useDomainData'
+import { makeListHook } from './domainHookFactory'
 
-export function useMetricDefaults() {
-  const { records, loading, error } =
-    useDomainData({ domain: 'jfb_metric_defaults', system: 'core' })
-  return { metricDefaults: records, loading, error }
-}
+export const useMetricDefaults = makeListHook('jfb_metric_defaults', 'metricDefaults', null)

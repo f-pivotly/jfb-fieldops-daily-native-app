@@ -33,7 +33,7 @@
       "slug": "report_id",
       "type": "uuid",
       "label": "Report Id",
-      "unique": false,
+      "unique": true,
       "indexed": true,
       "masking": {
         "masked": false
@@ -48,7 +48,7 @@
         "resolution_policy": "lookup_only"
       },
       "column_name": "report_id",
-      "description": "One row per report. The daily report this note/reference reading belongs to. Should be unique per report.",
+      "description": "One row per report. The daily report this note/reference reading belongs to. Unique per report -- enforced at the domain level as defense-in-depth against a client-side race (e.g. switching report dates without leaving the Water Quality tab) issuing a duplicate create instead of an update.",
       "conflict_resolution": {
         "code": "lww"
       },

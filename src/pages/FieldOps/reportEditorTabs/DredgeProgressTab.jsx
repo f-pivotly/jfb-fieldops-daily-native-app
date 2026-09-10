@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Box, Button, Checkbox, Group, Stack, Text } from '@mantine/core'
+import WarningBanner from './components/WarningBanner'
 import { useDomainData } from '../../../hooks/useDomainData'
 import { useProjectAreas } from '../../../hooks/useProjectAreas'
 import { useDredgeEquipmentConfig } from '../../../hooks/useDredgeEquipmentConfig'
@@ -44,10 +45,6 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
   const [recovery, setRecovery] = useState('')
   const [activeCellLabels, setActiveCellLabels] = useState([])
 
-  // Derived, not synced via an effect: `recovery` only tracks an explicit PE
-  // override; until they type one, the field displays (and generate uses)
-  // the project's saved default -- same value either way, just not copied
-  // into state that could drift from it.
   const displayedRecovery = recovery !== '' ? recovery : (effectiveConfig?.volume_recovery_factor ?? '')
 
   const reportDateById = new Map((reports ?? []).map((r) => [r.id, r.report_date]))
@@ -65,8 +62,6 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
   const existingProgressRecord = (progressRecords ?? []).find(
     (row) => row.report_id === report?.id && row.equipment_id === selected?.id,
   )
-  // Same "derived, not synced via an effect" pattern as displayedRecovery
-  // above: materialText only tracks an explicit PE override for today.
   const displayedMaterialText = materialText !== ''
     ? materialText
     : (existingProgressRecord?.material_text || latestPriorMaterialText || effectiveConfig?.default_material_note || '')
@@ -239,7 +234,7 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
             cellStatusBusy={cellStatusBusy}
           />
           {clusterWindows.length >= 2 && (
-            <Box mt={12} p={10} style={{ background: '#fbf1dd', border: '1px solid #e6cb87', borderRadius: 6 }}>
+            <WarningBanner mt={12} p={10}>
               <Checkbox
                 label={`Split into ${clusterWindows.length} focused views (large move detected)`}
                 checked={splitViews}
@@ -265,7 +260,7 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
                   </Button>
                 </Group>
               )}
-            </Box>
+            </WarningBanner>
           )}
           {hint && <Text size="xs" c="dimmed" mt={8}>{hint}</Text>}
         </Box>

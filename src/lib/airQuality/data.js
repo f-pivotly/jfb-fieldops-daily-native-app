@@ -1,26 +1,6 @@
-// Shapes raw jfb_air_quality_readings into the Daily Air Monitoring page
-// model -- 15-minute time-weighted averages per station in mg/m3, plus the
-// dynamic Alert/Action level series. Ported from the non-native app's
-// src/lib/airQuality/data.ts.
-//
-//   station TWA  = average of minute values in the 15-min bucket, ug -> mg
-//   Alert Level  = alert_offset  + MIN(llra-chart stations at that slot)
-//   Action Level = action_offset + MIN(llra-chart stations at that slot)
+import { windowUtc, timeLabelInZone } from '../monitoringWindow'
 
-import { zonedTimeToUtc } from '../waterQuality/data'
-
-export function airWindowUtc(config, dateISO) {
-  return {
-    startUtc: zonedTimeToUtc(dateISO, config.window_start, config.timezone),
-    endUtc: zonedTimeToUtc(dateISO, config.window_end, config.timezone),
-  }
-}
-
-function timeLabelInZone(d, timeZone) {
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone, hour: 'numeric', minute: '2-digit', hour12: true,
-  }).format(d)
-}
+export const airWindowUtc = windowUtc
 
 export function buildAirDay(config, readings, dateISO) {
   const { startUtc, endUtc } = airWindowUtc(config, dateISO)
@@ -46,7 +26,7 @@ export function buildAirDay(config, readings, dateISO) {
     const values = {}
     for (const s of config.stations) {
       const b = buckets.get(`${s.key}|${t}`)
-      values[s.key] = b && b.n > 0 ? b.sum / b.n / 1000 : null // ug -> mg
+      values[s.key] = b && b.n > 0 ? b.sum / b.n / 1000 : null
     }
     const llraVals = llraKeys.map((k) => values[k]).filter((v) => v !== null)
     const minLlra = llraVals.length > 0 ? Math.min(...llraVals) : null

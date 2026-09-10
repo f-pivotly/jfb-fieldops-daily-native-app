@@ -3,13 +3,13 @@ import { useParams, Link } from 'react-router-dom'
 import { Box, ScrollArea, Grid, Text, Badge, Checkbox, Group, Stack, Button, Tabs } from '@mantine/core'
 import { REPORT_STATUS_LABEL, REPORT_STATUS_COLOR } from '../../config/reportStatus'
 import { shouldShowDredgeProgress } from '../../config/dredgeProgress'
-import { shouldShowWaterQuality } from '../../config/waterMonitoring'
-import { shouldShowAirQuality } from '../../config/airMonitoring'
+import { shouldShowPlacementProgress } from '../../config/placementProgress'
+import { shouldShowSpreaderProgress } from '../../config/spreaderProgress'
+import { pickDensity } from './lib/coverDensity'
 import { useProject } from '../../hooks/useProject'
 import { useReports } from '../../hooks/useReports'
 import { useEquipment } from '../../hooks/useEquipment'
-import { useWaterMonitoringConfig } from '../../hooks/useWaterMonitoringConfig'
-import { useAirMonitoringConfig } from '../../hooks/useAirMonitoringConfig'
+import { usePlacementConfig } from '../../hooks/usePlacementConfig'
 import { api, createDomainRecord, executeReport, fetchCurrentUser, fetchFileById } from '../../data'
 import { useAppConfig } from '../../contexts/appConfigContext'
 import { useFieldOpsAction } from '../../contexts/fieldOpsAccessContext'
@@ -35,6 +35,8 @@ import NarrativesTab from './reportEditorTabs/NarrativesTab'
 import MetricsTab from './reportEditorTabs/MetricsTab'
 import SafetyTab from './reportEditorTabs/SafetyTab'
 import DredgeProgressTab from './reportEditorTabs/DredgeProgressTab'
+import PlacementProgressTab from './reportEditorTabs/PlacementProgressTab'
+import SpreaderProgressTab from './reportEditorTabs/SpreaderProgressTab'
 import WaterQualityTab from './reportEditorTabs/WaterQualityTab'
 import AirQualityTab from './reportEditorTabs/AirQualityTab'
 
@@ -48,6 +50,8 @@ const CONTENT_TABS = [
 ]
 
 const DREDGE_PROGRESS_TAB = { key: 'dredge_progress', label: 'Dredge Progress', Comp: DredgeProgressTab }
+const PLACEMENT_PROGRESS_TAB = { key: 'placement_progress', label: 'Placement Progress', Comp: PlacementProgressTab }
+const SPREADER_PROGRESS_TAB = { key: 'spreader_progress', label: 'Spreader Progress', Comp: SpreaderProgressTab }
 const WATER_QUALITY_TAB = { key: 'water_quality', label: 'Water Quality', Comp: WaterQualityTab }
 const AIR_QUALITY_TAB = { key: 'air_quality', label: 'Air Quality', Comp: AirQualityTab }
 
@@ -60,8 +64,6 @@ const CHECKLIST_LABELS = {
   metrics_entered: 'Metrics entered',
 }
 
-// Mirrors the non-native app's ReportEditor.tsx: mobilization day marks
-// exactly these 3 of the 6 items N/A rather than requiring them.
 const MOBILIZATION_NA_ITEMS = new Set(['event_log_reviewed', 'production_stats_entered', 'metrics_entered'])
 const EMPTY_NA_ITEMS = new Set()
 
@@ -83,7 +85,7 @@ export default function ReportEditorPage() {
   }, [project, reportsLoading, report, date, ensureReport])
 
   const { equipment } = useEquipment(projectId)
-  const [mobDay, setMobDay] = useState(false)
+  const mobDay = report?.no_production_day ?? false
   const [selectedEquipment, setSelectedEquipment] = useState(null)
   const [tab, setTab] = useState('event_log')
   const [downloadingPdf, setDownloadingPdf] = useState(false)
@@ -91,17 +93,21 @@ export default function ReportEditorPage() {
   const [pdfIssues, setPdfIssues] = useState(null)
   const canSkipPdfValidation = useFieldOpsAction('skip_pdf_validation')
   const effectiveEquipmentId = selectedEquipment ?? equipment[0]?.id ?? null
+  const effectiveEquipment = equipment.find((eq) => eq.id === effectiveEquipmentId) ?? null
   const canDownloadPdf = status === 'approved' || status === 'released'
   const canSubmitForReview = status === 'draft'
+  const canRelease = useFieldOpsAction('release_report') && status === 'approved'
   const canUnlock = status === 'approved' || status === 'released'
-  const { config: waterConfig } = useWaterMonitoringConfig(project?.id)
-  const { config: airConfig } = useAirMonitoringConfig(project?.id)
+  const [releasing, setReleasing] = useState(false)
+  const { config: placementConfig } = usePlacementConfig(project?.id)
   let contentTabs = CONTENT_TABS
-  if (shouldShowDredgeProgress(project)) contentTabs = [...contentTabs, DREDGE_PROGRESS_TAB]
-  if (shouldShowWaterQuality(waterConfig)) contentTabs = [...contentTabs, WATER_QUALITY_TAB]
-  if (shouldShowAirQuality(airConfig)) contentTabs = [...contentTabs, AIR_QUALITY_TAB]
+  if (shouldShowDredgeProgress(project, effectiveEquipment, date)) contentTabs = [...contentTabs, DREDGE_PROGRESS_TAB]
+  if (shouldShowPlacementProgress(project, effectiveEquipment, date, placementConfig)) contentTabs = [...contentTabs, PLACEMENT_PROGRESS_TAB]
+  if (shouldShowSpreaderProgress(project, effectiveEquipment, date)) contentTabs = [...contentTabs, SPREADER_PROGRESS_TAB]
+  contentTabs = [...contentTabs, WATER_QUALITY_TAB, AIR_QUALITY_TAB]
   const naItems = mobDay ? MOBILIZATION_NA_ITEMS : EMPTY_NA_ITEMS
   const checklistDone = !!checklist && Object.keys(CHECKLIST_LABELS).every((key) => naItems.has(key) || checklist[key])
+  const activeTab = contentTabs.some((t) => t.key === tab) ? tab : 'event_log'
 
   useEffect(() => {
     if (!project?.id || !report?.id) return
@@ -132,6 +138,26 @@ export default function ReportEditorPage() {
     await updateReport(report.id, { status: 'draft' })
   }
 
+  async function handleToggleNoProduction(value) {
+    if (!report?.id) return
+    await updateReport(report.id, { no_production_day: value })
+  }
+
+  async function handleRelease() {
+    if (!report?.id) return
+    setReleasing(true)
+    try {
+      const me = await fetchCurrentUser()
+      await updateReport(report.id, {
+        status: 'released',
+        released_at: new Date().toISOString(),
+        released_by_user_id: me.id,
+      })
+    } finally {
+      setReleasing(false)
+    }
+  }
+
   async function handleDownloadPdf(opts = {}) {
     setDownloadingPdf(true)
     setPdfIssues(null)
@@ -145,13 +171,12 @@ export default function ReportEditorPage() {
         return
       }
 
-      const equipmentIds = equipment.map((eq) => eq.id)
       const [dailyActivityData, photoAssets, dredgeChartAssets, safetyPageData, productionStatsByEquipment, productionTotals, flowAndPipe] = await Promise.all([
-        buildDailyActivityByEquipmentParam({ appSlug: config.appSlug, projectId, dateISO: date, equipmentIds }),
+        buildDailyActivityByEquipmentParam({ appSlug: config.appSlug, projectId, project, dateISO: date, equipment }),
         buildPhotoAssetsParam({ appSlug: config.appSlug, reportId }),
-        buildDredgeChartAssetsParam({ appSlug: config.appSlug, reportId }),
+        buildDredgeChartAssetsParam({ appSlug: config.appSlug, reportId, project, equipment, dateISO: date }),
         buildSafetyPageDataParam({ appSlug: config.appSlug, projectId, reportId, dateISO: date, project }),
-        buildProductionComboTotalsByEquipmentParam({ appSlug: config.appSlug, projectId, reportId, dateISO: date }),
+        buildProductionComboTotalsByEquipmentParam({ appSlug: config.appSlug, projectId, project, reportId, dateISO: date, equipment }),
         buildCoverProductionTotalsParam({ projectId, project, dateISO: date }),
         buildFlowAndPipeByEquipmentParam({ appSlug: config.appSlug, projectId, dateISO: date }),
       ])
@@ -159,11 +184,16 @@ export default function ReportEditorPage() {
       const { flowStatsByEquipment, pipeSegments, pipeTotalLength } = flowAndPipe
       const dateTable = buildDateTableParams({ date, project })
       const reportNumberByEquipment = buildEquipmentReportNumbers({ date, equipment })
+      const { density: coverDensity } = pickDensity({
+        narratives: narrativeSections,
+        metricsCount: (productionTotals?.rows ?? []).length,
+      })
       const result = await executeReport('rpt-jfb-daily-report', {
         parameters: {
           projectId,
           reportId,
           date,
+          noProductionDay: !!report?.no_production_day,
           projectFilter: { id: projectId },
           reportFilter: { report_id: reportId },
           equipmentFilter: { project_id: projectId },
@@ -180,6 +210,7 @@ export default function ReportEditorPage() {
           pipeSegments,
           pipeTotalLength,
           reportNumberByEquipment,
+          coverDensity,
           ...dateTable,
         },
       })
@@ -259,6 +290,17 @@ export default function ReportEditorPage() {
                 </Button>
               )}
 
+              {canRelease && (
+                <Button
+                  size="xs"
+                  loading={releasing}
+                  onClick={handleRelease}
+                  style={{ background: '#0F2744', border: 'none' }}
+                >
+                  Release
+                </Button>
+              )}
+
               {canUnlock && (
                 <Button size="xs" variant="default" loading={reportSaving} onClick={handleUnlock}>
                   Unlock
@@ -269,7 +311,7 @@ export default function ReportEditorPage() {
                 size="xs"
                 label="Mobilization day (no production)"
                 checked={mobDay}
-                onChange={(e) => setMobDay(e.currentTarget.checked)}
+                onChange={(e) => handleToggleNoProduction(e.currentTarget.checked)}
               />
 
               <Box>
@@ -309,7 +351,7 @@ export default function ReportEditorPage() {
                 </Stack>
               </Box>
 
-              <PMReviewPanel report={report} onApprove={handleApprove} onSendBack={handleSendBack} saving={reportSaving} />
+              <PMReviewPanel project={project} report={report} equipment={equipment} onApprove={handleApprove} onSendBack={handleSendBack} saving={reportSaving} />
 
               {canDownloadPdf && (
                 <Stack gap={6}>
@@ -345,7 +387,7 @@ export default function ReportEditorPage() {
           </Grid.Col>
 
           <Grid.Col span={{ base: 12, lg: 9 }}>
-            <Tabs value={tab} onChange={setTab} keepMounted={false}>
+            <Tabs value={activeTab} onChange={setTab} keepMounted={false}>
               <Tabs.List mb={12}>
                 {contentTabs.map((t) => (
                   <Tabs.Tab key={t.key} value={t.key}>{t.label}</Tabs.Tab>

@@ -1,41 +1,18 @@
-// Realized To-Date PDF param building. Shapes a computed RealizedReport (see
-// realizedToDate.js) into the parameters rpt-jfb-realized-to-date.json's
-// Handlebars template expects, and renders the two charts as inline SVG
-// markup passed through as unescaped strings.
-//
-// The reference app generates this PDF entirely client-side via
-// @react-pdf/renderer -- its two charts (RealizedToDateDocument.tsx's
-// DailyBarChart / CumulativeChart) are already just react-pdf's <Svg>/<Rect>/
-// <Polyline>/<Circle> primitives, i.e. plain SVG geometry with no
-// react-pdf-specific behavior. Since the Report Engine renders HTML (which
-// natively embeds <svg>) to PDF, that same coordinate math is ported here
-// to build real SVG strings instead -- no canvas/rasterization needed, and
-// no image-asset upload step like the Dredge/Weekly chart PNGs use, because
-// this is vector data the engine can render directly.
-
-import { prettyDate } from './realizedToDate'
+import { prettyDate, fmtNum as num, fmtHrs as hrs } from './realizedToDate'
 
 const BRENNAN_NAVY = '#002f6d'
-const GOAL_COLOR = '#e0a800' // amber -- goal bars / planned-pace line
-const FORECAST_COLOR = '#2563eb' // bright blue -- overall-rate forecast line
+const GOAL_COLOR = '#e0a800'
+const FORECAST_COLOR = '#2563eb'
 
-function num(n) {
-  return Math.round(n ?? 0).toLocaleString()
-}
 function rate(n) {
   return (n ?? 0).toLocaleString(undefined, { maximumFractionDigits: 1 })
-}
-function hrs(n) {
-  return (n ?? 0).toFixed(2)
 }
 function shortMD(iso) {
   const [, mm, dd] = iso.split('-')
   return `${Number(mm)}/${Number(dd)}`
 }
 
-/** Bar chart: this week's CY/day, with an optional bid-goal reference bar
- *  per day. Ported from RealizedToDateDocument.tsx's DailyBarChart. */
-export function buildDailyBarChartSvg(bars, bidGoal, plotW = 460, H = 110) {
+function buildDailyBarChartSvg(bars, bidGoal, plotW = 460, H = 110) {
   const axisW = 30
   const chartW = plotW - axisW
   const maxVal = Math.max(...bars.map((b) => b.cy), bidGoal ?? 0, 1)
@@ -72,24 +49,10 @@ export function buildDailyBarChartSvg(bars, bidGoal, plotW = 460, H = 110) {
     })
     .join('')
 
-  // width="100%" (not a fixed plotW px/pt number) so the chart actually
-  // fills whatever container it lands in -- a hardcoded pixel width here
-  // previously rendered narrower than the page because the HTML->PDF engine
-  // doesn't necessarily map SVG user-units 1:1 to the page's point-based
-  // content width. viewBox still drives the internal coordinate system and
-  // aspect ratio; height is intentionally omitted so it scales proportionally.
   return `<svg width="100%" viewBox="0 0 ${plotW} ${H + 20}" xmlns="http://www.w3.org/2000/svg" style="display:block">${gridLines}${yLabels}${bars_}${labels}</svg>`
 }
 
-/** Cumulative-vs-goal line chart: navy = actual, amber dashed = bid-pace
- *  projection, blue dashed = overall-rate forecast from the last actual
- *  point. Ported from RealizedToDateDocument.tsx's CumulativeChart. */
-// plotW default is the full landscape page's content width (letter landscape
-// 792pt - 2x24pt margins = 744pt, minus a little breathing room) -- the
-// reference app's own default (540) is sized for ITS portrait page's 540pt
-// content width and left this chart visibly smaller than it needs to be on
-// our wider landscape page.
-export function buildCumulativeChartSvg(points, weeks, goal, goalProjection, rateForecastEndCy, plotW = 700, H = 110) {
+function buildCumulativeChartSvg(points, weeks, goal, goalProjection, rateForecastEndCy, plotW = 700, H = 110) {
   const axisW = 36
   const chartW = plotW - axisW
   const N = Math.max(1, weeks.length)
@@ -139,20 +102,14 @@ export function buildCumulativeChartSvg(points, weeks, goal, goalProjection, rat
     })
     .join('')
 
-  // Same width="100%" fix as buildDailyBarChartSvg -- see comment there.
   return `<svg width="100%" viewBox="0 0 ${plotW} ${H + 20}" xmlns="http://www.w3.org/2000/svg" style="display:block">${gridH}${gridV}${yLabels}${goalLine}${forecastLine}${actualLine}${dots}${weekLabels}</svg>`
 }
 
-// Matches pkl-jfb-primary-measure's static values -- project.primary_measure
-// stores the raw picklist value (e.g. "linear_ft"), not the display label
-// ("Linear FT"), and nothing upstream resolves it before it reaches here.
 const UNIT_LABELS = { cy: 'CY', tons: 'Tons', sf: 'SF', linear_ft: 'Linear FT' }
 function prettyUnit(raw) {
   return UNIT_LABELS[(raw ?? '').toLowerCase()] ?? raw
 }
 
-/** Shapes a computed RealizedReport into the exact parameter object
- *  rpt-jfb-realized-to-date.json's Handlebars template consumes. */
 export function buildRealizedReportParams({ report, project, projectCode, generatedISO }) {
   const sm = report.summary
   const u = prettyUnit(sm.unit)

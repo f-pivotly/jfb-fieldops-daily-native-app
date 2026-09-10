@@ -1,4 +1,4 @@
-export const RESERVED_CODE_SLOTS = {
+const RESERVED_CODE_SLOTS = {
   "Hydraulic Dredging": [
     6, 7, 8, 9, 35, 36, 37, 38, 39, 44, 45, 46, 47, 48, 49, 59, 70, 71, 72,
     73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 96,

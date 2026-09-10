@@ -1,7 +1,3 @@
-import { useDomainData } from './useDomainData'
+import { makeListHook } from './domainHookFactory'
 
-export function useWeeklySummaryPhotos(projectId) {
-  const { records, loading, error, creating, updating, deleting, create, update, remove } =
-    useDomainData({ domain: 'jfb_weekly_summary_photos', system: 'core', projectId })
-  return { photos: records, loading, error, creating, updating, deleting, create, update, remove }
-}
+export const useWeeklySummaryPhotos = makeListHook('jfb_weekly_summary_photos', 'photos', 'project')

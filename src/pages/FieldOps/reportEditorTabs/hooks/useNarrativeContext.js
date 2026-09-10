@@ -2,11 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { executeDataView } from '../../../../data'
 import { useDomainData } from '../../../../hooks/useDomainData'
 
-// "Today's context" for the Narratives tab: per-equipment Op/Delay hours and
-// event list (from the dvw-jfb-narrative-context-events data view, which
-// does the delay-code/area JOIN work server-side) plus CY/SF (from the
-// existing jfb_production_stats domain read -- that table is small enough
-// per-report that a dedicated data view isn't worth the round trip).
 export function useNarrativeContext({ projectId, reportId, reportDate, equipment }) {
   const [events, setEvents] = useState([])
   const [loading, setLoading] = useState(true)

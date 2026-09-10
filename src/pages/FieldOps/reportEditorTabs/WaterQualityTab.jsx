@@ -1,32 +1,26 @@
 import { useMemo, useState } from 'react'
-import { Box, Text, Table, Stack, Group, Button, Textarea, TextInput, Image, Alert } from '@mantine/core'
+import { Box, Text, Table, Stack, Group, Button, Textarea, TextInput, Image, Alert, FileButton } from '@mantine/core'
+import SafeError from '../../../components/SafeError'
 import { useWaterMonitoringConfig } from '../../../hooks/useWaterMonitoringConfig'
 import { useWaterQualityReadings } from '../../../hooks/useWaterQualityReadings'
 import { useWaterMonitoringNotes } from '../../../hooks/useWaterMonitoringNotes'
 import { useWaterMonitoringNotesForm } from '../../../hooks/useWaterMonitoringNotesForm'
+import { useAttachmentField } from '../../../hooks/useAttachmentField'
 import { buildTurbidityDay } from '../../../lib/waterQuality/data'
 import { renderTurbidityChart } from '../../../lib/waterQuality/chart'
 
-// Water Quality tab -- the Daily Turbidity Reporting page. Ported from the
-// non-native app's src/components/WaterQualityTab.tsx, fixed-site (HydroVu)
-// variant only -- the tidal/WQData LIVE variant (mode toggle, NOAA tide
-// table, daily reference NTU) is out of scope for this phase, see
-// WATER_AIR_QUALITY_MIGRATION_PLAN.md section 5.
-//
-// Everything here is read-only except Notes and the monitor coordinates --
-// same "one human input on an auto-populated page" shape as the reference
-// app. Currently backed by sample data (see the hooks this imports); no
-// wiring changes needed here once those hooks switch to useDomainData.
+const MAX_AERIAL_BYTES = 10 * 1024 * 1024
 
 function fmt(v) {
   return v === null || v === undefined ? '—' : v.toFixed(1)
 }
 
 export default function WaterQualityTab({ project, report }) {
-  const { config, loading: configLoading } = useWaterMonitoringConfig(project?.id)
-  const { readings } = useWaterQualityReadings(config, report?.report_date)
+  const { config, loading: configLoading, error: configError, update: updateConfig } = useWaterMonitoringConfig(project?.id)
+  const { readings, error: readingsError } = useWaterQualityReadings(config, report?.report_date)
   const notesHook = useWaterMonitoringNotes(report?.id)
   const form = useWaterMonitoringNotesForm({
+    projectId: project?.id,
     reportId: report?.id,
     notesRow: notesHook.notes,
     create: notesHook.create,
@@ -37,16 +31,26 @@ export default function WaterQualityTab({ project, report }) {
   const [locations, setLocations] = useState(config?.locations ?? [])
   const [editingCoords, setEditingCoords] = useState(false)
   const [coordDrafts, setCoordDrafts] = useState({})
+  const [coordSaving, setCoordSaving] = useState(false)
   const [savedAt, setSavedAt] = useState(null)
+  const [saveError, setSaveError] = useState(null)
+  const aerial = useAttachmentField({
+    existingFileId: config?.aerial_path,
+    ensureRecordId: config?.id,
+    updateRecord: updateConfig,
+    domain: 'jfb_water_monitoring_config',
+    column: 'aerial_path',
+    maxBytes: MAX_AERIAL_BYTES,
+    onSaved: () => setSavedAt(new Date()),
+    onError: setSaveError,
+  })
+  const loadError = configError || readingsError || notesHook.error
+  const displayError = saveError || loadError
 
-  // Reset local drafts when the viewed report (or its config) changes --
-  // adjusting state during render per React's guidance (a useState-tracked
-  // "previous value", not a ref -- react-hooks/refs forbids reading/writing
-  // ref.current during render), instead of an effect, since this is a
-  // derived reset rather than a sync with an external system.
-  const [prevReportId, setPrevReportId] = useState(report?.id)
-  if (report?.id !== prevReportId) {
-    setPrevReportId(report?.id)
+  const notesKey = `${report?.id ?? 'none'}|${notesHook.notes?.id ?? 'none'}`
+  const [prevNotesKey, setPrevNotesKey] = useState(notesKey)
+  if (notesKey !== prevNotesKey) {
+    setPrevNotesKey(notesKey)
     setNotes(notesHook.notes?.notes ?? '')
   }
   const [prevConfig, setPrevConfig] = useState(config)
@@ -77,26 +81,40 @@ export default function WaterQualityTab({ project, report }) {
     form.onFieldChange('notes', v || null)
   }
   async function flushNotes() {
-    await form.flush()
-    setSavedAt(new Date())
+    try {
+      await form.flush()
+      setSavedAt(new Date())
+      setSaveError(null)
+    } catch (err) {
+      setSaveError(err.message || 'Failed to save.')
+    }
   }
 
   function startEditCoords() {
     setCoordDrafts(Object.fromEntries(locations.map((l) => [l.role, l.display_coords ?? ''])))
     setEditingCoords(true)
   }
-  function saveCoords() {
+  async function saveCoords() {
     const next = locations.map((l) => ({ ...l, display_coords: coordDrafts[l.role]?.trim() || null }))
-    setLocations(next)
-    setEditingCoords(false)
-    setSavedAt(new Date())
-    // SAMPLE DATA: not persisted to jfb_water_monitoring_config yet -- once
-    // that domain is live, call update(config.id, { locations: next }) here.
+    setCoordSaving(true)
+    try {
+      await updateConfig(config.id, { locations: next })
+      setLocations(next)
+      setEditingCoords(false)
+      setSavedAt(new Date())
+      setSaveError(null)
+    } catch (err) {
+      setSaveError(err.message || 'Failed to save coordinates.')
+    } finally {
+      setCoordSaving(false)
+    }
   }
 
   return (
     <Stack gap="md">
-      {/* Status band. */}
+      <SafeError message={displayError} />
+
+      {}
       <Box p="md" style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 6 }}>
         <Group justify="space-between" wrap="wrap">
           <Box>
@@ -130,7 +148,7 @@ export default function WaterQualityTab({ project, report }) {
       )}
 
       <Group align="flex-start" grow wrap="wrap">
-        {/* Readings table. */}
+        {}
         <Box style={{ flex: '3 1 480px', border: '1px solid var(--mantine-color-gray-3)', borderRadius: 6, overflow: 'hidden' }}>
           <Box style={{ maxHeight: 480, overflowY: 'auto' }}>
             <Table withTableBorder={false} verticalSpacing={4} fz="sm" stickyHeader>
@@ -158,8 +176,35 @@ export default function WaterQualityTab({ project, report }) {
           </Box>
         </Box>
 
-        {/* Right column: coordinates, notes, thresholds. */}
+        {}
         <Stack style={{ flex: '2 1 320px' }} gap="md">
+          {}
+          <Box p="xs" style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 6 }}>
+            {aerial.url ? (
+              <Image src={aerial.url} alt="Aerial site map with monitor locations" fit="contain" />
+            ) : (
+              <Box style={{ border: '1px dashed var(--mantine-color-gray-4)', borderRadius: 6, padding: 24, textAlign: 'center' }}>
+                <Text size="xs" c="dimmed" fs="italic">No aerial site map uploaded yet.</Text>
+              </Box>
+            )}
+            <Group justify="space-between" mt={8} wrap="nowrap">
+              <FileButton onChange={(f) => f && aerial.upload(f)} accept="image/png,image/jpeg,image/webp" disabled={aerial.uploading}>
+                {(props) => {
+                  let label = 'Upload aerial image'
+                  if (aerial.uploading) label = 'Uploading...'
+                  else if (aerial.url) label = 'Replace aerial image'
+                  return (
+                    <Button {...props} variant="default" size="compact-xs" loading={aerial.uploading}>
+                      {label}
+                    </Button>
+                  )
+                }}
+              </FileButton>
+              <Text size="10px" c="dimmed">PNG · JPG · WEBP · ≤10 MB</Text>
+            </Group>
+            <SafeError message={aerial.error} mt={6} />
+          </Box>
+
           <Box p="md" style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 6 }}>
             <Group justify="space-between" mb={6}>
               <Text size="sm" fw={600}>Monitor Coordinates (X,Y)</Text>
@@ -188,8 +233,8 @@ export default function WaterQualityTab({ project, report }) {
                   />
                 ))}
                 <Group gap={6}>
-                  <Button size="compact-xs" onClick={saveCoords}>Save</Button>
-                  <Button size="compact-xs" variant="default" onClick={() => setEditingCoords(false)}>Cancel</Button>
+                  <Button size="compact-xs" onClick={saveCoords} loading={coordSaving} disabled={coordSaving}>Save</Button>
+                  <Button size="compact-xs" variant="default" onClick={() => setEditingCoords(false)} disabled={coordSaving}>Cancel</Button>
                 </Group>
                 <Text size="xs" c="dimmed">New coordinates print on reports generated from now on.</Text>
               </Stack>
@@ -214,11 +259,20 @@ export default function WaterQualityTab({ project, report }) {
               {config.thresholds?.early_warning_ntu != null && (
                 <Text size="xs" c="dimmed">Early Warning Level: {config.thresholds.early_warning_ntu} NTU</Text>
               )}
+              {config.thresholds?.compliance_4hr_ntu != null && (
+                <Text size="xs" c="dimmed">Compliance Level (4-HR): {config.thresholds.compliance_4hr_ntu} NTU</Text>
+              )}
               {config.thresholds?.compliance_1hr_ntu != null && (
                 <Text size="xs" c="dimmed">Compliance Level (1-HR): {config.thresholds.compliance_1hr_ntu} NTU</Text>
               )}
               {config.thresholds?.background_multiplier != null && (
-                <Text size="xs" c="dimmed">Background Multiplier: {config.thresholds.background_multiplier}x</Text>
+                <Text size="xs" c="dimmed">Background Multiplier: {config.thresholds.background_multiplier}×</Text>
+              )}
+              {config.thresholds?.early_warning_delta_ntu != null && (
+                <Text size="xs" c="dimmed">Early-Warning Criterion: Background + {config.thresholds.early_warning_delta_ntu} NTU</Text>
+              )}
+              {config.thresholds?.compliance_delta_ntu != null && (
+                <Text size="xs" c="dimmed">Compliance Criterion: Background + {config.thresholds.compliance_delta_ntu} NTU</Text>
               )}
             </Stack>
           </Box>

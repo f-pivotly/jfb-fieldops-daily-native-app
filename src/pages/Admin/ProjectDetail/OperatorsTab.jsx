@@ -4,6 +4,7 @@ import { IconPlus, IconRefresh } from "@tabler/icons-react";
 import { useDomainData } from "../../../hooks/useDomainData";
 import { useConfirmDialog } from "../../../hooks/useConfirmDialog";
 import { useDomainAccess } from "../../../contexts/adminAccessContext";
+import { readWrittenRecordId } from "../../../data";
 
 function initials(fullName) {
   return (fullName || "")
@@ -75,7 +76,7 @@ export default function OperatorsTab({ project }) {
   async function handleAddNew() {
     if (!newOperator.name.trim() || !hasProject) return;
     const res = await createOperator({ name: newOperator.name.trim(), email: newOperator.email.trim() || null });
-    const operatorId = res?.data?.id;
+    const operatorId = readWrittenRecordId(res);
     if (!operatorId) return;
     await createLink({ project_id: project.id, operator_id: operatorId, is_active: true });
     setModalOpen(false);

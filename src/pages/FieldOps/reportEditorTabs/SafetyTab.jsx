@@ -13,14 +13,9 @@ import { useFieldOpsAction } from '../../../contexts/fieldOpsAccessContext'
 import { useAppConfig } from '../../../contexts/appConfigContext'
 import SiteEquipmentTab from '../projectSettingsTabs/SiteEquipmentTab'
 import { usePrefillOffer } from './hooks/usePrefillOffer'
-import { useSignatureUpload } from './hooks/useSignatureUpload'
+import { useAttachmentField } from '../../../hooks/useAttachmentField'
 import { useCrewSeeding } from './hooks/useCrewSeeding'
 import { priorReportsFor, findMostRecentCrewSummary, findMostRecentPlanOfDay, fetchUserSignature, formatMonthDay } from './hooks/safetyHistoryLookups'
-
-// Daily Safety Updates (including Culture Tenant), Sign-off (both
-// preparer and SSHO name/signature), Crew Summary, and Climate Summary
-// are all wired to real jfb_report_safety_v2 / jfb_report_crew_summary_v2
-// persistence. Remaining gaps are tracked in SAFETY_GAPS.md.
 
 const EMPTY_DAILY_UPDATES = {
   jhaAhaReviewed: '',
@@ -91,11 +86,6 @@ function climateFromRow(row) {
 
 const WIND_DIRECTIONS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
 
-// Reference app's actual server-enforced Supabase Storage bucket limit
-// (sql/2026-06-04_signatures.sql: 524288 bytes / 512KB) -- its own UI
-// copy says "500KB", which doesn't match what it enforces. Native has no
-// dedicated bucket/size cap at all yet, so this is the one real number to
-// enforce and advertise consistently, checked client-side before upload.
 const MAX_SIGNATURE_BYTES = 524288
 
 export default function SafetyTab({ project, report, reports = [] }) {
@@ -104,9 +94,6 @@ export default function SafetyTab({ project, report, reports = [] }) {
   const { update: updateProject, updating: savingLocation } = useProject(project?.id)
   const canEditLocation = useFieldOpsAction('manage_project_location')
 
-  // Shared save/error indicator for the whole tab, mirroring the reference
-  // app's top-right "Saved ✓" label and top-of-tab red error banner --
-  // every save path below reports into this via markSuccess/markError.
   const { message: saved, error: saveError, markSuccess, markError } = useAsyncAction()
 
   const {
@@ -146,17 +133,9 @@ export default function SafetyTab({ project, report, reports = [] }) {
     onSafetyFieldChange('signature_name', value)
   }
 
-  // Declared here (rather than down by the rest of the Climate Summary
-  // state) because the sync block below sets both on load -- a `const`
-  // referenced before its declaration in the same function throws, so
-  // these can't live below that block the way climate's later logic does.
   const [climate, setClimate] = useState(EMPTY_CLIMATE)
   const [precipBaseToday, setPrecipBaseToday] = useState(0)
 
-  // Seed the form from jfb_report_safety_v2 once, per report, after its fetch
-  // resolves -- gated on !safetyLoading rather than reportSafety itself,
-  // since a null row (no Safety data saved yet for this report) is a valid
-  // terminal state, not a sign the fetch is still in flight.
   const [safetySyncedFor, setSafetySyncedFor] = useState(null)
   if (report?.id && !safetyLoading && safetySyncedFor !== report.id) {
     setSafetySyncedFor(report.id)
@@ -184,9 +163,6 @@ export default function SafetyTab({ project, report, reports = [] }) {
 
   const [crew, setCrew] = useState([])
   const [crewSyncedFor, setCrewSyncedFor] = useState(null)
-  // Seeding creates rows one at a time, so crewSummary can briefly hold
-  // only some of the seeded rows -- crewSeeding gates the sync below so a
-  // partial snapshot never gets locked in as "synced" mid-seed.
   if (report?.id && !crewLoading && !crewSeeding && crewSummary.length > 0 && crewSyncedFor !== report.id) {
     setCrewSyncedFor(report.id)
     setCrew(
@@ -201,9 +177,6 @@ export default function SafetyTab({ project, report, reports = [] }) {
 
   const crewAllBlank = crew.length > 0 && crew.every((c) => (c.count ?? 0) === 0 && (c.hours ?? 0) === 0)
 
-  // "Use crew from M/D" pre-fill: only offered once every current crew row
-  // is blank, same gate as the reference app, so a real entry is never
-  // silently overwritten.
   const crewOffer = usePrefillOffer({
     enabled: !!report?.id && !crewLoading && crewAllBlank,
     fetchOffer: () => findMostRecentCrewSummary(priorReportsFor(reports, report), config.appSlug),
@@ -270,11 +243,6 @@ export default function SafetyTab({ project, report, reports = [] }) {
     }
   }
 
-  // "Use plan from M/D" pre-fill: fetched unconditionally on report load
-  // (not gated on the field being blank), matching the reference app --
-  // deliberate, so the button reappears if a PE clears a pre-filled
-  // field. Only the button's own visibility is gated on the field being
-  // empty, at render time below.
   const planOffer = usePrefillOffer({
     enabled: !!report?.id && !safetyLoading,
     fetchOffer: () => findMostRecentPlanOfDay(priorReportsFor(reports, report), config.appSlug),
@@ -294,12 +262,6 @@ export default function SafetyTab({ project, report, reports = [] }) {
     onSafetyFieldChange(CLIMATE_COLUMNS[key], value)
   }
 
-  // Precip MTD / Project Total: derived live via a Pivotly data view (sums
-  // precip_today_in across every report for this project, same as the
-  // reference app's fetchPrecipSums), not stored fields. precipBaseToday
-  // caches the value precip_today_in had at load time (set in the sync
-  // block above) so typing updates the displayed sums optimistically
-  // before the 2s debounce actually saves: display = sums + (typed - base).
   const [precipSums, setPrecipSums] = useState({ mtdIn: 0, ptdIn: 0 })
   useEffect(() => {
     if (!project?.id || !report?.report_date) return
@@ -361,11 +323,6 @@ export default function SafetyTab({ project, report, reports = [] }) {
 
   const [noaaFetching, setNoaaFetching] = useState(false)
   const [noaaMessage, setNoaaMessage] = useState(null)
-  // Reads the local location form state (what was actually just typed/saved),
-  // not the project prop -- the parent doesn't refetch/re-pass a fresh
-  // project object after this component's own saveLocation() call, so
-  // project.latitude/longitude can stay stale (still null) even right after
-  // a successful save. location state is always current.
   const hasLatLng = location.latitude.trim() !== '' && location.longitude.trim() !== ''
     && !Number.isNaN(Number(location.latitude)) && !Number.isNaN(Number(location.longitude))
   async function handleNoaaFetch() {
@@ -412,17 +369,6 @@ export default function SafetyTab({ project, report, reports = [] }) {
     return () => { cancelled = true }
   }, [])
 
-  // The signed-in user's own saved default signature -- offered as a
-  // preview/accept pre-fill on the preparer signature block (same UX
-  // pattern as "Use plan from M/D") when this report has none of its own
-  // yet. Once accepted it's copied onto this report's real
-  // signature_image_path, so PDF generation needs no fallback logic of
-  // its own -- it already reads that column. Scoped to the preparer
-  // block only, not SSHO: "my saved signature" only makes sense for the
-  // person currently filling out the report, and the SSHO is typically
-  // someone else. Kept separate from usePrefillOffer/useSignatureUpload:
-  // the fetched row is also consumed by preparerSignature's onUploaded
-  // "save as default" branch below, so it can't be an opaque offer value.
   const [userSignature, setUserSignature] = useState(null)
   useEffect(() => {
     if (!currentUserId) return
@@ -446,7 +392,7 @@ export default function SafetyTab({ project, report, reports = [] }) {
     return () => { cancelled = true }
   }, [userSignature?.signature_image_path, markError])
 
-  const preparerSignature = useSignatureUpload({
+  const preparerSignature = useAttachmentField({
     existingFileId: reportSafety?.signature_image_path,
     ensureRecordId: ensureSafetyRow,
     updateRecord: updateReportSafety,
@@ -493,7 +439,7 @@ export default function SafetyTab({ project, report, reports = [] }) {
     }
   }
 
-  const sshoSignature = useSignatureUpload({
+  const sshoSignature = useAttachmentField({
     existingFileId: reportSafety?.ssho_signature_image_path,
     ensureRecordId: ensureSafetyRow,
     updateRecord: updateReportSafety,

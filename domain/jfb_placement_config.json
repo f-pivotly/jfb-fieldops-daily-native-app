@@ -1,0 +1,310 @@
+{
+  "schema": [
+    {
+      "pii": false,
+      "name": "project_id",
+      "slug": "project_id",
+      "type": "uuid",
+      "label": "Project Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": true,
+        "target_attr": "id",
+        "target_domain": "jfb_projects",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "project_id",
+      "description": "One row per project. The project this placement (capping) chart config belongs to; its presence is what shows the Placement Progress tab.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "label",
+      "slug": "label",
+      "type": "text",
+      "label": "Work Area Label",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "label",
+      "description": "Work-area name printed on the chart's Area line (e.g. \"Area A - New Breakwater\").",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "grid_path",
+      "slug": "grid_path",
+      "type": "text",
+      "label": "Bucket Grid Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "grid_path",
+      "description": "Attachment fileId of the bucket-grid lattice JSON: rotationDeg + originU/originV + cellFt + the sparse list of [col,row] cells that exist, plus an optional boundary polyline and optional clipped-edge partials. Every cell polygon and every bucket index derives from it, so without it the tab cannot account coverage.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "grid_original_name",
+      "slug": "grid_original_name",
+      "type": "text",
+      "label": "Grid Original Name",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "grid_original_name",
+      "description": "Filename the PM picked for the bucket-grid lattice JSON. The upload endpoint suffixes a random id for uniqueness, so this keeps the name they recognize.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "grid_storage_path",
+      "slug": "grid_storage_path",
+      "type": "text",
+      "label": "Grid Storage Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "grid_storage_path",
+      "description": "Server-assigned storage path for the bucket-grid lattice JSON, read back after upload. Metadata only -- the file is always fetched by the id in grid_path.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "aerial_path",
+      "slug": "aerial_path",
+      "type": "text",
+      "label": "Aerial Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "aerial_path",
+      "description": "Attachment fileId of the aerial image drawn behind the grid. Optional -- without it the chart renders on a flat map colour.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "aerial_original_name",
+      "slug": "aerial_original_name",
+      "type": "text",
+      "label": "Aerial Original Name",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "aerial_original_name",
+      "description": "Filename the PM picked for the aerial image. The upload endpoint suffixes a random id for uniqueness, so this keeps the name they recognize.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "aerial_storage_path",
+      "slug": "aerial_storage_path",
+      "type": "text",
+      "label": "Aerial Storage Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "aerial_storage_path",
+      "description": "Server-assigned storage path for the aerial image, read back after upload. Metadata only -- the file is always fetched by the id in aerial_path.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "aerial_georef",
+      "slug": "aerial_georef",
+      "type": "jsonb",
+      "label": "Aerial Georeference",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "jsonb",
+      "column_name": "aerial_georef",
+      "description": "World bounds of aerial_path as {wL,wR,wT,wB} in the project CRS -- the same shape jfb_dredge_config.aerial_georef uses. Also frames the chart view when set, so the imagery fills the map panel exactly.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "reference_lines_path",
+      "slug": "reference_lines_path",
+      "type": "text",
+      "label": "Reference Lines Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "reference_lines_path",
+      "description": "Attachment fileId of the PM's alignment/stationing overlay DXF -- open line work plus text labels, drawn thin over the map. Optional; purely visual.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "reference_lines_original_name",
+      "slug": "reference_lines_original_name",
+      "type": "text",
+      "label": "Reference Lines Original Name",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "reference_lines_original_name",
+      "description": "Filename the PM picked for the alignment overlay DXF. The upload endpoint suffixes a random id for uniqueness, so this keeps the name they recognize.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "reference_lines_storage_path",
+      "slug": "reference_lines_storage_path",
+      "type": "text",
+      "label": "Reference Lines Storage Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "reference_lines_storage_path",
+      "description": "Server-assigned storage path for the alignment overlay DXF, read back after upload. Metadata only -- the file is always fetched by the id in reference_lines_path.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "active",
+      "slug": "active",
+      "type": "boolean",
+      "label": "Active",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "boolean",
+      "column_name": "active",
+      "description": "Whether this config is live. An inactive row hides the Placement Progress tab without deleting the uploaded grid and aerial.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    }
+  ],
+  "archive": true,
+  "contact": {
+    "name": "System Administrator"
+  },
+  "multi_tenant": false,
+  "xref_enabled": true,
+  "access_control": {
+    "model": "all_systems",
+    "read_access": true,
+    "delete_access": true,
+    "insert_access": true,
+    "update_access": true,
+    "hard_delete_allowed": true,
+    "direct_write_enabled": true
+  },
+  "archive_policy": {
+    "retention_days": 365,
+    "max_record_versions": 10000
+  },
+  "track_versions": true,
+  "domain_table_name": "jfb_placement_config",
+  "slug": "jfb_placement_config",
+  "domain_name_singular": "jfb_placement_config",
+  "default_conflict_resolution": {
+    "code": "lww",
+    "human_readable": "Last Write Wins"
+  }
+}

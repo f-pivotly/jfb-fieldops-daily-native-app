@@ -3,7 +3,7 @@ import { fetchPicklistValues } from '../data'
 
 const inflight = new Map()
 
-export function loadPicklist(slug) {
+function loadPicklist(slug) {
   if (!inflight.has(slug)) {
     inflight.set(
       slug,

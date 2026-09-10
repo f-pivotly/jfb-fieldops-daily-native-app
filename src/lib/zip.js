@@ -1,5 +1,3 @@
-// Minimal ZIP writer (STORE method, no compression, no dependency). Enough to
-// bundle a set of text files (e.g. progress DXFs) into one .zip download.
 function crc32(bytes) {
   let crc = ~0
   for (let i = 0; i < bytes.length; i++) {

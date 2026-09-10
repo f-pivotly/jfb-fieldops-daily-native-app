@@ -1,9 +1,3 @@
-import { useDomainData } from './useDomainData'
+import { makeRowHook } from './domainHookFactory'
 
-// jfb_report_safety_v2 has one row per report (unique on report_id).
-export function useReportSafety(reportId) {
-  const { records, loading, error, creating, updating, create, update } =
-    useDomainData({ domain: 'jfb_report_safety_v2', system: 'core', reportId })
-  const reportSafety = records[0] ?? null
-  return { reportSafety, loading, error, creating, updating, create, update }
-}
+export const useReportSafety = makeRowHook('jfb_report_safety_v2', 'reportSafety', 'report')

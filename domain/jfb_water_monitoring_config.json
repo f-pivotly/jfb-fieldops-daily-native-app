@@ -227,11 +227,11 @@
       "masking": {
         "masked": false
       },
-      "nullable": false,
-      "required": true,
+      "nullable": true,
+      "required": false,
       "data_type": "boolean",
       "column_name": "active",
-      "description": "Whether the Water Quality tab is shown for this project. This row's existence with active = true is the tab visibility gate -- a missing row, or one with active = false, hides the tab entirely and skips the Water Quality PDF page.",
+      "description": "Optional explicit disable switch for the Water Quality tab. Fails open, matching the reference app: this row's mere existence is the tab visibility gate -- a missing row hides the tab, but an existing row shows it unless active is explicitly set to false. Left unset (not required), same as a legacy/migrated row that predates this column.",
       "conflict_resolution": {
         "code": "lww"
       },

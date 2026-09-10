@@ -19,15 +19,11 @@ import { FieldOpsAccessProvider } from "./contexts/FieldOpsAccessProvider";
 import RequireFieldOpsAction from "./components/RequireFieldOpsAction";
 import RequireProjectAccess from "./components/RequireProjectAccess";
 
-// The Admin page's own required_claims gate (apg-jfb-admin.view) — pe lacks
-// it, pm/director/admin have it. Reused here so the launcher never offers a
-// choice the backend would refuse anyway.
 const ADMIN_PAGE_SLUG = "apg-jfb-admin";
 
 export default function App() {
   const { config, ready } = useAppConfig();
   const [mode, setMode] = useState(null);
-  // "checking" | "allowed" | "denied" — gates whether the launcher is shown at all.
   const [adminAccess, setAdminAccess] = useState("checking");
 
   useEffect(() => {
@@ -46,7 +42,6 @@ export default function App() {
           setAdminAccess("denied");
           setMode("fieldops");
         } else {
-          // Fail-open: a transient/network error shouldn't lock the user out.
           setAdminAccess("allowed");
         }
       });

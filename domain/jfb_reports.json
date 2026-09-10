@@ -68,6 +68,69 @@
         "code": "lww"
       },
       "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "released_at",
+      "slug": "released_at",
+      "type": "timestamp with time zone",
+      "label": "Released At",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "timestamp with time zone",
+      "column_name": "released_at",
+      "description": "When this report was released (status transitioned to released). NULL until then. Matches the non-native app's report_dates.released_at.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "released_by_user_id",
+      "slug": "released_by_user_id",
+      "type": "uuid",
+      "label": "Released By (User Id)",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "uuid",
+      "column_name": "released_by_user_id",
+      "description": "The Pivotly IAM user id who released this report. NULL until released. Named to match this domain's own generated_by_user_id convention (jfb_report_generations) rather than the non-native app's bare released_by column -- which the non-native app itself never actually writes despite having it.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "no_production_day",
+      "slug": "no_production_day",
+      "type": "boolean",
+      "label": "No Production Day",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "boolean",
+      "column_name": "no_production_day",
+      "description": "Mobilization/demobilization/full-shutdown day: no production expected. NULL/false is the normal case. When true, marks event_log_reviewed, production_stats_entered, and metrics_entered N/A on the completion checklist instead of required, and the PDF generator omits per-equipment production sheets. Matches the non-native app's report_dates.no_production_day.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
     }
   ],
   "archive": true,

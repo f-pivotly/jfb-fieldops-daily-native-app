@@ -1,8 +1,3 @@
-import { useDomainData } from './useDomainData'
+import { makeListHook } from './domainHookFactory'
 
-
-export function useProjectAreas(projectId) {
-  const { records, loading, error, creating, updating, deleting, create, update, remove } =
-    useDomainData({ domain: 'jfb_project_areas', system: 'core', projectId })
-  return { areas: records, loading, error, creating, updating, deleting, create, update, remove }
-}
+export const useProjectAreas = makeListHook('jfb_project_areas', 'areas', 'project')

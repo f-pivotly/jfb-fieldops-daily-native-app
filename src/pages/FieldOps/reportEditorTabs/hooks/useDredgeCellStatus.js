@@ -2,11 +2,6 @@ import { useState } from 'react'
 import { useDomainData } from '../../../../hooks/useDomainData'
 import { useConfirmDialog } from '../../../../hooks/useConfirmDialog'
 
-// Completed-CSC flags (residual dredging): a cell can't take 1st/2nd pass
-// once flagged -- re-entry there charts as residual (gray) from
-// completed_on forward. "Effective" is gated on the report DATE being
-// viewed, not just existence of the row, so an older released report
-// keeps its original classification even after a later flag is added.
 export function useDredgeCellStatus(projectId, reportDate) {
   const { records: cellStatusRecords, create: createCellStatus, update: updateCellStatus, remove: removeCellStatus } =
     useDomainData({ domain: 'jfb_dredge_cell_status', system: 'core', projectId })

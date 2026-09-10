@@ -1,0 +1,343 @@
+{
+  "schema": [
+    {
+      "pii": false,
+      "name": "project_id",
+      "slug": "project_id",
+      "type": "uuid",
+      "label": "Project Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": true,
+        "target_attr": "id",
+        "target_domain": "jfb_projects",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "project_id",
+      "description": "Owning project.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "report_id",
+      "slug": "report_id",
+      "type": "uuid",
+      "label": "Report Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": true,
+        "target_attr": "id",
+        "target_domain": "jfb_reports",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "report_id",
+      "description": "The day's report this bucket log belongs to. One row per report per equipment -- re-uploading replaces the day's file.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "equipment_id",
+      "slug": "equipment_id",
+      "type": "uuid",
+      "label": "Equipment Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": true,
+        "target_attr": "id",
+        "target_domain": "jfb_equipments",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "equipment_id",
+      "description": "The placement excavator/barge whose bucket log this is.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "source_filename",
+      "slug": "source_filename",
+      "type": "text",
+      "label": "Source Filename",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "source_filename",
+      "description": "Name of the uploaded .bkt file, shown back to the PE so they can tell which export is loaded.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "source_header",
+      "slug": "source_header",
+      "type": "text",
+      "label": "Source Header",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "source_header",
+      "description": "The .bkt file's header line verbatim. Informational only -- it is a template default (\"Dredge T\") and does NOT name the machine.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "placements",
+      "slug": "placements",
+      "type": "jsonb",
+      "label": "Placements",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "jsonb",
+      "column_name": "placements",
+      "description": "The RAW parsed bucket placements: {line,x,y,elevationFt,station,bucketWidthFt,bucketLengthFt,secs,clock}[]. Coverage is deliberately NOT frozen here -- the per-layer split is re-derived from the current event log on every read, so correcting a layer or an event time reflows the numbers with no re-upload.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "bucket_count",
+      "slug": "bucket_count",
+      "type": "integer",
+      "label": "Bucket Count",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "integer",
+      "column_name": "bucket_count",
+      "description": "Number of placements parsed from the file. Denormalized so a report list need not open the jsonb.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "first_secs",
+      "slug": "first_secs",
+      "type": "integer",
+      "label": "First Bucket Secs",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "integer",
+      "column_name": "first_secs",
+      "description": "Seconds since local midnight of the day's first bucket. The .bkt clock is the machine's LOCAL wall time, not UTC.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "last_secs",
+      "slug": "last_secs",
+      "type": "integer",
+      "label": "Last Bucket Secs",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "integer",
+      "column_name": "last_secs",
+      "description": "Seconds since local midnight of the day's last bucket.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "distinct_cells",
+      "slug": "distinct_cells",
+      "type": "integer",
+      "label": "Distinct Cells",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "integer",
+      "column_name": "distinct_cells",
+      "description": "Grid cells touched by any bucket that day. Less than the sum of the per-layer counts whenever two lifts hit one cell, which is expected since lifts stack in plan view.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "today_sqft",
+      "slug": "today_sqft",
+      "type": "numeric",
+      "label": "Today Sq Ft",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "today_sqft",
+      "description": "Distinct area covered today. A covered cell counts as its FULL area (25 SF on a 5 ft grid) -- the PM's ruling: the grid is the accounting unit, not the smaller bucket footprint the .bkt reports.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "problems",
+      "slug": "problems",
+      "type": "jsonb",
+      "label": "Problems",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "jsonb",
+      "column_name": "problems",
+      "description": "Rows of the .bkt that could not be parsed, as {line,text,reason}[]. Collected rather than thrown so one bad row never blocks a whole day's upload.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "chart_path",
+      "slug": "chart_path",
+      "type": "text",
+      "label": "Chart Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "chart_path",
+      "description": "Attachment fileId of the rendered Daily Placement Progress Chart PNG for this day. The daily PDF re-serves this image rather than re-rendering.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "generated_by_user_id",
+      "slug": "generated_by_user_id",
+      "type": "uuid",
+      "label": "Generated By User Id",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "uuid",
+      "column_name": "generated_by_user_id",
+      "description": "The Pivotly IAM user id who saved this row.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    }
+  ],
+  "archive": true,
+  "contact": {
+    "name": "System Administrator"
+  },
+  "multi_tenant": false,
+  "xref_enabled": true,
+  "access_control": {
+    "model": "all_systems",
+    "read_access": true,
+    "delete_access": true,
+    "insert_access": true,
+    "update_access": true,
+    "hard_delete_allowed": true,
+    "direct_write_enabled": true
+  },
+  "archive_policy": {
+    "retention_days": 365,
+    "max_record_versions": 10000
+  },
+  "track_versions": true,
+  "domain_table_name": "jfb_placement_progress",
+  "slug": "jfb_placement_progress",
+  "domain_name_singular": "jfb_placement_progres",
+  "default_conflict_resolution": {
+    "code": "lww",
+    "human_readable": "Last Write Wins"
+  }
+}

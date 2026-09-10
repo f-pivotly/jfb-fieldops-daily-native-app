@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { uploadAttachment } from '../../../../data'
+import { uploadAttachment, readWrittenRecordId } from '../../../../data'
 import { gzipBytes } from '../../../../lib/dredge/designVolume'
 
 const DREDGE_PROGRESS_DOMAIN = 'jfb_dredge_progress'
@@ -59,18 +59,10 @@ export function useDredgeProgressSave({
         progressId = existingProgressRecord.id
       } else {
         const res = await createProgress(recordData)
-        progressId = res?.data?.id
+        progressId = readWrittenRecordId(res)
       }
 
-      // Upload the rendered chart(s) to Pivotly file storage and record their
-      // paths -- same uploadAttachment() flow every other dredge file already
-      // uses. Needs an existing record id first, same "save row, then attach"
-      // ordering used everywhere else in this feature.
       if (progressId) {
-        // Big-move day: render one zoomed PNG per work area off-screen instead
-        // of the single wide view. The row above still stores the FULL day's
-        // coverage_rings/footprint_rings -- only the saved IMAGES are per-area,
-        // so progress is never divided or lost.
         let blobs = []
         if (splitViews && clusterWindows.length >= 2) {
           const off = document.createElement('canvas')
@@ -91,13 +83,6 @@ export function useDredgeProgressSave({
           const uploadRes = await uploadAttachment({ coreRecordId: progressId, domain: DREDGE_PROGRESS_DOMAIN, file })
           fileIds.push(uploadRes.fileId)
         }
-        // Bank this day's full-surface export (if any -- surfaceDiffRef is
-        // null on day-scoped exports/HYPACK days) so the next full-surface
-        // upload for this equipment can diff against it. Same
-        // gzip-then-attach pattern the reference-survey upload already uses
-        // (designVolume.js's gzipBytes), just gzipping the raw CSV text
-        // instead of a pre-parsed binary grid -- keeps the banked file
-        // openable/diffable the same way a prior-day download is read back.
         let surfaceExportPath
         if (surfaceDiffRef.current?.csvText) {
           const gz = await gzipBytes(new TextEncoder().encode(surfaceDiffRef.current.csvText))
@@ -117,7 +102,7 @@ export function useDredgeProgressSave({
     } catch (err) {
       setSaveError(err.message)
     } finally {
-      resetPreview() // restore the full-day view on screen regardless of what was last previewed
+      resetPreview()
       setSaving(false)
     }
   }

@@ -9,10 +9,6 @@ import { useAirMonitoringDailyForm } from '../../../hooks/useAirMonitoringDailyF
 import { buildAirDay } from '../../../lib/airQuality/data'
 import { buildAirChartSpecs, renderAirChart } from '../../../lib/airQuality/chart'
 
-// Resolves a Pivotly attachment id (jfb_air_monitoring_config.aerial_path --
-// named "_path" but, like cells_path/reference_lines_path elsewhere in this
-// app, actually a downloadAttachment()-able file id, not a bare URL like
-// reference's Supabase-hosted aerial_path) to a displayable object URL.
 function useAttachmentImageUrl(fileId) {
   const [resolved, setResolved] = useState({ fileId: null, url: null })
   useEffect(() => {
@@ -32,10 +28,6 @@ function useAttachmentImageUrl(fileId) {
   return fileId && resolved.fileId === fileId ? resolved.url : null
 }
 
-// Air Quality tab -- the Daily Air Monitoring page. Ported from the
-// non-native app's src/components/AirQualityTab.tsx. Read-only except two
-// PE inputs: "Project activity today" and the narrative notes.
-
 function fmt(v) {
   return v === null || v === undefined ? '—' : v.toFixed(3)
 }
@@ -45,6 +37,7 @@ export default function AirQualityTab({ project, report }) {
   const { readings, error: readingsError } = useAirQualityReadings(config, report?.report_date)
   const dailyHook = useAirMonitoringDaily(report?.id)
   const form = useAirMonitoringDailyForm({
+    projectId: project?.id,
     reportId: report?.id,
     dailyRow: dailyHook.daily,
     create: dailyHook.create,
@@ -59,13 +52,10 @@ export default function AirQualityTab({ project, report }) {
   const displayError = saveError || loadError
   const aerialUrl = useAttachmentImageUrl(config?.aerial_path)
 
-  // Reset local drafts when the viewed report changes -- adjusting state
-  // during render per React's guidance (a useState-tracked "previous
-  // value", not a ref -- react-hooks/refs forbids ref access during
-  // render), instead of an effect.
-  const [prevReportId, setPrevReportId] = useState(report?.id)
-  if (report?.id !== prevReportId) {
-    setPrevReportId(report?.id)
+  const dailyKey = `${report?.id ?? 'none'}|${dailyHook.daily?.id ?? 'none'}`
+  const [prevDailyKey, setPrevDailyKey] = useState(dailyKey)
+  if (dailyKey !== prevDailyKey) {
+    setPrevDailyKey(dailyKey)
     setActivity(dailyHook.daily?.activity ?? '')
     setNotes(dailyHook.daily?.notes ?? '')
   }
@@ -102,14 +92,14 @@ export default function AirQualityTab({ project, report }) {
     <Stack gap="md">
       <SafeError message={displayError} />
 
-      {/* Status band. */}
+      {}
       <Box p="md" style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 6 }}>
         <Group justify="space-between" wrap="wrap">
           <Box>
             <Text size="xs" tt="uppercase" c="dimmed">PM10 -- 15-min TWA</Text>
             <Text size="sm">
-              {day?.populatedCount ?? 0} of {day?.slots.length ?? 0} intervals reported *{' '}
-              {config.stations.length} stations * pulled automatically from SGS SmartSense
+              {day?.populatedCount ?? 0} of {day?.slots.length ?? 0} intervals reported ·{' '}
+              {config.stations.length} stations · pulled automatically from SGS SmartSense
             </Text>
           </Box>
           {savedAt && <Text size="xs" c="dimmed">Saved {savedAt.toLocaleTimeString()}</Text>}
@@ -123,7 +113,7 @@ export default function AirQualityTab({ project, report }) {
         </Alert>
       )}
 
-      {/* PE inputs. */}
+      {}
       <SimpleGrid cols={{ base: 1, md: 2 }}>
         <Box p="md" style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 6 }}>
           <Text size="sm" fw={600} mb={6}>Project activity today</Text>
@@ -146,14 +136,14 @@ export default function AirQualityTab({ project, report }) {
         </Box>
       </SimpleGrid>
 
-      {/* Aerial (stations + barge lane). */}
+      {}
       {aerialUrl && (
         <Box p="xs" style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 6 }}>
           <Image src={aerialUrl} alt="Air monitoring stations aerial" fit="contain" mx="auto" style={{ maxWidth: 700 }} />
         </Box>
       )}
 
-      {/* Charts -- side by side like the report page. */}
+      {}
       {charts && (
         <SimpleGrid cols={{ base: 1, lg: 2 }}>
           <Box p="xs" style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 6 }}>
@@ -165,9 +155,9 @@ export default function AirQualityTab({ project, report }) {
         </SimpleGrid>
       )}
 
-      {/* 15-min TWA table. */}
+      {}
       <Box style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 6, overflow: 'hidden' }}>
-        <Box style={{ maxHeight: 420, overflowY: 'auto' }}>
+        <Box style={{ maxHeight: 480, overflowY: 'auto' }}>
           <Table withTableBorder={false} verticalSpacing={4} fz="sm" stickyHeader>
             <Table.Thead bg="gray.0">
               <Table.Tr>
@@ -186,16 +176,16 @@ export default function AirQualityTab({ project, report }) {
                   {config.stations.map((st) => (
                     <Table.Td key={st.key} ta="right">{fmt(s.values[st.key] ?? null)}</Table.Td>
                   ))}
-                  <Table.Td ta="right" c="orange.8">{fmt(s.alertLevel)}</Table.Td>
-                  <Table.Td ta="right" c="red.8">{fmt(s.actionLevel)}</Table.Td>
+                  <Table.Td ta="right" c="#b45309">{fmt(s.alertLevel)}</Table.Td>
+                  <Table.Td ta="right" c="#b91c1c">{fmt(s.actionLevel)}</Table.Td>
                 </Table.Tr>
               ))}
             </Table.Tbody>
           </Table>
         </Box>
         <Text size="xs" c="dimmed" p="xs" style={{ borderTop: '1px solid var(--mantine-color-gray-2)' }}>
-          All values mg/m3, 15-minute time-weighted averages. Alert/Action ={' '}
-          {config.thresholds?.alert_offset_mgm3 ?? '—'} / {config.thresholds?.action_offset_mgm3 ?? '—'} mg/m3
+          All values mg/m³, 15-minute time-weighted averages. Alert/Action ={' '}
+          {config.thresholds?.alert_offset_mgm3 ?? '—'} / {config.thresholds?.action_offset_mgm3 ?? '—'} mg/m³
           above the minimum beach-station value per interval.
         </Text>
       </Box>

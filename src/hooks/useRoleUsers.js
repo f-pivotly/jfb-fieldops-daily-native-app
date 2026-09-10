@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { fetchRoleUsers } from '../data'
 
-// Lists users assigned to a given Pivotly role (Admin → Roles → Users tab).
-// enabled=false skips the fetch entirely, e.g. when the caller lacks the
-// user_role.list claim and the request would just 403.
 export function useRoleUsers(roleId, { enabled = true } = {}) {
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(true)

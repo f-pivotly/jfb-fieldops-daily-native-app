@@ -7,13 +7,6 @@ function fmtSize(n) {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`
 }
 
-// Shared "upload a file, point a record field at it, delete whatever it
-// replaced" flow -- the same three-step sequence (upload -> update -> delete
-// old) that DredgeChartTab.replaceConfigFile, SafetyTab's signature
-// handlers, and WeeklySummaryPage.handlePhotoUpload each hand-rolled
-// separately. One hook instance covers one independent upload target (e.g.
-// one signature slot); a caller with several independent slots calls this
-// once per slot, same as it would with useState.
 export function useAttachmentUpload() {
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState(null)
@@ -49,14 +42,9 @@ export function useAttachmentUpload() {
         try {
           const rows = await getAttachments({ coreRecordId: id, domain })
           storagePath = rows.find((r) => r.fileId === res.fileId)?.storagePath ?? null
+          // eslint-disable-next-line no-empty
         } catch {
-          // best-effort -- storage_path is nice-to-have metadata, not required
-          // to link the file
         }
-        // originalName overrides the uploaded file's own name when the file
-        // that actually got uploaded was derived/renamed from what the user
-        // picked (e.g. a CSV converted to a PNG, or gzipped before upload) --
-        // the metadata should record what the user chose, not the derived name.
         metadataPatch = {
           [`${metadataPrefix}_original_name`]: originalName ?? resolvedFile.name,
           [`${metadataPrefix}_storage_path`]: storagePath,

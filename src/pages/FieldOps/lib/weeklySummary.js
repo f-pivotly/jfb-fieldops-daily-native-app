@@ -1,13 +1,5 @@
 import { downloadAttachment } from '../../../data'
-
-function blobToDataUri(blob) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onloadend = () => resolve(reader.result)
-    reader.onerror = reject
-    reader.readAsDataURL(blob)
-  })
-}
+import { blobToDataUri, rate } from './realizedToDate'
 
 export async function buildPhotoAssetsParam(photos, weekStart) {
   const weekPhotos = photos.filter((p) => p.week_start === weekStart && p.photo_file_path)
@@ -52,22 +44,6 @@ export function defaultWeeklyWeekStart(todayISO) {
   return addDaysISO(mondayStartISO(todayISO), -7)
 }
 
-function rate(cy, goh) {
-  return goh > 0 ? cy / goh : 0
-}
-
-/**
- * Build the client-facing Weekly Summary report for one Monday-Sunday week.
- *
- * Production (weekCy/weekSf/weekGoh/weekNoh + project-to-date cumulative) comes
- * from `dailyTotals` -- the same dvw-jfb-realized-daily-totals rows Realized
- * To-Date already fetches (per-day cy/sf/goh/noh, released reports only, from
- * the project's production_start_date/start_date floor onward) -- filtered to
- * the week here for "this week" and summed whole for "to date". Delay summary
- * comes pre-aggregated from dvw-jfb-realized-delay-summary, scoped to this
- * week's date range by the caller. Planned/variance use the same bid-rate x
- * expected-GOH/day definition as the Realized To-Date report.
- */
 export function buildWeeklyReport({ project, weekStart, reports, sections, contentRows, dailyTotals, delayRows }) {
   const weekEnd = weekEndISO(weekStart)
   const inWeek = (d) => d >= weekStart && d <= weekEnd

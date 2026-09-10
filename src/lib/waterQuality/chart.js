@@ -1,15 +1,9 @@
-// Canvas renderer for the Daily Turbidity Reporting chart. Draws the
-// monitor series, the compliance line, and the 1.5x background series onto
-// an offscreen canvas and returns a PNG data URL, exactly like the
-// non-native app's src/lib/waterQuality/chart.ts (renderTurbidityChart) --
-// absolute-threshold mode only (Torch Lake style); delta mode (Penobscot
-// tidal sites) is out of scope for this phase.
-
 const COLORS = {
   background: '#1f4e9c',
   earlyWarning: '#7a8c2e',
   compliance: '#6b6b6b',
   complianceLevel: '#e8a33d',
+  earlyWarningLevel: '#c9772e',
   backgroundX15: '#74a9d8',
   axis: '#444444',
   grid: '#e0e0e0',
@@ -34,6 +28,10 @@ export function renderTurbidityChart(day, thresholds, opts = {}) {
 
   const slots = day.slots
   const n = slots.length
+
+  const ewDelta = thresholds.early_warning_delta_ntu
+  const compDelta = thresholds.compliance_delta_ntu
+  const deltaMode = ewDelta != null || compDelta != null
   const complianceLevel = thresholds.compliance_1hr_ntu ?? 50
   const bgMult = thresholds.background_multiplier ?? 1.5
   const hasEwMonitor = slots.some((s) => s.earlyWarning !== null)
@@ -42,6 +40,10 @@ export function renderTurbidityChart(day, thresholds, opts = {}) {
   for (const s of slots) {
     for (const v of [s.background, s.earlyWarning, s.compliance]) {
       if (v !== null && v > maxVal) maxVal = v
+    }
+    if (deltaMode && s.background !== null) {
+      if (compDelta != null && s.background + compDelta > maxVal) maxVal = s.background + compDelta
+      if (ewDelta != null && s.background + ewDelta > maxVal) maxVal = s.background + ewDelta
     }
   }
   maxVal = Math.ceil((maxVal * 1.05) / 10) * 10
@@ -117,8 +119,17 @@ export function renderTurbidityChart(day, thresholds, opts = {}) {
     ctx.setLineDash([])
   }
 
-  if (complianceLevel <= maxVal) drawSeries(() => complianceLevel, COLORS.complianceLevel, 2, [8, 6])
-  drawSeries((s) => (s.background !== null ? s.background * bgMult : null), COLORS.backgroundX15, 1.5)
+  if (deltaMode) {
+    if (compDelta != null) {
+      drawSeries((s) => (s.background !== null ? s.background + compDelta : null), COLORS.complianceLevel, 2, [8, 6])
+    }
+    if (ewDelta != null) {
+      drawSeries((s) => (s.background !== null ? s.background + ewDelta : null), COLORS.earlyWarningLevel, 2, [4, 4])
+    }
+  } else {
+    if (complianceLevel <= maxVal) drawSeries(() => complianceLevel, COLORS.complianceLevel, 2, [8, 6])
+    drawSeries((s) => (s.background !== null ? s.background * bgMult : null), COLORS.backgroundX15, 1.5)
+  }
   drawSeries((s) => s.background, COLORS.background)
   if (hasEwMonitor) drawSeries((s) => s.earlyWarning, COLORS.earlyWarning)
   drawSeries((s) => s.compliance, COLORS.compliance)
@@ -126,8 +137,13 @@ export function renderTurbidityChart(day, thresholds, opts = {}) {
   const legend = [['Background NTUs', COLORS.background]]
   if (hasEwMonitor) legend.push(['Early Warning NTUs', COLORS.earlyWarning])
   legend.push(['Compliance NTUs', COLORS.compliance])
-  legend.push([`${complianceLevel} NTU Compliance Level`, COLORS.complianceLevel])
-  legend.push([`${bgMult}x Background NTUs`, COLORS.backgroundX15])
+  if (deltaMode) {
+    if (compDelta != null) legend.push([`Compliance (BG +${compDelta})`, COLORS.complianceLevel])
+    if (ewDelta != null) legend.push([`Early Warning (BG +${ewDelta})`, COLORS.earlyWarningLevel])
+  } else {
+    legend.push([`${complianceLevel} NTU Compliance Level`, COLORS.complianceLevel])
+    legend.push([`${bgMult}x Background NTUs`, COLORS.backgroundX15])
+  }
 
   ctx.font = '11px Arial'
   ctx.textBaseline = 'middle'

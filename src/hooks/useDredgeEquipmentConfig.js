@@ -1,7 +1,3 @@
-import { useDomainData } from './useDomainData'
+import { makeListHook } from './domainHookFactory'
 
-export function useDredgeEquipmentConfig(projectId) {
-  const { records, loading, error, creating, updating, deleting, create, update, remove } =
-    useDomainData({ domain: 'jfb_dredge_equipment_config', system: 'core', projectId })
-  return { equipmentConfigs: records, loading, error, creating, updating, deleting, create, update, remove }
-}
+export const useDredgeEquipmentConfig = makeListHook('jfb_dredge_equipment_config', 'equipmentConfigs', 'project')

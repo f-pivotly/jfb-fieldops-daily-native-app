@@ -1,6 +1,3 @@
-import { useDomainData } from './useDomainData'
+import { makeListHook } from './domainHookFactory'
 
-export function useWorkTypes() {
-  const { records, loading, error } = useDomainData({ domain: 'jfb_work_types', system: 'core' })
-  return { workTypes: records, loading, error }
-}
+export const useWorkTypes = makeListHook('jfb_work_types', 'workTypes', null)

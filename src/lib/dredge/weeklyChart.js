@@ -1,10 +1,3 @@
-// Weekly dredge progress charts -- one per equipment with coverage (this
-// week or prior), for the Weekly Summary PDF. Same bordered chart as the
-// daily, in "weekly mode": prior coverage in green, this week's coverage
-// highlighted orange, no live-dredge pose. Ported from the reference app's
-// weeklyChart.ts -- base/overview path only. Multi-contract scoped
-// rendering and intra-week re-pass folding are the separate "Multi-contract
-// weekly scope split" gap (DREDGE_FEATURE_GAPS.md) and aren't ported here.
 import { fetchDomainRecords, downloadAttachment } from '../../data'
 import { renderChart, parseCells } from './chart'
 import { loadAttachmentImage, loadPublicImage, loadTiles } from './imageLoaders'
@@ -14,7 +7,6 @@ function shortDate(iso) {
   return d.toLocaleDateString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric', year: 'numeric' })
 }
 
-// "Jun 15 - Jun 21, 2026" -- drops the redundant first year when same-year.
 function weekRangeText(weekStartISO, weekEndISO) {
   const start = shortDate(weekStartISO)
   const end = shortDate(weekEndISO)
@@ -32,14 +24,6 @@ async function loadCellsFor(path) {
   }
 }
 
-// Buckets every jfb_dredge_progress row for the project into this week's
-// footprint vs. prior footprint, per equipment_id, using the same
-// footprint_rings ?? coverage_rings fallback DredgeProgressTab.jsx's own
-// priorRings computation already uses. Rows dated after weekEndISO
-// (future reports) are excluded from both buckets. Exported on its own --
-// much cheaper than renderWeeklyProgressCharts (no image fetches, no
-// canvas render) -- for the on-screen "N dredge(s) with coverage" status,
-// which only needs the count, not the rendered charts.
 export async function fetchWeekCoverage({ appSlug, projectId, weekStartISO, weekEndISO }) {
   const [reportsRes, progressRes] = await Promise.all([
     fetchDomainRecords({ domain: 'jfb_reports', system: 'core', appSlug, filters: { project_id: projectId }, limit: 1000 }),
@@ -60,11 +44,6 @@ export async function fetchWeekCoverage({ appSlug, projectId, weekStartISO, week
   return byEquipment
 }
 
-/**
- * Renders one weekly progress chart per equipment with coverage (this week
- * or prior), as PNG data URLs keyed by equipment_id. {} for projects with
- * no dredge chart config, or when nothing's been dredged yet.
- */
 export async function renderWeeklyProgressCharts({ appSlug, projectId, weekStartISO, weekEndISO }) {
   const [projectRes, dredgeConfigRes, equipmentConfigRes, areasRes, equipmentRes, coverage] = await Promise.all([
     fetchDomainRecords({ domain: 'jfb_projects', system: 'core', appSlug, filters: { id: projectId }, limit: 1 }),
@@ -97,11 +76,6 @@ export async function renderWeeklyProgressCharts({ appSlug, projectId, weekStart
   const out = {}
   for (const [equipmentId, cov] of coverage) {
     if (!cov.weekRings.length && !cov.priorRings.length) continue
-    // Equipment-config label field is `label`, not `chart_label_override`
-    // (jfb_dredge_equipment_config.json) -- DredgeProgressTab.jsx's daily
-    // chart references chart_label_override, which doesn't exist on this
-    // domain, so it always falls through to the equipment's own name there.
-    // Using the real field name here so weekly labels correctly.
     const dredgeLabel = equipmentConfigByEqId.get(equipmentId)?.label
       || equipmentById.get(equipmentId)?.name
       || 'Dredge'

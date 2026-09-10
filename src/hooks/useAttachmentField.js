@@ -1,13 +1,8 @@
 import { useEffect, useState } from 'react'
-import { downloadAttachment } from '../../../../data'
-import { useAttachmentUpload } from '../../../../hooks/useAttachmentUpload'
+import { downloadAttachment } from '../data'
+import { useAttachmentUpload } from './useAttachmentUpload'
 
-// One signature slot (preparer or SSHO) on the safety report: downloads the
-// existing image for preview, uploads a replacement via the shared
-// useAttachmentUpload, and optionally clears the field. Signatures don't
-// delete the file they replace (pre-existing behavior, not changed here --
-// see useAttachmentUpload's previousFileId, simply never passed).
-export function useSignatureUpload({
+export function useAttachmentField({
   existingFileId,
   ensureRecordId,
   updateRecord,
@@ -19,11 +14,6 @@ export function useSignatureUpload({
   onError,
 }) {
   const [url, setUrl] = useState(null)
-  // Local, inline-under-the-button validation error (file too large) --
-  // distinct from onError, which reports actual load/upload/save failures
-  // into the tab's shared banner. Kept separate to match the original
-  // display split (size errors show next to the button, everything else
-  // shows at the top of the tab).
   const [error, setError] = useState(null)
   const attachment = useAttachmentUpload()
 
@@ -32,7 +22,7 @@ export function useSignatureUpload({
     let cancelled = false
     downloadAttachment(existingFileId)
       .then((blob) => { if (!cancelled) setUrl(URL.createObjectURL(blob)) })
-      .catch((err) => { if (!cancelled) onError?.(`Failed to load signature: ${err.message}`) })
+      .catch((err) => { if (!cancelled) onError?.(`Failed to load file: ${err.message}`) })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existingFileId])
@@ -40,7 +30,7 @@ export function useSignatureUpload({
   async function upload(file) {
     if (!file) return
     if (maxBytes && file.size > maxBytes) {
-      setError(`Signature image is ${(file.size / 1024).toFixed(0)} KB — must be ${maxBytes / 1024} KB or smaller.`)
+      setError(`File is ${(file.size / (1024 * 1024)).toFixed(1)} MB — must be ${(maxBytes / (1024 * 1024)).toFixed(0)} MB or smaller.`)
       return
     }
     setError(null)

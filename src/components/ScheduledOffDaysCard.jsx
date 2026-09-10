@@ -2,19 +2,6 @@ import { useState } from 'react'
 import { Box, Text, Group, Button, TextInput, UnstyledButton } from '@mantine/core'
 import { addDaysISO, daysBetween, prettyDate } from '../pages/FieldOps/lib/realizedToDate'
 
-/**
- * Scheduled Off-Days panel. PMs add future calendar dates the project isn't
- * working (e.g. a holiday week, scheduled vacation) -- the Realized-to-Date
- * forecast extends its goal-reach date by the count of future-excluded days
- * inside the projection window.
- *
- * Storage is jfb_realized_excluded_days, the same domain the per-day exclude
- * toggle on the Realized To-Date weekly log writes to. Either UI writes to
- * the same place; both views reflect changes on next load. Mounted on both
- * the Realized To-Date page (primary, weekly visibility) and Project
- * Settings (secondary, planning summary) -- matches the reference app's
- * ScheduledOffDaysCard.tsx, shared the same way for the same reason.
- */
 export default function ScheduledOffDaysCard({ projectId, excludedDays, today, onCreate, onRemove, onError }) {
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')

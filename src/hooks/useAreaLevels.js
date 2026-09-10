@@ -1,7 +1,7 @@
-import { useDomainData } from './useDomainData'
+import { makeListHook } from './domainHookFactory'
 
-export function useAreaLevels(projectId) {
-  const { records, loading, error } = useDomainData({ domain: 'jfb_project_area_levels', system: 'core', projectId })
-  const areaLevels = records.slice().sort((a, b) => (a.sort_order ?? a.depth) - (b.sort_order ?? b.depth))
-  return { areaLevels, loading, error }
+function bySortOrder(records) {
+  return records.slice().sort((a, b) => (a.sort_order ?? a.depth) - (b.sort_order ?? b.depth))
 }
+
+export const useAreaLevels = makeListHook('jfb_project_area_levels', 'areaLevels', 'project', bySortOrder)

@@ -12,12 +12,6 @@ import {
   readWrittenRecordId,
 } from "../../data";
 
-// Default points at the throwaway domain created for this test panel.
-// This must be the config item's SLUG (core.cfg_items_b.slug), not the
-// domain_table_name -- core.fnc_crd_ctx_from_inputs looks up
-// core.cfg_domain_info_cache_b by slug, and that cache row only exists
-// after the domain has been Published (Save alone doesn't populate it).
-// Same rule PhotosTab.jsx / DredgeProgressTab.jsx rely on for their domains.
 const DEFAULT_TEST_DOMAIN = "test_attachment_demos";
 
 function fmtSize(n) {

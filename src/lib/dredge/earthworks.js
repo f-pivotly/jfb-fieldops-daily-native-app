@@ -1,29 +1,8 @@
-// Trimble Earthworks surface-export support for mechanical dredging projects.
-// The export is a 1-ft gridded snapshot of the machine's as-built surface:
-// CSV `X,Y,VAL,NUM,SDV`, VAL = surface elevation ft, one row per cell,
-// cumulative to the moment of export. Unlike HYPACK there is no time axis --
-// a day-scoped export's cells ARE that day's bucket positions.
-//
-// SWING FILTER: the operator lifts each bucket and swings it over
-// already-worked ground / open water to the material barge, and Earthworks
-// logs those bucket positions too. A cell counts as genuine digging only when
-// the recorded surface is below the water elevation (or within tolerance of
-// design grade) -- lifted swing/dump readings drop out.
-//
-// Ported from jfb-fieldops-daily/src/lib/dredge/earthworks.ts (types dropped
-// to JSDoc). Full-surface diffing against a PRIOR day's export (diffSurfaces)
-// is ported for reuse, but nothing in this app wires it up yet -- that needs
-// somewhere to bank each day's surface for tomorrow's diff, and
-// jfb_dredge_progress has no field for it today (see DREDGE_FEATURE_GAPS.md).
 import { PARAM, close, fillHoles, dropSmallIslands, maskToPolys } from './coverage'
+import { sampleRef } from './designVolume'
 
-/** @typedef {{x0: number, y0: number, nx: number, ny: number, val: Float32Array}} SurfaceGrid */
+const EARTHWORKS_DEFAULTS = { minCutFt: 0.25, waterBufferFt: 0.25, designTolFt: 0.5, minIslandSqFt: 0 }
 
-export const EARTHWORKS_DEFAULTS = { minCutFt: 0.25, waterBufferFt: 0.25, designTolFt: 0.5, minIslandSqFt: 0 }
-
-/** Parse an Earthworks grid export (X,Y,VAL[,NUM,SDV]) into a SurfaceGrid.
- *  Cells must sit on a 1-ft grid.
- * @param {string} text @returns {SurfaceGrid} */
 export function parseEarthworksCsv(text) {
   const rows = []
   let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity
@@ -56,20 +35,10 @@ export function parseEarthworksCsv(text) {
   return { x0: minX, y0: minY, nx, ny, val }
 }
 
-function sampleAt(s, x, y) {
-  const gx = Math.round(x - s.x0), gy = Math.round(y - s.y0)
-  if (gx < 0 || gx >= s.nx || gy < 0 || gy >= s.ny) return NaN
-  return s.val[gy * s.nx + gx]
-}
+const sampleAt = sampleRef
 
-/** Morphology pad (cells) around the data extent. */
 const GRID_PAD = 4
 
-/** @typedef {{waterElev: number, design?: SurfaceGrid|null, minCutFt?: number, waterBufferFt?: number, designTolFt?: number, minIslandSqFt?: number}} DiffOptions */
-
-/** Diff today's surface against the prior stored surface -> the day's genuine
- *  dredging coverage as world-coord rings, swing artifacts filtered out.
- * @param {SurfaceGrid} today @param {SurfaceGrid} prior @param {DiffOptions} opts */
 export function diffSurfaces(today, prior, opts) {
   const minCut = opts.minCutFt ?? EARTHWORKS_DEFAULTS.minCutFt
   const waterCutoff = opts.waterElev - (opts.waterBufferFt ?? EARTHWORKS_DEFAULTS.waterBufferFt)
@@ -102,13 +71,6 @@ export function diffSurfaces(today, prior, opts) {
   return { rings, cutSqFt: cut, swingFilteredSqFt: swing, newCells }
 }
 
-/** @typedef {{rings: [number, number][][], keptSqFt: number, swingFilteredSqFt: number}} CoverageResult */
-
-/** DAY-SCOPED export -> the day's coverage directly: the file's cells ARE the
- *  day's bucket positions, like a HYPACK track. Keep a cell only where the
- *  bucket was genuinely digging: recorded surface below the water elevation,
- *  or within tolerance of design grade. No prior surface involved.
- * @param {SurfaceGrid} today @param {DiffOptions} opts @returns {CoverageResult} */
 export function coverageFromSurface(today, opts) {
   const waterCutoff = opts.waterElev - (opts.waterBufferFt ?? EARTHWORKS_DEFAULTS.waterBufferFt)
   const designTol = opts.designTolFt ?? EARTHWORKS_DEFAULTS.designTolFt
@@ -135,9 +97,6 @@ export function coverageFromSurface(today, opts) {
   return { rings, keptSqFt: kept, swingFilteredSqFt: swing }
 }
 
-/** The YYMMDD date prefix of an Earthworks export filename, as ISO, or null.
- *  e.g. "260716 TL CAT 374 Progress.csv" -> "2026-07-16".
- * @param {string} name */
 export function filenameDateISO(name) {
   const m = name.trim().match(/^(\d{2})(\d{2})(\d{2})\b/)
   if (!m) return null
@@ -147,14 +106,6 @@ export function filenameDateISO(name) {
   return `20${yy}-${mm}-${dd}`
 }
 
-// --- Isopach / difference-chart rendering from a CSV grid export -----------
-// The team re-exports the isopach as dredging progresses; accepting the raw
-// X,Y,DIFF grid here (instead of requiring a pre-rendered image) makes that a
-// one-file upload with the georeference computed from the data itself.
-
-/** Depth-difference color bins -- the team's OGS matrix convention (recovered
- *  from the Torch Lake isopach DXF: grays = at/over design, greens < 1 ft,
- *  cyan/blues 1-5 ft, yellows/orange 5-8 ft, pink/red 8-10+ ft remaining). */
 const ISO_BINS = [
   { max: -1.5, rgb: [38, 0, 0] },
   { max: -1.0, rgb: [0, 0, 0] },
@@ -174,20 +125,11 @@ const ISO_BINS = [
   { max: 9, rgb: [204, 204, 204] },
   { max: 10, rgb: [255, 127, 191] },
 ]
-/** @param {number} v @returns {[number, number, number]} */
-export function isopachColor(v) {
-  // strict < : a value exactly on an edge takes the UPPER bin (e.g. 2.0 -> the
-  // 2-3 ft color) -- verified 99.2% pixel-identical to the team's own
-  // rendering of the real Torch Lake isopach.
+function isopachColor(v) {
   for (const b of ISO_BINS) if (v < b.max) return b.rgb
-  return [255, 0, 0] // 10+ ft
+  return [255, 0, 0]
 }
 
-/** Render an isopach/difference CSV grid (X,Y,DIFF) to a colored PNG File
- *  (1 px per cell, transparent where no data) + its georeference, ready for
- *  the standard config-asset upload path. Browser-only (canvas).
- * @param {string} text
- * @returns {Promise<{file: File, georef: {wL: number, wR: number, wT: number, wB: number}}>} */
 export async function isopachCsvToImage(text) {
   const s = parseEarthworksCsv(text)
   const canvas = document.createElement('canvas')
@@ -200,7 +142,7 @@ export async function isopachCsvToImage(text) {
       const v = s.val[gy * s.nx + gx]
       if (Number.isNaN(v)) continue
       const [r, gr, b] = isopachColor(v)
-      const o = ((s.ny - 1 - gy) * s.nx + gx) * 4 // image row 0 = north (max Y)
+      const o = ((s.ny - 1 - gy) * s.nx + gx) * 4
       img.data[o] = r; img.data[o + 1] = gr; img.data[o + 2] = b; img.data[o + 3] = 255
     }
   }

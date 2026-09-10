@@ -15,11 +15,6 @@ function triggerDownload(blob, name) {
   URL.revokeObjectURL(url)
 }
 
-// The rendering + interactive-annotation engine for DredgeProgressTab. Owns
-// the canvas, the render transform, and every ref/state the click-to-edit
-// mode machine touches -- runRender and the edit handlers are one hook (not
-// split further) because every edit action ends by calling runRender(), and
-// runRender reads the same editRef every edit action mutates.
 export function useDredgeChartEngine({
   effectiveConfig,
   project,
@@ -40,23 +35,13 @@ export function useDredgeChartEngine({
   const transformRef = useRef(null)
   const todayPtsRef = useRef([])
   const headingsRef = useRef([])
-  // Mechanical/Earthworks coverage rings (see resolveTodayCoverage) -- empty
-  // for HYPACK projects, where todayPtsRef drives coverage instead.
   const todayCoverageRingsRef = useRef([])
   const drawRef = useRef([])
   const [flipDisplay, setFlipDisplay] = useState(() => readFlipShape(selectedEquipmentId))
   const editRef = useRef({ secondManual: [], removedSeeds: [], excludeRings: [], removedAreaSeeds: [], advanceLines: [], override: null, flipShape: flipDisplay })
   const imagesRef = useRef({})
-  // Caches the decoded reference-survey grid by storage path, so re-generating
-  // a chart doesn't re-download/re-gunzip the ~MB grid every time -- only when
-  // the config's reference_surface_path actually changes. Written by
-  // useDredgeChartGenerate's loaders, read here by runRender.
   const refSurfaceRef = useRef(null)
-  // Same idea, for the parsed dredge-shape DXF.
   const dredgeShapeRef = useRef(null)
-  // This generate's full-surface export (if any) + the prior surface it was
-  // diffed against, for useDredgeProgressSave to bank and runRender to build
-  // the surface-diff volume input from. Null on day-scoped exports/HYPACK days.
   const surfaceDiffRef = useRef(null)
   const pendingCutterRef = useRef(null)
 
@@ -133,9 +118,6 @@ export function useDredgeChartEngine({
       flipShape: e.flipShape,
       viewWindow,
     })
-    // Preview-only render (a zoomed work-area window): draw to the canvas but
-    // don't touch the "official" result -- lastResult/transform must always
-    // reflect the full day, since that's what gets saved.
     if (!viewWindow) {
       transformRef.current = result.transform
       setLastResult({ ...result, trackPoints: todayPtsRef.current.length })
@@ -143,10 +125,6 @@ export function useDredgeChartEngine({
     return result
   }
 
-  // Resets the click-to-edit mode machine. preserveFlip=true (post-generate)
-  // keeps the current flipShape and leaves gap/tolerance/lastResult alone;
-  // preserveFlip=false (files changed) recomputes flip fresh and clears
-  // everything, matching the two distinct reset flows this replaces.
   const resetEdits = (preserveFlip) => {
     const flip = preserveFlip ? editRef.current.flipShape : readFlipShape(selectedEquipmentId)
     editRef.current = { secondManual: [], removedSeeds: [], excludeRings: [], removedAreaSeeds: [], advanceLines: [], override: null, flipShape: flip }
@@ -248,7 +226,8 @@ export function useDredgeChartEngine({
   const toggleFlip = () => {
     const next = !editRef.current.flipShape
     editRef.current.flipShape = next
-    try { if (selectedEquipmentId) localStorage.setItem(`dredgeFlip:${selectedEquipmentId}`, next ? '1' : '0') } catch { /* private mode */ }
+    // eslint-disable-next-line no-empty
+    try { if (selectedEquipmentId) localStorage.setItem(`dredgeFlip:${selectedEquipmentId}`, next ? '1' : '0') } catch { }
     setFlipDisplay(next)
     runRender()
   }

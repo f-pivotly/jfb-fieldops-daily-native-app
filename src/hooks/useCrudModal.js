@@ -1,21 +1,15 @@
 import { useState } from 'react'
 import { useConfirmDialog } from './useConfirmDialog'
 
-// Shared "add/edit modal + delete confirm" state machine behind
-// CappingSetupTab's five nearly-identical CRUD-table components
-// (NamedTypeTable, ComponentsTable, and the three mapping tables) --
-// each keeps its own toForm/toPayload field mapping and its own render,
-// only the modalOpen/editRow/form bookkeeping and openAdd/openEdit/save/
-// remove handlers were duplicated.
 export function useCrudModal({
-  emptyForm, // (context) => initial form object, e.g. () => ({ name: '', ... })
-  toForm, // (row) => form object, for populating the Edit modal
-  toPayload, // (form, { editRow, context }) => payload, or falsy to abort save
-  contextFromRow, // optional: (row) => context, set when opening Edit (mapping tables' parent id)
+  emptyForm,
+  toForm,
+  toPayload,
+  contextFromRow,
   onCreate,
   onUpdate,
   onDelete,
-  confirmMessage, // (row) => string, shown before delete
+  confirmMessage,
 }) {
   const { confirm, modal: confirmModal } = useConfirmDialog()
   const [modalOpen, setModalOpen] = useState(false)

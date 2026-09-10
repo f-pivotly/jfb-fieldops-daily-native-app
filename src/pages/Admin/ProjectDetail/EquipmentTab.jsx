@@ -1,41 +1,59 @@
 import { useState } from "react";
-import { Box, Text, Group, Button, Modal, TextInput } from "@mantine/core";
+import { Box, Text, Group, Button, Modal, TextInput, Select } from "@mantine/core";
 import { IconPlus, IconAnchor, IconRefresh } from "@tabler/icons-react";
 import { useEquipment } from "../../../hooks/useEquipment";
 import { useConfirmDialog } from "../../../hooks/useConfirmDialog";
+import { useDomainData } from "../../../hooks/useDomainData";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import SafeError from "../../../components/SafeError";
+
+function toDateInputValue(iso) {
+  return iso ? String(iso).slice(0, 10) : "";
+}
 
 export default function EquipmentTab({ project }) {
   const hasProject = !!project?.id;
   const { confirm, modal: confirmModal } = useConfirmDialog();
   const { equipment: equipmentRecords, loading, error, creating, updating, reload, create, update, remove } = useEquipment(project?.id);
+  const { records: workTypeRecords } = useDomainData({ domain: "jfb_work_types", system: "core" });
+  const workTypeData = workTypeRecords.map((r) => ({ value: r.name, label: r.name }));
 
   const equipment = hasProject ? equipmentRecords : [];
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editRow, setEditRow] = useState(null);
   const [name, setName] = useState("");
+  const [workType, setWorkType] = useState("");
+  const [workTypeFrom, setWorkTypeFrom] = useState("");
 
   function openAdd() {
     setEditRow(null);
     setName("");
+    setWorkType("");
+    setWorkTypeFrom("");
     setModalOpen(true);
   }
 
   function openEdit(row) {
     setEditRow(row);
     setName(row.name ?? "");
+    setWorkType(row.work_type ?? "");
+    setWorkTypeFrom(toDateInputValue(row.work_type_from));
     setModalOpen(true);
   }
 
   async function handleSave() {
     if (!name.trim()) return;
+    const payload = {
+      name: name.trim(),
+      work_type: workType || null,
+      work_type_from: workType ? (workTypeFrom || null) : null,
+    };
     if (editRow) {
-      await update(editRow.id, { name: name.trim() });
+      await update(editRow.id, payload);
     } else {
       if (!hasProject) return;
-      await create({ name: name.trim(), project_id: project.id });
+      await create({ ...payload, project_id: project.id });
     }
     setModalOpen(false);
   }
@@ -82,6 +100,12 @@ export default function EquipmentTab({ project }) {
             <Group gap={8}>
               <IconAnchor size={14} color="#0F2744" />
               <Text size="xs" fw={600}>{row.name}</Text>
+              {row.work_type && (
+                <Text size="xs" c="dimmed">
+                  {row.work_type}
+                  {row.work_type_from ? ` (from ${toDateInputValue(row.work_type_from)})` : ""}
+                </Text>
+              )}
             </Group>
             <Group gap={10} wrap="nowrap">
               <Button size="xs" variant="subtle" onClick={() => openEdit(row)}>Edit</Button>
@@ -102,6 +126,26 @@ export default function EquipmentTab({ project }) {
           mb={16}
           autoFocus
         />
+        <Select
+          label="Work Type"
+          description="Pins this unit's discipline regardless of the project's own work type -- leave blank to inherit the project's. Use this for a mixed-phase project running a dredge and a placement unit on the same job."
+          placeholder="Inherit from project"
+          data={workTypeData}
+          value={workType || null}
+          onChange={(v) => setWorkType(v ?? "")}
+          clearable
+          mb={workType ? 16 : 0}
+        />
+        {workType && (
+          <TextInput
+            type="date"
+            label="Effective From"
+            description="First report date this work type applies from. Leave blank if this unit has only ever done this one thing."
+            value={workTypeFrom}
+            onChange={(e) => setWorkTypeFrom(e.currentTarget.value)}
+            mb={16}
+          />
+        )}
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => setModalOpen(false)}>Cancel</Button>
           <Button size="xs" loading={editRow ? updating : creating} onClick={handleSave} disabled={!name.trim()} style={{ background: "#0F2744", border: "none" }}>

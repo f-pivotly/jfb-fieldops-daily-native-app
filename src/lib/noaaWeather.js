@@ -1,22 +1,8 @@
-// NOAA / NWS weather fetch helper for the Safety tab Climate section.
-// Ported from jfb-fieldops-daily/src/lib/noaaWeather.ts. All fetch() calls
-// route through fetchExternalJson (../data) rather than calling fetch()
-// directly -- this project's eslint config forbids fetch() outside
-// src/data/index.js, matching the existing pattern used by
-// src/lib/dredge/aerial.js for the USGS basemap call.
-//
-// Strategy: try up to 5 nearest NWS stations (recent ~7 days, official
-// data). If NWS returns nothing, fall back to Open-Meteo's archive
-// endpoint (NOAA-derived reanalysis, back to 1940). Within the NWS path,
-// precip specifically prefers the station's own reading and only
-// cross-checks Open-Meteo's forecast endpoint when the station logged
-// zero -- Open-Meteo is a gridded model and can badly overshoot a point
-// measurement.
 import { fetchExternalJson } from '../data'
 
 const NWS_BASE = 'https://api.weather.gov'
 
-export class NoaaFetchError extends Error {
+class NoaaFetchError extends Error {
   constructor(message) {
     super(message)
     this.name = 'NoaaFetchError'
@@ -67,7 +53,6 @@ function roundOrNull(n) {
   return n === null || n === undefined ? null : Math.round(n)
 }
 
-// Aggregates one station's raw hourly observations into a daily summary.
 function aggregate(obs) {
   if (obs.length === 0) {
     return {
@@ -96,10 +81,6 @@ function aggregate(obs) {
 
     if (o.windDirectionDeg !== null) windDirs.push(o.windDirectionDeg)
 
-    // precipitationLastHour is a TRAILING-hour total; a dense station
-    // re-reports the same hour every few minutes, so summing every ob
-    // multiplies the same rain. Keep ONE value per clock hour (the last
-    // ob in the hour) and sum those.
     const p = precipToIn(o.precipLastHour, o.precipUnit)
     if (p !== null) {
       precipAny = true
@@ -119,7 +100,6 @@ function aggregate(obs) {
     if (v > maxCount) { conditions = k; maxCount = v }
   }
 
-  // Wind direction = circular mean.
   let avgDirDeg = null
   if (windDirs.length > 0) {
     let sumSin = 0
@@ -160,8 +140,6 @@ const WMO_CODE_LABELS = {
   95: 'Thunderstorm', 96: 'Thunderstorm with Hail', 99: 'Heavy Thunderstorm with Hail',
 }
 
-// Open-Meteo Archive -- daily weather summary going back to 1940. Used
-// when NWS has no observations at all for the requested date/location.
 async function fetchOpenMeteoArchive(lat, lng, reportDateISO) {
   const url =
     `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lng}` +
@@ -198,9 +176,6 @@ async function fetchOpenMeteoArchive(lat, lng, reportDateISO) {
   }
 }
 
-// Open-Meteo Forecast endpoint -- covers today + recent past days. Used
-// only to cross-check NWS precipitation when the station logged zero
-// (most stations leave precipitationLastHour null even when it rained).
 async function fetchOpenMeteoForecastPrecip(lat, lng, reportDateISO) {
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
@@ -220,8 +195,6 @@ async function fetchOpenMeteoForecastPrecip(lat, lng, reportDateISO) {
   }
 }
 
-// Fetch a one-day weather summary for a location + report date. Throws
-// NoaaFetchError only when BOTH NWS and Open-Meteo fail.
 export async function fetchNoaaDailySummary(lat, lng, reportDateISO) {
   let points
   try {
@@ -259,7 +232,7 @@ export async function fetchNoaaDailySummary(lat, lng, reportDateISO) {
         `${NWS_BASE}/stations/${station.id}/observations?start=${start}&end=${end}`,
       )
     } catch {
-      continue // try the next station
+      continue
     }
 
     const obs = (obsJson.features ?? []).map((f) => ({
@@ -279,9 +252,6 @@ export async function fetchNoaaDailySummary(lat, lng, reportDateISO) {
 
     const summary = aggregate(obs)
 
-    // Precip source: prefer the station's own reading whenever it
-    // reported any precip -- fall back to Open-Meteo's forecast endpoint
-    // only when the station logged NO precip at all.
     const omPrecip =
       summary.precipTodayIn == null ? await fetchOpenMeteoForecastPrecip(lat, lng, reportDateISO) : null
     const finalPrecip = summary.precipTodayIn != null ? summary.precipTodayIn : omPrecip
@@ -289,8 +259,6 @@ export async function fetchNoaaDailySummary(lat, lng, reportDateISO) {
     return { ...summary, precipTodayIn: finalPrecip, source: 'NWS', sourceLabel: station.id, observationCount: obs.length }
   }
 
-  // NWS came back empty across all tried stations -- fall back to
-  // Open-Meteo's archive.
   try {
     return await fetchOpenMeteoArchive(lat, lng, reportDateISO)
   } catch (openMeteoErr) {

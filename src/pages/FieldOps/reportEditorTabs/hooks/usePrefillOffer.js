@@ -1,12 +1,5 @@
 import { useEffect, useState } from 'react'
 
-// Shared "offer a prefill from a prior report, preview it, accept or
-// dismiss" bookkeeping behind SafetyTab's "Use plan from M/D" and "Use crew
-// from M/D" buttons. Only the fetch + preview-open + accept-busy state is
-// generic here -- what accepting actually does, and exactly when the
-// preview closes, stays with the caller, since that differs per field (one
-// closes the preview immediately and saves in the background, another
-// waits for every row to finish saving first).
 export function usePrefillOffer({ enabled, fetchOffer, deps }) {
   const [offer, setOffer] = useState(null)
   const [previewOpen, setPreviewOpen] = useState(false)
