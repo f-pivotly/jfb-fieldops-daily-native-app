@@ -10,7 +10,6 @@ export default function LaunchPage({ onSelect }) {
         alignItems: "center",
         justifyContent: "center",
         background: "#f5f6f8",
-        fontFamily: "'Inter', -apple-system, sans-serif",
       }}
     >
       <Box

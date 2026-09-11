@@ -68,7 +68,6 @@ export default function AdminApp({ onExit }) {
         display: "flex",
         height: "100vh",
         overflow: "hidden",
-        fontFamily: "'Inter', -apple-system, sans-serif",
         fontSize: 13,
         background: "#f7f7f7",
       }}

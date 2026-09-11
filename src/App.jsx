@@ -83,7 +83,6 @@ export default function App() {
             flexDirection: "column",
             height: "100vh",
             overflow: "hidden",
-            fontFamily: "'Inter', -apple-system, sans-serif",
             fontSize: 13,
           }}
         >

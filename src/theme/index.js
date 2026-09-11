@@ -26,6 +26,8 @@ const ink = [
   "#24272B",
 ];
 
+const fontStack = "'Inter', system-ui, -apple-system, sans-serif";
+
 export const theme = createTheme({
   primaryColor: "brennanNavy",
   primaryShade: { light: 6, dark: 6 },
@@ -36,11 +38,8 @@ export const theme = createTheme({
   black: "#0E0F11",
   white: "#FFFFFF",
 
-  fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
-  fontFamilyMonospace: "'JetBrains Mono', ui-monospace, Menlo, monospace",
-  headings: {
-    fontFamily: "'Barlow Condensed', 'Oswald', sans-serif",
-  },
+  fontFamily: fontStack,
+  headings: { fontFamily: fontStack },
 
   radius: {
     sm: "4px",
