@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { Box, ScrollArea, Grid, Text, Table, Group, Button, Stack, TextInput, UnstyledButton } from '@mantine/core'
-import { api, executeDataView, executeReport, fetchCurrentUser, fetchFileById, createDomainRecord } from '../../data'
+import { executeDataView, executeReport } from '../../data'
 import { useAppConfig } from '../../contexts/appConfigContext'
 import { useProject } from '../../hooks/useProject'
 import { useRealizedExcludedDays } from '../../hooks/useRealizedExcludedDays'
@@ -10,6 +10,7 @@ import ReasonDialog from '../../components/ReasonDialog'
 import ScheduledOffDaysCard from '../../components/ScheduledOffDaysCard'
 import { buildRealizedReport, todayISO, prettyDate, addDaysISO, mondayStartISO } from './lib/realizedToDate'
 import { buildRealizedReportParams } from './lib/realizedPdfData'
+import { downloadAndLogReport } from './lib/reportDownload'
 
 function fmtRate(n) {
   return (n ?? 0).toLocaleString(undefined, { maximumFractionDigits: 1 })
@@ -113,41 +114,16 @@ export default function RealizedToDatePage() {
       const generatedISO = todayISO()
       const params = buildRealizedReportParams({ report, project, projectCode: project.project_code, generatedISO })
       const result = await executeReport('rpt-jfb-realized-to-date', { parameters: params })
-      const fileRes = await api.get(result.downloadUrl, { responseType: 'blob' })
-      const blobUrl = URL.createObjectURL(new Blob([fileRes.data], { type: 'application/pdf' }))
-      const link = document.createElement('a')
-      link.href = blobUrl
-      link.download = `${generatedISO.replace(/-/g, '')}_${project.project_code}_RealizedToDate.pdf`
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      URL.revokeObjectURL(blobUrl)
-
-      try {
-        const [me, file] = await Promise.all([
-          fetchCurrentUser(),
-          result.fileKey ? fetchFileById(result.fileKey) : Promise.resolve(null),
-        ])
-        await createDomainRecord({
-          domain: 'jfb_report_generations',
-          system: 'core',
-          appSlug: config.appSlug,
-          recordData: {
-            project_id: projectId,
-            report_slug: 'rpt-jfb-realized-to-date',
-            report_type: 'realized_to_date',
-            generated_at: new Date().toISOString(),
-            generated_by_user_id: me.id,
-            generated_by_email: me.email,
-            file_id: result.fileKey ?? null,
-            file_name: file?.logicalName ?? null,
-            file_path: file?.storagePath ?? null,
-            download_url: result.downloadUrl,
-          },
-        })
-      } catch (logErr) {
-        console.error('Failed to log report generation:', logErr.message)
-      }
+      await downloadAndLogReport({
+        result,
+        filename: `${generatedISO.replace(/-/g, '')}_${project.project_code}_RealizedToDate.pdf`,
+        appSlug: config.appSlug,
+        recordData: {
+          project_id: projectId,
+          report_slug: 'rpt-jfb-realized-to-date',
+          report_type: 'realized_to_date',
+        },
+      })
     } catch (e) {
       setActionError(e.message)
     } finally {

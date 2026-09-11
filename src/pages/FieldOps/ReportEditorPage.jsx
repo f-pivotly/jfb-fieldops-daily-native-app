@@ -6,11 +6,12 @@ import { shouldShowDredgeProgress } from '../../config/dredgeProgress'
 import { shouldShowPlacementProgress } from '../../config/placementProgress'
 import { shouldShowSpreaderProgress } from '../../config/spreaderProgress'
 import { pickDensity } from './lib/coverDensity'
+import { downloadAndLogReport } from './lib/reportDownload'
 import { useProject } from '../../hooks/useProject'
 import { useReports } from '../../hooks/useReports'
 import { useEquipment } from '../../hooks/useEquipment'
 import { usePlacementConfig } from '../../hooks/usePlacementConfig'
-import { api, createDomainRecord, executeReport, fetchCurrentUser, fetchFileById } from '../../data'
+import { executeReport, fetchCurrentUser } from '../../data'
 import { useAppConfig } from '../../contexts/appConfigContext'
 import { useFieldOpsAction } from '../../contexts/fieldOpsAccessContext'
 import {
@@ -214,44 +215,19 @@ export default function ReportEditorPage() {
           ...dateTable,
         },
       })
-      const fileRes = await api.get(result.downloadUrl, { responseType: 'blob' })
-      const blobUrl = URL.createObjectURL(new Blob([fileRes.data], { type: 'application/pdf' }))
-      const link = document.createElement('a')
-      link.href = blobUrl
       const yymmdd = date.replaceAll('-', '').slice(2)
-      link.download = `${yymmdd} ${project?.name ?? 'Daily Report'} Daily Report.pdf`
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      URL.revokeObjectURL(blobUrl)
-
-      try {
-        const [me, file] = await Promise.all([
-          fetchCurrentUser(),
-          result.fileKey ? fetchFileById(result.fileKey) : Promise.resolve(null),
-        ])
-        await createDomainRecord({
-          domain: 'jfb_report_generations',
-          system: 'core',
-          appSlug: config.appSlug,
-          recordData: {
-            report_id: reportId,
-            project_id: projectId,
-            report_date: date,
-            report_slug: 'rpt-jfb-daily-report',
-            report_type: 'daily',
-            generated_at: new Date().toISOString(),
-            generated_by_user_id: me.id,
-            generated_by_email: me.email,
-            file_id: result.fileKey ?? null,
-            file_name: file?.logicalName ?? null,
-            file_path: file?.storagePath ?? null,
-            download_url: result.downloadUrl,
-          },
-        })
-      } catch (logErr) {
-        console.error('Failed to log report generation:', logErr.message)
-      }
+      await downloadAndLogReport({
+        result,
+        filename: `${yymmdd} ${project?.name ?? 'Daily Report'} Daily Report.pdf`,
+        appSlug: config.appSlug,
+        recordData: {
+          report_id: reportId,
+          project_id: projectId,
+          report_date: date,
+          report_slug: 'rpt-jfb-daily-report',
+          report_type: 'daily',
+        },
+      })
     } catch (err) {
       console.error('Report generation failed:', err.message)
     } finally {

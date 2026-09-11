@@ -1,9 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { Box, ScrollArea, Text, Group, Button, Stack, Textarea, SimpleGrid, Switch, Modal } from '@mantine/core'
 import {
-  executeDataView, deleteAttachment, readWrittenRecordId,
-  executeReport, api, createDomainRecord, fetchCurrentUser, fetchFileById,
+  executeDataView, deleteAttachment, readWrittenRecordId, executeReport,
 } from '../../data'
 import { useAppConfig } from '../../contexts/appConfigContext'
 import { useProject } from '../../hooks/useProject'
@@ -26,6 +25,9 @@ import {
   buildPhotoAssetsParam,
 } from './lib/weeklySummary'
 import { buildWeeklyChartAssetsParam } from './lib/reportPdfData'
+import { downloadAndLogReport } from './lib/reportDownload'
+import { useDebouncedDraft } from '../../hooks/useDebouncedDraft'
+import SaveIndicator from '../../components/SaveIndicator'
 import { fetchWeekCoverage } from '../../lib/dredge/weeklyChart'
 
 const REPORT_SLUG = 'rpt-jfb-weekly-summary'
@@ -277,43 +279,18 @@ export default function WeeklySummaryPage() {
           ...buildWeeklyDelayChartParams(report),
         },
       })
-      const fileRes = await api.get(result.downloadUrl, { responseType: 'blob' })
-      const blobUrl = URL.createObjectURL(new Blob([fileRes.data], { type: 'application/pdf' }))
-      const link = document.createElement('a')
-      link.href = blobUrl
-      link.download = `${weekStart} to ${weekEnd} ${project?.name ?? 'Weekly Summary'}.pdf`
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      URL.revokeObjectURL(blobUrl)
-
-      try {
-        const [me, file] = await Promise.all([
-          fetchCurrentUser(),
-          result.fileKey ? fetchFileById(result.fileKey) : Promise.resolve(null),
-        ])
-        await createDomainRecord({
-          domain: 'jfb_report_generations',
-          system: 'core',
-          appSlug: config.appSlug,
-          recordData: {
-            report_id: null,
-            project_id: projectId,
-            report_date: weekStart,
-            report_slug: REPORT_SLUG,
-            report_type: 'weekly',
-            generated_at: new Date().toISOString(),
-            generated_by_user_id: me.id,
-            generated_by_email: me.email,
-            file_id: result.fileKey ?? null,
-            file_name: file?.logicalName ?? null,
-            file_path: file?.storagePath ?? null,
-            download_url: result.downloadUrl,
-          },
-        })
-      } catch (logErr) {
-        console.error('Failed to log report generation:', logErr.message)
-      }
+      await downloadAndLogReport({
+        result,
+        filename: `${weekStart} to ${weekEnd} ${project?.name ?? 'Weekly Summary'}.pdf`,
+        appSlug: config.appSlug,
+        recordData: {
+          report_id: null,
+          project_id: projectId,
+          report_date: weekStart,
+          report_slug: REPORT_SLUG,
+          report_type: 'weekly',
+        },
+      })
     })
   }
 
@@ -497,59 +474,11 @@ export default function WeeklySummaryPage() {
 }
 
 function WeeklySummaryTextarea({ summaryRow, onSave }) {
-  const [draft, setDraft] = useState(summaryRow?.content ?? '')
-  const [saveState, setSaveState] = useState('idle')
-  const [syncedRowId, setSyncedRowId] = useState(summaryRow?.id)
-  const timerRef = useRef(null)
-  const draftRef = useRef(draft)
-  const onSaveRef = useRef(onSave)
-
-  useEffect(() => {
-    draftRef.current = draft
+  const { draft, saveState, handleChange, flushSave } = useDebouncedDraft({
+    row: summaryRow,
+    onSave,
+    debounceMs: SUMMARY_DEBOUNCE_MS,
   })
-  useEffect(() => {
-    onSaveRef.current = onSave
-  })
-
-  if (summaryRow?.id !== syncedRowId && saveState !== 'pending' && saveState !== 'saving') {
-    setSyncedRowId(summaryRow?.id)
-    setDraft(summaryRow?.content ?? '')
-  }
-
-  const flushSave = async () => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current)
-      timerRef.current = null
-    }
-    if ((summaryRow?.content ?? '') === draftRef.current) return
-    setSaveState('saving')
-    try {
-      await onSaveRef.current(draftRef.current)
-      setSaveState('saved')
-    } catch {
-      setSaveState('error')
-    }
-  }
-  const flushSaveRef = useRef(flushSave)
-  useEffect(() => {
-    flushSaveRef.current = flushSave
-  })
-
-  useEffect(
-    () => () => {
-      void flushSaveRef.current()
-    },
-    [],
-  )
-
-  function handleChange(next) {
-    setDraft(next)
-    setSaveState('pending')
-    if (timerRef.current) clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(() => {
-      void flushSaveRef.current()
-    }, SUMMARY_DEBOUNCE_MS)
-  }
 
   return (
     <>
@@ -567,21 +496,6 @@ function WeeklySummaryTextarea({ summaryRow, onSave }) {
       />
     </>
   )
-}
-
-function SaveIndicator({ state }) {
-  switch (state) {
-    case 'pending':
-      return <Text size="10px" c="dimmed">…</Text>
-    case 'saving':
-      return <Text size="10px" c="blue">Saving</Text>
-    case 'saved':
-      return <Text size="10px" c="teal" fw={600}>✓ Saved</Text>
-    case 'error':
-      return <Text size="10px" c="red" fw={600}>⚠ Save failed</Text>
-    default:
-      return null
-  }
 }
 
 function ProductionCard({ report }) {

@@ -1,11 +1,13 @@
 import { Box, Text, Textarea, Stack, Group, Button, Modal, TextInput, Switch, Grid } from '@mantine/core'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { IconSettings, IconTrash, IconRefresh } from '@tabler/icons-react'
 import { useDomainData } from '../../../hooks/useDomainData'
 import { useConfirmDialog } from '../../../hooks/useConfirmDialog'
 import { useFieldOpsDomainAccess } from '../../../contexts/fieldOpsAccessContext'
 import LoadingSpinner from '../../../components/LoadingSpinner'
 import SafeError from '../../../components/SafeError'
+import SaveIndicator from '../../../components/SaveIndicator'
+import { useDebouncedDraft } from '../../../hooks/useDebouncedDraft'
 import NarrativeContextPanel from './NarrativeContextPanel'
 import { uniqueSectionKey } from '../../../lib/narrativeSectionKey'
 
@@ -149,63 +151,11 @@ export default function NarrativesTab({ project, report, equipment = [] }) {
 }
 
 function NarrativeSectionCard({ label, contentRow, disabled, onSave }) {
-  const [draft, setDraft] = useState(contentRow?.content ?? '')
-  const [saveState, setSaveState] = useState('idle')
-  const [syncedRowId, setSyncedRowId] = useState(contentRow?.id)
-  const timerRef = useRef(null)
-  const draftRef = useRef(draft)
-  const onSaveRef = useRef(onSave)
-
-  useEffect(() => {
-    draftRef.current = draft
+  const { draft, saveState, handleChange, flushSave } = useDebouncedDraft({
+    row: contentRow,
+    onSave,
+    debounceMs: DEBOUNCE_MS,
   })
-  useEffect(() => {
-    onSaveRef.current = onSave
-  })
-
-  if (contentRow?.id !== syncedRowId && saveState !== 'pending' && saveState !== 'saving') {
-    setSyncedRowId(contentRow?.id)
-    setDraft(contentRow?.content ?? '')
-  }
-
-  const flushSave = async () => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current)
-      timerRef.current = null
-    }
-    if ((contentRow?.content ?? '') === draftRef.current) return
-    setSaveState('saving')
-    try {
-      await onSaveRef.current(draftRef.current)
-      setSaveState('saved')
-    } catch {
-      setSaveState('error')
-    }
-  }
-  const flushSaveRef = useRef(flushSave)
-  useEffect(() => {
-    flushSaveRef.current = flushSave
-  })
-
-  useEffect(
-    () => () => {
-      void flushSaveRef.current()
-    },
-    [],
-  )
-
-  function handleChange(next) {
-    setDraft(next)
-    setSaveState('pending')
-    if (timerRef.current) clearTimeout(timerRef.current)
-    timerRef.current = setTimeout(() => {
-      void flushSaveRef.current()
-    }, DEBOUNCE_MS)
-  }
-
-  async function handleBlur() {
-    await flushSave()
-  }
 
   return (
     <Box p={16} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8, background: '#fff' }}>
@@ -218,27 +168,12 @@ function NarrativeSectionCard({ label, contentRow, disabled, onSave }) {
         minRows={2}
         value={draft}
         disabled={disabled}
-        onBlur={() => void handleBlur()}
+        onBlur={() => void flushSave()}
         onChange={(e) => handleChange(e.currentTarget.value)}
         placeholder={disabled ? 'Select a report date to write a narrative…' : 'Write the narrative for this section…'}
       />
     </Box>
   )
-}
-
-function SaveIndicator({ state }) {
-  switch (state) {
-    case 'pending':
-      return <Text size="10px" c="dimmed">…</Text>
-    case 'saving':
-      return <Text size="10px" c="blue">Saving</Text>
-    case 'saved':
-      return <Text size="10px" c="teal" fw={600}>✓ Saved</Text>
-    case 'error':
-      return <Text size="10px" c="red" fw={600}>⚠ Save failed</Text>
-    default:
-      return null
-  }
 }
 
 function SectionsManagerDialog({ opened, onClose, project, records, create, update, remove }) {

@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { Box, Text, Group, Button, Modal, TextInput, Select } from "@mantine/core";
-import { IconPlus, IconAnchor, IconRefresh } from "@tabler/icons-react";
+import { IconAnchor } from "@tabler/icons-react";
 import { useEquipment } from "../../../hooks/useEquipment";
 import { useConfirmDialog } from "../../../hooks/useConfirmDialog";
 import { useDomainData } from "../../../hooks/useDomainData";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import SafeError from "../../../components/SafeError";
+import TabToolbar from "./TabToolbar";
 
 function toDateInputValue(iso) {
   return iso ? String(iso).slice(0, 10) : "";
@@ -65,24 +66,14 @@ export default function EquipmentTab({ project }) {
 
   return (
     <Box>
-      <Group justify="space-between" mb={12}>
-        <Text fw={700} size="sm">Equipment</Text>
-        <Group gap={8}>
-          <Box onClick={reload} style={{ cursor: "pointer", color: "#aaa", display: "flex", alignItems: "center" }} title="Refresh">
-            <IconRefresh size={14} />
-          </Box>
-          <Button
-            size="xs"
-            leftSection={<IconPlus size={12} />}
-            onClick={openAdd}
-            disabled={!hasProject}
-            title={hasProject ? undefined : "Select a project to manage its equipment"}
-            style={{ background: "#0F2744", border: "none" }}
-          >
-            Add Equipment
-          </Button>
-        </Group>
-      </Group>
+      <TabToolbar
+        title="Equipment"
+        addLabel="Add Equipment"
+        onAdd={openAdd}
+        onReload={reload}
+        disabled={!hasProject}
+        disabledHint="Select a project to manage its equipment"
+      />
 
       <Box style={{ background: "#fff", border: "1px solid #ebebeb", borderRadius: 6, padding: 12 }}>
         {loading && <LoadingSpinner py={16} />}

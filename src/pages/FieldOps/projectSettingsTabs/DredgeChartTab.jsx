@@ -16,6 +16,7 @@ import { ringArea } from '../../../lib/dredge/coverage'
 import { loadAttachmentImage, loadPublicImage, loadTiles } from '../../../lib/dredge/imageLoaders'
 import { makeZip } from '../../../lib/zip'
 import { useStagedFiles } from './hooks/useStagedFiles'
+import UploadedFile from './components/UploadedFile'
 
 const DATA_SOURCES = [
   { value: 'hypack', label: 'HYPACK RAW folder — hydraulic dredge cutter track' },
@@ -385,7 +386,8 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
                   <FileControl
                     accept=".csv,.asc"
                     uploading={uploading.earthworks_design_path}
-                    uploaded={!!existingConfig?.earthworks_design_path}
+                    fileId={existingConfig?.earthworks_design_path}
+                    fileName={existingConfig?.earthworks_design_original_name}
                     staged={!!stagedFiles.earthworks_design_path}
                     error={uploadErrors.earthworks_design_path}
                     onChange={(file) => handleUploadImage('earthworks_design_path', file)}
@@ -410,7 +412,8 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
                     <FileControl
                       accept=".dxf,application/dxf"
                       uploading={uploading.alignment_path}
-                      uploaded={!!existingConfig?.alignment_path}
+                      fileId={existingConfig?.alignment_path}
+                      fileName={existingConfig?.alignment_original_name}
                       staged={!!stagedFiles.alignment_path}
                       error={uploadErrors.alignment_path}
                       onChange={(file) => handleUploadImage('alignment_path', file)}
@@ -464,7 +467,8 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
                   <FileControl
                     accept=".xyz,.csv,.txt"
                     uploading={refUploading}
-                    uploaded={!!existingConfig?.reference_surface_path}
+                    fileId={existingConfig?.reference_surface_path}
+                    fileName={existingConfig?.reference_surface_original_name}
                     staged={!!stagedFiles.reference_surface_path}
                     error={refError}
                     onChange={handleUploadReferenceSurvey}
@@ -499,7 +503,8 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
             <FileControl
               accept="image/png,image/jpeg,image/webp,.csv,.asc"
               uploading={uploading.bg_path}
-              uploaded={!!existingConfig?.bg_path}
+              fileId={existingConfig?.bg_path}
+              fileName={existingConfig?.bg_original_name}
               staged={!!stagedFiles.bg_path}
               error={uploadErrors.bg_path}
               onChange={handleIsopachFile}
@@ -509,7 +514,8 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
             <FileControl
               accept="image/png,image/jpeg"
               uploading={uploading.colorbar_path}
-              uploaded={!!existingConfig?.colorbar_path}
+              fileId={existingConfig?.colorbar_path}
+              fileName={existingConfig?.colorbar_original_name}
               staged={!!stagedFiles.colorbar_path}
               error={uploadErrors.colorbar_path}
               onChange={(file) => handleUploadImage('colorbar_path', file)}
@@ -553,7 +559,8 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
               <FileControl
                 accept="image/png,image/jpeg,image/webp"
                 uploading={uploading.aerial_path}
-                uploaded={!!existingConfig?.aerial_path}
+                fileId={existingConfig?.aerial_path}
+                fileName={existingConfig?.aerial_original_name}
                 staged={!!stagedFiles.aerial_path}
                 error={uploadErrors.aerial_path}
                 onChange={(file) => handleUploadImage('aerial_path', file)}
@@ -577,7 +584,8 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
           <FileControl
             accept=".dxf,application/dxf"
             uploading={uploading.cells_path}
-            uploaded={!!existingConfig?.cells_path}
+            fileId={existingConfig?.cells_path}
+            fileName={existingConfig?.cells_original_name}
             staged={!!stagedFiles.cells_path}
             error={uploadErrors.cells_path}
             onChange={(file) => handleUploadImage('cells_path', file)}
@@ -595,7 +603,8 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
           <FileControl
             accept=".dxf,application/dxf"
             uploading={uploading.reference_lines_path}
-            uploaded={!!existingConfig?.reference_lines_path}
+            fileId={existingConfig?.reference_lines_path}
+            fileName={existingConfig?.reference_lines_original_name}
             staged={!!stagedFiles.reference_lines_path}
             error={uploadErrors.reference_lines_path}
             onChange={(file) => handleUploadImage('reference_lines_path', file)}
@@ -775,7 +784,7 @@ function TileManager({ label, help, tiles, stagedTiles, onStagedTilesChange, onR
   )
 }
 
-function FileControl({ accept, label, onChange, uploading, uploaded, staged, error }) {
+function FileControl({ accept, label, onChange, uploading, fileId, fileName, staged, error }) {
   return (
     <Box>
       {label && <Text size="xs" c="dimmed" mb={4}>{label}</Text>}
@@ -783,7 +792,7 @@ function FileControl({ accept, label, onChange, uploading, uploaded, staged, err
         <FileButton onChange={onChange ?? (() => {})} accept={accept}>
           {(props) => <Button {...props} variant="default" size="xs" loading={uploading}>Choose File</Button>}
         </FileButton>
-        {uploaded && !uploading && !staged && <Text size="xs" c="teal">Uploaded</Text>}
+        {fileId && !uploading && !staged && <UploadedFile key={fileId} fileId={fileId} fileName={fileName} />}
         {staged && !uploading && <Text size="xs" c="orange">Staged — will upload on Save</Text>}
       </Group>
       {error && <Text size="10px" c="red" mt={2}>{error}</Text>}
@@ -853,7 +862,7 @@ function EquipmentShapeRow({ equipment, projectId, existingEquipmentConfig, crea
       <FileControl
         accept=".dxf,application/dxf"
         label="Dredge shape DXF"
-        uploaded={!!existingEquipmentConfig?.shape_path}
+        fileId={existingEquipmentConfig?.shape_path}
         staged={!!stagedShape}
         onChange={handleUploadShape}
       />

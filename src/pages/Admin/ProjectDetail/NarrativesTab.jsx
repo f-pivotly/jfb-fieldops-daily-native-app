@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Box, Text, Group, Button, Table, Modal, TextInput, NumberInput, Checkbox } from "@mantine/core";
-import { IconPlus, IconRefresh } from "@tabler/icons-react";
 import { useDomainData } from "../../../hooks/useDomainData";
 import { useConfirmDialog } from "../../../hooks/useConfirmDialog";
 import { useAppConfig } from "../../../contexts/appConfigContext";
@@ -8,6 +7,7 @@ import { createDomainRecord } from "../../../data";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import SafeError from "../../../components/SafeError";
 import { uniqueSectionKey } from "../../../lib/narrativeSectionKey";
+import TabToolbar from "./TabToolbar";
 
 const EMPTY_FORM = { narrative_label: "", date: "", sort_order: 0, is_active: true };
 
@@ -113,24 +113,14 @@ export default function NarrativesTab({ project }) {
 
   return (
     <Box>
-      <Group justify="space-between" mb={12}>
-        <Text fw={700} size="sm">Narrative Sections</Text>
-        <Group gap={8}>
-          <Box onClick={reload} style={{ cursor: "pointer", color: "#aaa", display: "flex", alignItems: "center" }} title="Refresh">
-            <IconRefresh size={14} />
-          </Box>
-          <Button
-            size="xs"
-            leftSection={<IconPlus size={12} />}
-            onClick={openAdd}
-            disabled={!hasProject}
-            title={hasProject ? undefined : "Select a project to manage its narrative sections"}
-            style={{ background: "#0F2744", border: "none" }}
-          >
-            Add Section
-          </Button>
-        </Group>
-      </Group>
+      <TabToolbar
+        title="Narrative Sections"
+        addLabel="Add Section"
+        onAdd={openAdd}
+        onReload={reload}
+        disabled={!hasProject}
+        disabledHint="Select a project to manage its narrative sections"
+      />
 
       <Box style={{ background: "#fff", border: "1px solid #ebebeb", borderRadius: 6, padding: 12 }}>
         {loading && <LoadingSpinner py={16} />}
