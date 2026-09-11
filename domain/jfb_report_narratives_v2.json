@@ -69,7 +69,28 @@
       "required": true,
       "data_type": "text",
       "column_name": "narrative_label",
-      "description": "Matches the label of the project's jfb_project_report_narratives template row this content belongs to. Text match, not a real FK -- there's no stable section_key in this app, so renaming a template's label orphans past content the same way it would in the non-native app if labels (not keys) were used to join.",
+      "description": "Denormalized copy of the section's display label at last save, for convenience only -- NOT used to join back to its jfb_project_report_narratives template row (use section_key for that). Can go stale if the template is renamed afterward; harmless since nothing reads it as a key.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "section_key",
+      "slug": "section_key",
+      "type": "text",
+      "label": "Section Key",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "section_key",
+      "description": "The stable section_key of the jfb_project_report_narratives template row this content belongs to. Combined with report_id, should be unique -- one content row per section per report day. Text match, not a real FK (matches the platform's own report_id/project_id fk_config pattern elsewhere in this domain, but section_key has no dedicated target domain of its own to point at). Nullable only because existing rows are backfilled by a one-time migration; every row created after that migration must set it.",
       "conflict_resolution": {
         "code": "lww"
       },

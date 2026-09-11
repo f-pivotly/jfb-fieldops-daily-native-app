@@ -7,6 +7,7 @@ import { useAppConfig } from "../../../contexts/appConfigContext";
 import { createDomainRecord } from "../../../data";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import SafeError from "../../../components/SafeError";
+import { uniqueSectionKey } from "../../../lib/narrativeSectionKey";
 
 const EMPTY_FORM = { narrative_label: "", date: "", sort_order: 0, is_active: true };
 
@@ -39,12 +40,15 @@ export default function NarrativesTab({ project }) {
       const toSeed = [...defaultSections]
         .filter((d) => d.is_active !== false)
         .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+      const usedKeys = [];
       for (const d of toSeed) {
+        const sectionKey = uniqueSectionKey(d.label, usedKeys);
+        usedKeys.push(sectionKey);
         await createDomainRecord({
           domain: "jfb_project_report_narratives",
           system: "core",
           appSlug: config.appSlug,
-          recordData: { project_id: project.id, narrative_label: d.label, sort_order: d.sort_order, is_active: true },
+          recordData: { project_id: project.id, narrative_label: d.label, section_key: sectionKey, sort_order: d.sort_order, is_active: true },
         });
       }
       await reload();
@@ -75,9 +79,11 @@ export default function NarrativesTab({ project }) {
 
   async function handleAddSave() {
     if (!form.narrative_label.trim() || !hasProject) return;
+    const sectionKey = uniqueSectionKey(form.narrative_label, rows.map((r) => r.section_key).filter(Boolean));
     await create({
       project_id: project.id,
       narrative_label: form.narrative_label.trim(),
+      section_key: sectionKey,
       date: form.date || null,
       sort_order: form.sort_order,
       is_active: true,

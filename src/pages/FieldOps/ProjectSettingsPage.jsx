@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { Box, ScrollArea, Text, Group, Tabs, TextInput, Button } from '@mantine/core'
 import { useProject } from '../../hooks/useProject'
+import { useEquipment } from '../../hooks/useEquipment'
 import { useRealizedExcludedDays } from '../../hooks/useRealizedExcludedDays'
 import { shouldShowDredgeProgress } from '../../config/dredgeProgress'
 import { isPlacementEquipment } from '../../config/placementProgress'
@@ -18,9 +19,17 @@ import CoverMetricsTab from './projectSettingsTabs/CoverMetricsTab'
 export default function ProjectSettingsPage() {
   const { projectId } = useParams()
   const { project, update: updateProject } = useProject(projectId)
+  const { equipment } = useEquipment(projectId)
   const { excludedDays, create: createExcluded, remove: removeExcluded } = useRealizedExcludedDays(projectId)
   const isDredging = shouldShowDredgeProgress(project)
-  const isPlacement = isPlacementEquipment(project, null, null)
+  // The project's own default work_type isn't enough here -- a project
+  // defaulting to dredging can still have specific equipment (e.g. a
+  // capping barge) individually pinned to placement via that equipment's
+  // own work_type/work_type_from override, and that equipment still needs
+  // its placement chart configured.
+  const isPlacement =
+    isPlacementEquipment(project, null, null) ||
+    (equipment ?? []).some((eq) => isPlacementEquipment(project, eq, todayISO()))
   const isSpreader = project?.is_spreader_active === true
 
   return (

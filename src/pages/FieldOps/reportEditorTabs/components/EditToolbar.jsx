@@ -1,6 +1,4 @@
-import { Button, Checkbox, Group, NumberInput } from '@mantine/core'
-
-const DEFAULT_CLOSE_FT = 2
+import { Box, Button, Checkbox, Group, Slider, Text } from '@mantine/core'
 
 function ModeBtn({ active, onClick, children }) {
   return (
@@ -10,11 +8,26 @@ function ModeBtn({ active, onClick, children }) {
   )
 }
 
+function TuneSlider({ label, unit, value, onChange, onChangeEnd, min, max, step, w = 160 }) {
+  return (
+    <Box w={w}>
+      <Group gap={6} justify="space-between" mb={2}>
+        <Text size="sm" c="dimmed">{label}</Text>
+        <Text size="sm" c="dimmed">{value} {unit}</Text>
+      </Group>
+      <Slider
+        size="sm" min={min} max={max} step={step} value={value} label={null}
+        onChange={onChange} onChangeEnd={onChangeEnd}
+      />
+    </Box>
+  )
+}
+
 export default function EditToolbar({
   mode,
   onToggleMode,
   onFinishDrawing,
-  showShapeControls,
+  placeLabel,
   manualCount,
   removedCount,
   excludeCount,
@@ -40,14 +53,13 @@ export default function EditToolbar({
   return (
     <>
       <Group gap={8} mb={8}>
+        <Text size="xs" tt="uppercase" c="dimmed" fw={600} mr={4}>Adjust</Text>
+        <ModeBtn active={mode === 'place-cutter' || mode === 'place-stern'} onClick={onToggleMode('place-cutter')}>{placeLabel}</ModeBtn>
         <ModeBtn active={mode === 'remove-second'} onClick={onToggleMode('remove-second')}>Reject 2nd pass</ModeBtn>
         <ModeBtn active={mode === 'add-second'} onClick={onToggleMode('add-second')}>Add 2nd pass</ModeBtn>
         <ModeBtn active={mode === 'remove-area'} onClick={onToggleMode('remove-area')}>Remove area (click)</ModeBtn>
         <ModeBtn active={mode === 'exclude'} onClick={onToggleMode('exclude')}>Exclude area</ModeBtn>
         <ModeBtn active={mode === 'advance'} onClick={onToggleMode('advance')}>Measure advance</ModeBtn>
-        {showShapeControls && (
-          <ModeBtn active={mode === 'place-cutter' || mode === 'place-stern'} onClick={onToggleMode('place-cutter')}>Move dredge</ModeBtn>
-        )}
         {(mode === 'add-second' || mode === 'exclude' || mode === 'advance') && (
           <Button size="xs" color="teal" onClick={onFinishDrawing}>Done{mode === 'advance' ? ' lane' : ''}</Button>
         )}
@@ -59,40 +71,35 @@ export default function EditToolbar({
         {excludeCount > 0 && <Button size="xs" variant="subtle" onClick={onClearExclude}>clear excluded ({excludeCount})</Button>}
         {advanceCount > 0 && <Button size="xs" variant="subtle" onClick={onClearAdvance}>clear advance ({advanceCount})</Button>}
         {hasOverride && <Button size="xs" variant="subtle" onClick={onResetPlacement}>reset dredge placement</Button>}
-        {showShapeControls && <Button size="xs" variant="subtle" onClick={onToggleFlip}>flip machine{flipDisplay ? ' (flipped)' : ''}</Button>}
-      </Group>
-      <Group gap={16} align="flex-end">
-        <NumberInput label="Gap bridge (ft)" size="xs" w={120} min={0} max={60} value={gapFt} onChange={(v) => onGapFtChange(Number(v) || 0)} />
-        <Button size="xs" variant="default" onClick={onApplyGap}>Apply</Button>
-        <NumberInput label="Overlap tolerance (ft)" size="xs" w={140} min={0} max={30} value={tolFt} onChange={(v) => onTolFtChange(Number(v) || 0)} />
-        <Button size="xs" variant="default" onClick={onApplyTol}>Apply</Button>
+        {hasOverride && <Button size="xs" variant="subtle" onClick={onToggleFlip}>flip machine{flipDisplay ? ' (flipped)' : ''}</Button>}
         <Checkbox
-          label="Auto-detect advance line"
+          label={`Auto-propose advance line${advanceCount > 0 ? ' (using drawn lanes)' : ''}`}
           checked={autoAdvance}
-          onChange={(ev) => onAutoAdvanceChange(ev.currentTarget.checked)}
-          mb={4}
+          disabled={advanceCount > 0}
+          onChange={(ev) => { onAutoAdvanceChange(ev.currentTarget.checked); onApplyAutoAdvance() }}
+          ml={4}
         />
-        <Button size="xs" variant="default" onClick={onApplyAutoAdvance}>Apply</Button>
       </Group>
-      <Group gap={16} align="flex-end" mt={12}>
-        <NumberInput
-          label="Sweep smoothing (ft)"
-          description="Closes small gaps within today's coverage"
-          size="xs" w={150} min={2} max={20}
-          value={closeFt}
-          onChange={(v) => onCloseFtChange(Number(v) || DEFAULT_CLOSE_FT)}
+      <Group gap={24} align="flex-start">
+        <TuneSlider
+          label="Overlap tolerance" unit="ft" min={0} max={20} step={1}
+          value={tolFt} onChange={onTolFtChange} onChangeEnd={onApplyTol}
         />
-        {dataSource === 'earthworks' && (
-          <NumberInput
-            label="Ignore stray patches under (sq ft)"
-            size="xs" w={180} min={0} max={500}
-            value={islandSqFt}
-            onChange={(v) => onIslandSqFtChange(Number(v) || 0)}
+        <TuneSlider
+          label="Gap bridge" unit="ft" min={0} max={60} step={5}
+          value={gapFt} onChange={onGapFtChange} onChangeEnd={onApplyGap}
+        />
+        {dataSource === 'earthworks' ? (
+          <TuneSlider
+            label="Ignore stray patches under" unit="sq ft" min={0} max={500} step={25} w={200}
+            value={islandSqFt} onChange={onIslandSqFtChange} onChangeEnd={onApplyTuning}
+          />
+        ) : (
+          <TuneSlider
+            label="Sweep smoothing" unit="ft" min={2} max={20} step={1}
+            value={closeFt} onChange={onCloseFtChange} onChangeEnd={onApplyTuning}
           />
         )}
-        <Button size="xs" variant="default" onClick={onApplyTuning}>
-          {dataSource === 'earthworks' ? 'Apply (regenerates)' : 'Apply'}
-        </Button>
       </Group>
     </>
   )

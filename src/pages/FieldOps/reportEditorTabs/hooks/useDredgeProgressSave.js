@@ -45,6 +45,8 @@ export function useDredgeProgressSave({
         second_pass_flags: lastResult.secondRings.length ? lastResult.secondRings : null,
         advance_ft: lastResult.stats.advanceFt,
         advance_lines: lastResult.advanceLines.length ? lastResult.advanceLines : null,
+        // Per-DMU SF breakdown -- Production Stats can pull SF + flag uncovered DMUs.
+        cell_breakdown: lastResult.cellBreakdown?.length ? lastResult.cellBreakdown : null,
         today_sqft: lastResult.stats.todaySqFt,
         cumulative_sqft: lastResult.stats.cumulativeSqFt,
         gross_cy: lastResult.stats.grossCy ?? null,

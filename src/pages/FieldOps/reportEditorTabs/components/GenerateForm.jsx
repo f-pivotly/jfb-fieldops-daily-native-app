@@ -10,8 +10,6 @@ export default function GenerateForm({
   showRecoveryInput,
   recoveryValue, onRecoveryChange,
   materialText, onMaterialTextChange,
-  generated, isUpdate, saving, onSave,
-  onDownloadDxf, onDownloadPng,
 }) {
   return (
     <Group gap={10}>
@@ -48,17 +46,6 @@ export default function GenerateForm({
         value={materialText}
         onChange={(e) => onMaterialTextChange(e.currentTarget.value)}
       />
-      {generated && (
-        <Button size="xs" variant="light" disabled={saving} loading={saving} onClick={onSave}>
-          {isUpdate ? 'Update saved progress' : 'Save to report'}
-        </Button>
-      )}
-      {generated && (
-        <Button size="xs" variant="default" onClick={onDownloadDxf}>Download DXF</Button>
-      )}
-      {generated && (
-        <Button size="xs" variant="default" onClick={onDownloadPng}>Download PNG</Button>
-      )}
     </Group>
   )
 }

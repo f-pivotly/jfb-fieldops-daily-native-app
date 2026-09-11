@@ -7,6 +7,7 @@ import { useFieldOpsDomainAccess } from '../../../contexts/fieldOpsAccessContext
 import LoadingSpinner from '../../../components/LoadingSpinner'
 import SafeError from '../../../components/SafeError'
 import NarrativeContextPanel from './NarrativeContextPanel'
+import { uniqueSectionKey } from '../../../lib/narrativeSectionKey'
 
 const DEBOUNCE_MS = 1500
 
@@ -22,7 +23,7 @@ export default function NarrativesTab({ project, report, equipment = [] }) {
   const { records: contentRows, create: createContent, update: updateContent, reload: reloadContent } = useDomainData({
     domain: 'jfb_report_narratives_v2',
     system: 'core',
-    projectId: project?.id,
+    reportId: report?.id,
   })
   const { canCreate: canAddSections, canUpdate: canEditSections } = useFieldOpsDomainAccess('jfb_project_report_narratives')
   const canManageSections = canAddSections || canEditSections
@@ -43,9 +44,15 @@ export default function NarrativesTab({ project, report, equipment = [] }) {
     ? [...records].filter((r) => r.is_active !== false).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
     : []
 
-  async function handleSave(contentRow, sectionLabel, text) {
+  async function handleSave(contentRow, section, text) {
     if (!contentRow) {
-      await createContent({ project_id: project.id, report_id: report.id, narrative_label: sectionLabel, content: text })
+      await createContent({
+        project_id: project.id,
+        report_id: report.id,
+        narrative_label: section.narrative_label,
+        section_key: section.section_key,
+        content: text,
+      })
       return
     }
     try {
@@ -103,7 +110,7 @@ export default function NarrativesTab({ project, report, equipment = [] }) {
           <Stack gap="md">
             {sections.map((s) => {
               const contentRow = hasReport
-                ? contentRows.find((c) => c.report_id === report.id && c.narrative_label === s.narrative_label)
+                ? contentRows.find((c) => c.section_key === s.section_key)
                 : null
               return (
                 <NarrativeSectionCard
@@ -111,7 +118,7 @@ export default function NarrativesTab({ project, report, equipment = [] }) {
                   label={s.narrative_label}
                   contentRow={contentRow}
                   disabled={!hasReport}
-                  onSave={(text) => handleSave(contentRow, s.narrative_label, text)}
+                  onSave={(text) => handleSave(contentRow, s, text)}
                 />
               )
             })}
@@ -263,7 +270,8 @@ function SectionsManagerDialog({ opened, onClose, project, records, create, upda
   async function addSection() {
     if (!newLabel.trim() || !project?.id) return
     const nextSort = rows.length === 0 ? 10 : Math.max(...rows.map((r) => r.sort_order ?? 0)) + 10
-    await create({ project_id: project.id, narrative_label: newLabel.trim(), sort_order: nextSort, is_active: true })
+    const sectionKey = uniqueSectionKey(newLabel, rows.map((r) => r.section_key).filter(Boolean))
+    await create({ project_id: project.id, narrative_label: newLabel.trim(), section_key: sectionKey, sort_order: nextSort, is_active: true })
     setNewLabel('')
   }
 

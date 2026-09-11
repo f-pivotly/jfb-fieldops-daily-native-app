@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Box, Button, FileButton, Group, Stack, Table, Text } from '@mantine/core'
+import { Alert, Box, Button, FileButton, Group, Stack, Text } from '@mantine/core'
 import { useDomainData } from '../../../hooks/useDomainData'
 import { useSpreaderConfig } from '../../../hooks/useSpreaderConfig'
 import { useProjectLayers } from '../../../hooks/useProjectLayers'
 import { useAsyncAction } from '../../../hooks/useAsyncAction'
-import { useConfirmDialog } from '../../../hooks/useConfirmDialog'
 import { loadAttachmentImage, loadPublicImage } from '../../../lib/dredge/imageLoaders'
 import { parseStepCsv } from '../../../lib/spreader/steps'
 import { assignLayers } from '../../../lib/spreader/layers'
 import { computeSpreaderCoverage, computeSpreaderCoverageFromPlan, computeCoverageFromRings } from '../../../lib/spreader/coverage'
 import { renderSpreaderChart } from '../../../lib/spreader/chart'
+import { parseDxfPolylines } from '../../../lib/dredge/chart'
 import { windowsFromActivities } from '../../../lib/placement/attribution'
 import { isProductiveActivity } from '../lib/workType'
 import { useSpreaderProgressSave } from './hooks/useSpreaderProgressSave'
@@ -27,7 +27,7 @@ export default function SpreaderProgressTab({ project, report, reports, equipmen
   const { layers } = useProjectLayers(projectId)
   const {
     records: progressRecords, loading: progressLoading,
-    create: createProgress, update: updateProgress, remove: removeProgress, reload: reloadProgress,
+    create: createProgress, update: updateProgress, reload: reloadProgress,
   } = useDomainData({ domain: SPREADER_PROGRESS_DOMAIN, system: 'core', projectId })
   const { records: activities } = useDomainData({ domain: 'jfb_daily_activities', system: 'core', projectId })
 
@@ -35,7 +35,6 @@ export default function SpreaderProgressTab({ project, report, reports, equipmen
   const [images, setImages] = useState({ aerial: null, logo: null, north: null })
   const [chartError, setChartError] = useState(null)
   const { busy, message: notice, error: uploadError, run: runUpload } = useAsyncAction()
-  const { confirm, modal: confirmModal } = useConfirmDialog()
 
   const aerialFileId = config?.aerial_path ?? null
 
@@ -86,17 +85,19 @@ export default function SpreaderProgressTab({ project, report, reports, equipmen
     }
   }, [config])
 
-  const derived = useMemo(() => {
-    if (!config || !params) return null
+  // Shared by the live preview (derived, below) and every action that
+  // persists a row (upload / override / clear) -- each of those banks its
+  // own freshly-computed breakdown immediately as part of the same save,
+  // rather than leaving that as a separate manual step. Takes steps/rings
+  // directly (not existingRow) so a handler can compute from data it just
+  // parsed, before that data has round-tripped back through a reload.
+  function computeBreakdown(steps, overrideRings) {
     const boundaries = config.boundaries ?? []
-    if (!boundaries.length) return null
-    const steps = existingRow?.steps ?? []
-    const overrideRings = existingRow?.override_rings ?? null
     if (overrideRings?.length) {
       const breakdown = computeCoverageFromRings(overrideRings, boundaries, null, params)
       return { breakdown, recordedSteps: steps.length, placedSteps: steps.length, override: true }
     }
-    if (!steps.length) return null
+    if (!steps.length) return { breakdown: [], recordedSteps: 0, placedSteps: 0, override: false }
     const windows = windowsFromActivities(
       (activities ?? []).filter((a) => a.equipment_id === selectedEquipmentId),
       layerNameById,
@@ -108,6 +109,16 @@ export default function SpreaderProgressTab({ project, report, reports, equipmen
       ? computeSpreaderCoverageFromPlan(assigned, lanes, Number(config.plan_cell_len_ft ?? 6), boundaries, params)
       : computeSpreaderCoverage(assigned, boundaries, params)
     return { ...res, override: false }
+  }
+
+  const derived = useMemo(() => {
+    if (!config || !params) return null
+    if (!(config.boundaries ?? []).length) return null
+    const steps = existingRow?.steps ?? []
+    const overrideRings = existingRow?.override_rings ?? null
+    if (!steps.length && !overrideRings?.length) return null
+    return computeBreakdown(steps, overrideRings)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [config, params, existingRow, activities, selectedEquipmentId, layerNameById])
 
   const priorCoverage = useMemo(() => {
@@ -151,6 +162,18 @@ export default function SpreaderProgressTab({ project, report, reports, equipmen
     report, selected, existingRow, updateProgress, reloadProgress, canvasRef,
   })
 
+  // Every action below computes its own resulting breakdown and banks it
+  // (coverage/today_sqft/cumulative_sqft) as part of the same save --
+  // matching the non-native app's single "Save" action, which persists
+  // steps and the currently-computed coverage together. Native has no
+  // separate "Bank coverage" step; each of these IS that step.
+  function bankedFields(steps, overrideRings) {
+    const result = computeBreakdown(steps, overrideRings)
+    const todaySqFtNow = result.breakdown.reduce((s, c) => s + (c.sqFt ?? 0), 0)
+    const cumulativeSqFtNow = todaySqFtNow + priorCoverage.reduce((s, c) => s + (c.sqFt ?? 0), 0)
+    return { coverage: result.breakdown, today_sqft: todaySqFtNow, cumulative_sqft: cumulativeSqFtNow }
+  }
+
   const handleUpload = (file) => {
     if (!file) return
     resetSaveState()
@@ -164,6 +187,7 @@ export default function SpreaderProgressTab({ project, report, reports, equipmen
         equipment_id: selectedEquipmentId,
         source_filename: file.name,
         steps,
+        ...bankedFields(steps, null),
       }
       if (existingRow?.id) await updateProgress(existingRow.id, payload)
       else await createProgress(payload)
@@ -172,21 +196,36 @@ export default function SpreaderProgressTab({ project, report, reports, equipmen
     })
   }
 
-  const handleBank = async () => {
-    if (!existingRow?.id) return
-    await updateProgress(existingRow.id, {
-      coverage: todayCoverage,
-      today_sqft: todaySqFt,
-      cumulative_sqft: toDateSqFt,
+  const handleUploadOverride = (file) => {
+    if (!file) return
+    resetSaveState()
+    runUpload(async () => {
+      const text = await file.text()
+      const rings = parseDxfPolylines(text)
+      if (!rings.length) throw new Error('No closed polygon found in that DXF.')
+      const payload = {
+        project_id: projectId,
+        report_id: reportId,
+        equipment_id: selectedEquipmentId,
+        override_rings: rings,
+        ...bankedFields(existingRow?.steps ?? [], rings),
+      }
+      if (existingRow?.id) await updateProgress(existingRow.id, payload)
+      else await createProgress(payload)
+      await reloadProgress()
+      return `Coverage override loaded (${rings.length} polygon${rings.length === 1 ? '' : 's'}) — applied.`
     })
-    await reloadProgress()
   }
 
-  const handleDelete = async () => {
+  const handleClearOverride = () => {
     if (!existingRow?.id) return
-    if (!(await confirm("Delete this day's spreader log?"))) return
-    await removeProgress(existingRow.id)
-    await reloadProgress()
+    resetSaveState()
+    runUpload(async () => {
+      const steps = existingRow?.steps ?? []
+      await updateProgress(existingRow.id, { override_rings: null, ...bankedFields(steps, null) })
+      await reloadProgress()
+      return 'Override cleared — back to step-derived coverage.'
+    })
   }
 
   if (configLoading || progressLoading) return <Text size="sm" c="dimmed" p={16}>Loading…</Text>
@@ -209,16 +248,25 @@ export default function SpreaderProgressTab({ project, report, reports, equipmen
         <FileButton onChange={handleUpload} accept=".csv,text/csv">
           {(props) => (
             <Button {...props} size="xs" loading={busy} style={{ background: '#0F2744', border: 'none' }}>
-              {existingRow ? 'Replace Step Detail file' : 'Upload Step Detail file'}
+              Upload Step Detail (CSV)
             </Button>
           )}
         </FileButton>
+        <Text size="xs" c="dimmed">Neenah &quot;Step Detail&quot; export, saved as CSV</Text>
+        <FileButton onChange={handleUploadOverride} accept=".dxf,application/dxf">
+          {(props) => (
+            <Button {...props} size="xs" variant="outline" color="orange" loading={busy}>
+              Coverage override (DXF)
+            </Button>
+          )}
+        </FileButton>
+        {!!existingRow?.override_rings?.length && (
+          <Text size="xs" c="dimmed" onClick={handleClearOverride} style={{ cursor: 'pointer', textDecoration: 'underline' }}>
+            clear
+          </Text>
+        )}
         {existingRow && (
-          <>
-            <Button size="xs" variant="default" onClick={handleBank} disabled={!derived}>Bank coverage</Button>
-            <Button size="xs" variant="default" loading={saving} onClick={handleSave}>Save chart to report</Button>
-            <Button size="xs" variant="subtle" color="red" onClick={handleDelete}>Delete</Button>
-          </>
+          <Button size="xs" variant="default" loading={saving} onClick={handleSave}>Save chart to report</Button>
         )}
         {existingRow?.source_filename && (
           <Text size="xs" c="dimmed">
@@ -238,6 +286,7 @@ export default function SpreaderProgressTab({ project, report, reports, equipmen
           Today: <strong>{num(todaySqFt)} SF</strong> · To date: <strong>{num(toDateSqFt)} SF</strong>
           {!derived.override && (
             <> · {derived.placedSteps} of {derived.recordedSteps} steps placed material
+              {params?.minStepTons > 0 ? ` (≥ ${params.minStepTons} t)` : ''}
               {derived.recordedSteps > derived.placedSteps
                 ? `; ${derived.recordedSteps - derived.placedSteps} walk-back excluded`
                 : ''}
@@ -245,27 +294,6 @@ export default function SpreaderProgressTab({ project, report, reports, equipmen
           )}
           {derived.override && <> · from the PM&apos;s drawn coverage override</>}
         </Text>
-      )}
-
-      {todayCoverage.length > 0 && (
-        <Table withTableBorder verticalSpacing="xs" fz="sm">
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Subarea</Table.Th>
-              <Table.Th>Lift</Table.Th>
-              <Table.Th ta="right">SF today</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {todayCoverage.map((c) => (
-              <Table.Tr key={`${c.area}-${c.layerId ?? 'none'}`}>
-                <Table.Td>{c.area}</Table.Td>
-                <Table.Td>{c.layerId ? (layerNameById.get(c.layerId) ?? '—') : <Text span c="orange.8">Unattributed</Text>}</Table.Td>
-                <Table.Td ta="right">{num(c.sqFt)}</Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
       )}
 
       {!existingRow && (
@@ -277,8 +305,6 @@ export default function SpreaderProgressTab({ project, report, reports, equipmen
       <Box style={{ overflowX: 'auto' }}>
         <canvas ref={canvasRef} style={{ width: '100%', maxWidth: 1060, border: '1px solid #ddd' }} />
       </Box>
-
-      {confirmModal}
     </Stack>
   )
 }

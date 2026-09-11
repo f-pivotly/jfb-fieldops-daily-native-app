@@ -59,10 +59,10 @@ export function buildWeeklyReport({ project, weekStart, reports, sections, conte
 
   const sectionReports = activeSections.map((s) => {
     const entries = contentRows
-      .filter((c) => releasedIds.has(c.report_id) && c.narrative_label === s.narrative_label && c.content?.trim())
+      .filter((c) => releasedIds.has(c.report_id) && c.section_key === s.section_key && c.content?.trim())
       .map((c) => ({ date: reportDateById.get(c.report_id), text: c.content.trim() }))
       .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
-    return { key: s.id, label: s.narrative_label, entries }
+    return { key: s.id, sectionKey: s.section_key, label: s.narrative_label, entries }
   })
 
   const weekDays = dailyTotals.filter((d) => inWeek(d.report_date))
@@ -128,7 +128,7 @@ export function buildNarrativeSectionsParam(sections, summaries, weekStart) {
 
   return activeSections
     .map((s) => {
-      const row = summaries.find((r) => r.week_start === weekStart && r.section_key === s.narrative_label)
+      const row = summaries.find((r) => r.week_start === weekStart && r.section_key === s.section_key)
       return { label: s.narrative_label, content: (row?.content ?? '').trim() }
     })
     .filter((s) => s.content)

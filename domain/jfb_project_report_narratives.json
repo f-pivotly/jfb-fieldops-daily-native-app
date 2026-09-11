@@ -42,7 +42,28 @@
       "required": true,
       "data_type": "text",
       "column_name": "narrative_label",
-      "description": "Display name for this narrative entry.",
+      "description": "Freely-editable display name for this section. NOT a stable identifier -- joins must use section_key, never this. Renaming a section only ever touches this column.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "section_key",
+      "slug": "section_key",
+      "type": "text",
+      "label": "Section Key",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "section_key",
+      "description": "Stable slug identifying this section within its project, immutable once set -- unlike narrative_label, renaming a section never changes this. Every jfb_report_narratives_v2 content row and jfb_weekly_summaries row for this section carries the same section_key, so a rename can't orphan prior content the way joining on narrative_label did. Unique per project_id (not globally). Nullable only because existing rows are backfilled by a one-time migration; every row created after that migration must set it.",
       "conflict_resolution": {
         "code": "lww"
       },

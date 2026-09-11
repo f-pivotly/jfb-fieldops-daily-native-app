@@ -219,13 +219,13 @@ export default function WeeklySummaryPage() {
     }
   }
 
-  async function handleSaveSummary(summaryRow, sectionLabel, text) {
+  async function handleSaveSummary(summaryRow, sectionKey, text) {
     const now = new Date().toISOString()
     if (!summaryRow) {
       await createSummary({
         project_id: projectId,
         week_start: weekStart,
-        section_key: sectionLabel,
+        section_key: sectionKey,
         content: text,
         edited_by: config?.user?.id ?? null,
         edited_at: now,
@@ -410,7 +410,7 @@ export default function WeeklySummaryPage() {
                 <Text size="xs" c="dimmed">No narrative sections configured for this project yet.</Text>
               )}
               {report.sections.map((s) => {
-                const summaryRow = summaries.find((row) => row.week_start === weekStart && row.section_key === s.label)
+                const summaryRow = summaries.find((row) => row.week_start === weekStart && row.section_key === s.sectionKey)
                 return (
                   <Box key={s.key} p={16} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }}>
                     <Text size="sm" fw={600} mb={6}>{s.label}</Text>
@@ -424,7 +424,7 @@ export default function WeeklySummaryPage() {
                     </Stack>
                     <WeeklySummaryTextarea
                       summaryRow={summaryRow}
-                      onSave={(text) => handleSaveSummary(summaryRow, s.label, text)}
+                      onSave={(text) => handleSaveSummary(summaryRow, s.sectionKey, text)}
                     />
                   </Box>
                 )

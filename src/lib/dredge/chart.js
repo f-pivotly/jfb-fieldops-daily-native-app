@@ -790,7 +790,7 @@ export function renderChart(canvas, input) {
   const lx = side + 280, ly = 70, sw = 28, sh = 18
   g.font = `bold 14px ${FONT}`
   leg.forEach((d, k) => {
-    const x = lx, y = ly + k * 24
+    const col = k < 2 ? 0 : 1, row = k % 2, x = lx + col * 330, y = ly + row * 30
     g.fillStyle = d[1]; g.fillRect(x, y - 14, sw, sh)
     g.strokeStyle = '#000'; g.lineWidth = 0.75; g.strokeRect(x, y - 14, sw, sh)
     g.fillStyle = '#000'; g.fillText(d[0], x + sw + 8, y)

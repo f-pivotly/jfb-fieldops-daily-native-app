@@ -178,15 +178,11 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
           showRecoveryInput={effectiveConfig?.volume_mode === 'design_grade' || effectiveConfig?.volume_mode === 'surface_diff'}
           recoveryValue={displayedRecovery} onRecoveryChange={setRecovery}
           materialText={displayedMaterialText} onMaterialTextChange={setMaterialText}
-          generated={generated} isUpdate={!!existingProgressRecord}
-          saving={saving} onSave={handleSave}
-          onDownloadDxf={handleDownloadDxf} onDownloadPng={handleDownloadPng}
         />
         <ChartStatsSummary
           lastResult={lastResult}
           priorAdvanceFt={priorAdvanceFt}
           refSurfaceError={refSurfaceError}
-          saved={saved}
           notice={notice}
           dateWarning={dateWarning}
           error={error}
@@ -200,7 +196,7 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
             mode={mode}
             onToggleMode={toggleMode}
             onFinishDrawing={finishDrawing}
-            showShapeControls={!!equipmentConfig?.shape_path}
+            placeLabel={effectiveConfig?.data_source === 'earthworks' ? 'Place machine' : 'Move dredge'}
             manualCount={manualCount}
             removedCount={removedCount}
             excludeCount={excludeCount}
@@ -263,6 +259,14 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
             </WarningBanner>
           )}
           {hint && <Text size="xs" c="dimmed" mt={8}>{hint}</Text>}
+          <Group gap={10} mt={12}>
+            <Button size="xs" variant="light" disabled={saving} loading={saving} onClick={handleSave}>
+              {existingProgressRecord ? 'Update saved progress' : 'Save to report'}
+            </Button>
+            <Button size="xs" variant="default" onClick={handleDownloadDxf}>Download DXF</Button>
+            <Button size="xs" variant="default" onClick={handleDownloadPng}>Download PNG</Button>
+            {saved && <Text size="xs" c="teal">✓ Saved to report</Text>}
+          </Group>
         </Box>
       )}
 

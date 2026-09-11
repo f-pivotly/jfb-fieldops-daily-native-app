@@ -9,7 +9,7 @@ function isCappingEquipment(project, equipment, dateISO) {
   return equipmentWorkType(project, equipment, dateISO).toLowerCase().includes('cap')
 }
 
-function isoCalWeek(dateISO) {
+export function isoCalWeek(dateISO) {
   const [y, m, d] = dateISO.split('-').map(Number)
   const dt = new Date(Date.UTC(y, m - 1, d))
   const dayNum = dt.getUTCDay() || 7
@@ -18,7 +18,7 @@ function isoCalWeek(dateISO) {
   return Math.ceil(((dt.getTime() - yearStart) / 86_400_000 + 1) / 7)
 }
 
-function projectWeekNumber(reportDateISO, projectStartRaw) {
+export function projectWeekNumber(reportDateISO, projectStartRaw) {
   if (!projectStartRaw) return null
   const projectStartISO = projectStartRaw.slice(0, 10)
   const a = new Date(`${projectStartISO}T00:00:00Z`)
@@ -138,11 +138,11 @@ export async function buildNarrativeSectionsParam({ appSlug, projectId, reportId
   const sections = (sectionRes?.data ?? [])
     .filter((r) => r.is_active !== false)
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-  const contentByLabel = new Map((contentRes?.data ?? []).map((c) => [c.narrative_label, c.content]))
+  const contentByKey = new Map((contentRes?.data ?? []).map((c) => [c.section_key, c.content]))
 
   return sections.map((s) => ({
     label: s.narrative_label,
-    content: (contentByLabel.get(s.narrative_label) ?? '').trim(),
+    content: (contentByKey.get(s.section_key) ?? '').trim(),
   }))
 }
 

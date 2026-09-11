@@ -1,23 +1,42 @@
-import { Box, Table, Text } from '@mantine/core'
+import { Box, SimpleGrid, Table, Text } from '@mantine/core'
 import { impliedThicknessFt } from '../../../../lib/dredge/designVolume'
 
-export default function ChartStatsSummary({ lastResult, priorAdvanceFt, refSurfaceError, saved, notice, dateWarning, error, saveError }) {
+function Stat({ label, value }) {
+  return (
+    <Box>
+      <Text size="10px" fw={600} tt="uppercase" c="dimmed" style={{ letterSpacing: 0.3 }}>{label}</Text>
+      <Text size="sm" fw={500}>{value}</Text>
+    </Box>
+  )
+}
+
+export default function ChartStatsSummary({ lastResult, priorAdvanceFt, refSurfaceError, notice, dateWarning, error, saveError }) {
   return (
     <>
       {lastResult && (
-        <Text size="xs" c="dimmed" mt={10}>
-          1st Pass Today: {lastResult.stats.todaySqFt.toLocaleString()} sq ft · 2nd Pass: {lastResult.stats.secondPassSqFt.toLocaleString()} sq ft ·
-          {lastResult.stats.residualSqFt > 0 && ` Residual: ${lastResult.stats.residualSqFt.toLocaleString()} sq ft ·`}
-          {' '}Progress to Date: {lastResult.stats.cumulativeSqFt.toLocaleString()} sq ft · Advance: {lastResult.stats.advanceFt.toLocaleString()} ft ·
-          {' '}Cumulative Advance: {(priorAdvanceFt + lastResult.stats.advanceFt).toLocaleString()} ft ·
-          {' '}Track points: {lastResult.trackPoints.toLocaleString()}
-        </Text>
-      )}
-      {lastResult?.stats.adjustedCy != null && (
-        <Text size="xs" c="dimmed" mt={4}>
-          Volume above design grade: {lastResult.stats.grossCy.toLocaleString()} CY gross → <b>{lastResult.stats.adjustedCy.toLocaleString()} CY reported</b>
-          {lastResult.stats.todaySqFt > 0 && ` · Avg thickness: ${impliedThicknessFt(lastResult.stats.adjustedCy, lastResult.stats.todaySqFt).toFixed(2)} ft`}
-        </Text>
+        <SimpleGrid cols={{ base: 2, sm: 3 }} spacing="sm" mt={10}>
+          <Stat label="1st pass today" value={`${lastResult.stats.todaySqFt.toLocaleString()} sq ft`} />
+          <Stat label="2nd pass today" value={`${lastResult.stats.secondPassSqFt.toLocaleString()} sq ft`} />
+          {lastResult.stats.residualSqFt > 0 && (
+            <Stat label="Residual today" value={`${lastResult.stats.residualSqFt.toLocaleString()} sq ft`} />
+          )}
+          <Stat label="Daily advance" value={`${lastResult.stats.advanceFt.toLocaleString()} ft`} />
+          <Stat label="Cumulative advance" value={`${(priorAdvanceFt + lastResult.stats.advanceFt).toLocaleString()} ft`} />
+          {lastResult.stats.incidentalSqFt > 0 && (
+            <Stat label="Incidental (trimmed)" value={`${lastResult.stats.incidentalSqFt.toLocaleString()} sq ft`} />
+          )}
+          <Stat label="Cumulative (1st)" value={`${lastResult.stats.cumulativeSqFt.toLocaleString()} sq ft`} />
+          <Stat label="Cutter track" value={`${lastResult.trackPoints.toLocaleString()} pts`} />
+          {lastResult.stats.grossCy != null && (
+            <Stat label="Volume available" value={`${lastResult.stats.grossCy.toLocaleString()} CY gross`} />
+          )}
+          {lastResult.stats.adjustedCy != null && (
+            <Stat label="Volume reported" value={`${lastResult.stats.adjustedCy.toLocaleString()} CY`} />
+          )}
+          {lastResult.stats.adjustedCy != null && lastResult.stats.todaySqFt > 0 && (
+            <Stat label="Avg thickness" value={`${impliedThicknessFt(lastResult.stats.adjustedCy, lastResult.stats.todaySqFt).toFixed(2)} ft`} />
+          )}
+        </SimpleGrid>
       )}
       {lastResult?.stats.volumeNoDataSqFt > 0 && (
         <Text size="xs" c="orange" mt={4}>
@@ -57,9 +76,6 @@ export default function ChartStatsSummary({ lastResult, priorAdvanceFt, refSurfa
             </Table.Tbody>
           </Table>
         </Box>
-      )}
-      {saved && (
-        <Text size="xs" c="teal" mt={4}>Saved to this report.</Text>
       )}
       {notice && (
         <Text size="xs" c="dimmed" mt={4}>{notice}</Text>
