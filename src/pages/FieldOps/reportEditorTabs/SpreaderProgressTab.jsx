@@ -13,6 +13,7 @@ import { parseDxfPolylines } from '../../../lib/dredge/chart'
 import { windowsFromActivities } from '../../../lib/placement/attribution'
 import { isProductiveActivity } from '../lib/workType'
 import { useSpreaderProgressSave } from './hooks/useSpreaderProgressSave'
+import { useDayActivities } from './hooks/useDayActivities'
 
 const SPREADER_PROGRESS_DOMAIN = 'jfb_spreader_progress'
 const num = (n) => Math.round(Number(n) || 0).toLocaleString()
@@ -29,7 +30,7 @@ export default function SpreaderProgressTab({ project, report, reports, equipmen
     records: progressRecords, loading: progressLoading,
     create: createProgress, update: updateProgress, reload: reloadProgress,
   } = useDomainData({ domain: SPREADER_PROGRESS_DOMAIN, system: 'core', projectId })
-  const { records: activities } = useDomainData({ domain: 'jfb_daily_activities', system: 'core', projectId })
+  const activities = useDayActivities({ projectId, reportDate, equipmentId: selectedEquipmentId })
 
   const canvasRef = useRef(null)
   const [images, setImages] = useState({ aerial: null, logo: null, north: null })
@@ -98,11 +99,7 @@ export default function SpreaderProgressTab({ project, report, reports, equipmen
       return { breakdown, recordedSteps: steps.length, placedSteps: steps.length, override: true }
     }
     if (!steps.length) return { breakdown: [], recordedSteps: 0, placedSteps: 0, override: false }
-    const windows = windowsFromActivities(
-      (activities ?? []).filter((a) => a.equipment_id === selectedEquipmentId),
-      layerNameById,
-      isProductiveActivity,
-    )
+    const windows = windowsFromActivities(activities ?? [], layerNameById, isProductiveActivity)
     const assigned = assignLayers(steps, windows)
     const lanes = config.planned_lanes ?? []
     const res = lanes.length

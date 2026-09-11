@@ -11,17 +11,16 @@ import { useProjectLayerMaterials } from '../../../hooks/useProjectLayerMaterial
 import { useConfirmDialog } from '../../../hooks/useConfirmDialog'
 import { usePicklist } from '../../../hooks/usePicklist'
 import { equipmentWorkType } from '../lib/workType'
-import { useAppConfig } from '../../../contexts/appConfigContext'
 import { useDomainData } from '../../../hooks/useDomainData'
-import { fetchDomainRecords, readWrittenRecordId } from '../../../data'
-import { utcDayRange, sameCalendarDay } from '../lib/reportPdfData'
+import { readWrittenRecordId } from '../../../data'
+import { useDayActivities } from './hooks/useDayActivities'
 import { buildCombosFromActivities, comboNOH, comboKey, isUnassigned } from '../../../lib/productionCombos'
 import { chartSfForCombo, chartCyForCombo, uncoveredCoverage } from '../../../lib/dredge/productionLink'
 import { FlowStatsPanel, PipeConfigPanel } from './components/FlowStatsPanel'
 import BucketSfControls from './components/BucketSfControls'
 import { usePlacementConfig } from '../../../hooks/usePlacementConfig'
 import { loadPlacementGrid } from '../../../lib/placement/loaders'
-import { attributeBuckets, activitiesByDay, windowsFromActivities } from '../../../lib/placement/attribution'
+import { attributeBuckets, windowsFromActivities } from '../../../lib/placement/attribution'
 import { isProductiveActivity } from '../lib/workType'
 import { hoursBetween } from '../lib/eventTotals'
 import LoadingSpinner from '../../../components/LoadingSpinner'
@@ -96,7 +95,6 @@ function comboKeyOfPersisted(p) {
 }
 
 export default function ProductionStatsTab({ project, report, equipment = [], selectedEquipmentId }) {
-  const { config } = useAppConfig()
   const { confirm, modal: confirmModal } = useConfirmDialog()
   const { stats, loading, error, update, remove, create } = useProductionStats(report?.id)
   const { areas, loading: areasLoading } = useProjectAreas(project?.id)
@@ -124,29 +122,16 @@ export default function ProductionStatsTab({ project, report, equipment = [], se
 
   const rows = stats.filter((s) => s.equipment_id === selectedEquipmentId)
 
-  const [activities, setActivities] = useState(null)
-  useEffect(() => {
-    if (!project?.id || !report?.report_date || !selectedEquipmentId) return undefined
-    let cancelled = false
-    const { gte, lt } = utcDayRange(report.report_date)
-    fetchDomainRecords({
-      domain: 'jfb_daily_activities', system: 'core', appSlug: config.appSlug,
-      filters: { project_id: project.id, equipment_id: selectedEquipmentId, start_date_time: { gte, lt } },
-      limit: 1000,
-    })
-      .then((res) => {
-        if (cancelled) return
-        const rowsForDay = (res?.data ?? []).filter((a) => sameCalendarDay(a.start_date_time, report.report_date, a.timezone))
-        setActivities(rowsForDay)
-      })
-      .catch(() => { if (!cancelled) setActivities([]) })
-    return () => { cancelled = true }
-  }, [project?.id, report?.report_date, selectedEquipmentId, config.appSlug])
+  const activities = useDayActivities({
+    projectId: project?.id,
+    reportDate: report?.report_date,
+    equipmentId: selectedEquipmentId,
+  })
   const activitiesLoading = activities === null
 
-  const { records: dredgeProgressRecords } = useDomainData({ domain: 'jfb_dredge_progress', system: 'core', projectId: project?.id })
+  const { records: dredgeProgressRecords } = useDomainData({ domain: 'jfb_dredge_progress', system: 'core', reportId: report?.id })
   const { records: dredgeConfigRecords } = useDomainData({ domain: 'jfb_dredge_config', system: 'core', projectId: project?.id })
-  const dredgeProgress = dredgeProgressRecords.find((r) => r.report_id === report?.id && r.equipment_id === selectedEquipmentId) ?? null
+  const dredgeProgress = dredgeProgressRecords.find((r) => r.equipment_id === selectedEquipmentId) ?? null
   const chartBreakdown = dredgeProgress?.cell_breakdown ?? []
   const chartTodaySf = dredgeProgress?.today_sqft ?? null
   const chartTodayCy = dredgeProgress?.adjusted_cy ?? null
@@ -172,27 +157,19 @@ export default function ProductionStatsTab({ project, report, equipment = [], se
   }, [placementGridFileId])
 
   const { records: placementRows } = useDomainData({
-    domain: 'jfb_placement_progress', system: 'core', projectId: isCapping ? project?.id : null,
-  })
-  const { records: allActivities } = useDomainData({
-    domain: 'jfb_daily_activities', system: 'core', projectId: isCapping ? project?.id : null,
+    domain: 'jfb_placement_progress', system: 'core', reportId: isCapping ? report?.id : null,
   })
 
-  const placementRow = (placementRows ?? []).find(
-    (r) => r.report_id === report?.id && r.equipment_id === selectedEquipmentId,
-  ) ?? null
+  const placementRow = (placementRows ?? []).find((r) => r.equipment_id === selectedEquipmentId) ?? null
 
   const layerNameById = useMemo(() => new Map((layers ?? []).map((l) => [l.id, l.layer_name])), [layers])
 
   const bucketCoverage = useMemo(() => {
     const placements = placementRow?.placements ?? []
     if (!placementGrid || placements.length === 0) return null
-    const byDate = activitiesByDay(allActivities, selectedEquipmentId)
-    const windows = windowsFromActivities(
-      byDate.get(report?.report_date) ?? [], layerNameById, isProductiveActivity,
-    )
+    const windows = windowsFromActivities(activities ?? [], layerNameById, isProductiveActivity)
     return attributeBuckets(placements, placementGrid, windows)
-  }, [placementRow, placementGrid, allActivities, selectedEquipmentId, report?.report_date, layerNameById])
+  }, [placementRow, placementGrid, activities, layerNameById])
 
   async function fillBucketSf(row, sf) {
     await update(row.id, { area: sf })

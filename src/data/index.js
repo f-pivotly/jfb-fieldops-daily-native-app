@@ -134,6 +134,13 @@ export async function fetchDomainRecords({ domain, system, appSlug, limit = 25, 
       ...(includeDeleted ? { include_deleted_records: true } : {}),
     },
   })
+
+  if (data?.meta?.has_more === true && limit > 1) {
+    console.warn(
+      `[core-data-read] TRUNCATED: ${domain} returned ${limit} rows at offset ${offset} and more exist — this caller is working from partial data.`,
+      { domain, limit, offset, filters },
+    )
+  }
   return data
 }
 
