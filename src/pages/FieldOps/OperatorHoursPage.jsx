@@ -15,7 +15,7 @@ export default function OperatorHoursPage() {
     let cancelled = false
     setRows(null)
     setError(null)
-    executeDataView('dvw-jfb-operator-hours', {})
+    executeDataView('dvw-jfb-operator-hours-v2', {})
       .then((data) => { if (!cancelled) setRows(data) })
       .catch((err) => { if (!cancelled) setError(err.message) })
     return () => { cancelled = true }

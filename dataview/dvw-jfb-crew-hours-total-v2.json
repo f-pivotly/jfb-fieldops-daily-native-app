@@ -1,5 +1,5 @@
 {
-  "slug": "dvw-jfb-crew-hours-total",
+  "slug": "dvw-jfb-crew-hours-total-v2",
   "description": "Sums jfb_report_crew_summary_v2.hours across every report a project has ever had, no date filter -- matches the reference app's fetchProjectCrewHistory, which also pulls every report_crew_summary row for the project with no date bound. Backs the PDF Safety page's project-lifetime crew-hours totals (Work Hours On-Site This Day / Cumulative Hours from Previous Day / Total Work Hours from Project Start); today's-hours and previous-day figures are then derived client-side from this one total plus the current report's own crew rows (previousProjectHours = max(0, total - today)), same as the reference app.",
   "authoring_mode": "direct_sql",
   "implementation": "function",

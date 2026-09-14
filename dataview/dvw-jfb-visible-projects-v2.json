@@ -1,11 +1,11 @@
 {
-  "slug": "dvw-jfb-visible-projects",
-  "description": "Projects a pe/pm is scoped to, resolved server-side instead of the client fetching every jfb_project_members row and filtering in JS. Joins jfb_projects to jfb_project_members and returns the projects where an active membership row's email matches p_email (case/whitespace-insensitive). Cross-project roles (director/admin) don't use this view -- they still read jfb_projects directly for the full list.",
+  "slug": "dvw-jfb-visible-projects-v2",
+  "description": "Projects a pe/pm is scoped to, resolved server-side instead of the client fetching every jfb_project_members row and filtering in JS. Joins jfb_projects to jfb_project_members and returns the projects where an active membership row's user resolves (via core.iam_entities_b) to p_email (case/whitespace-insensitive). Cross-project roles (director/admin) don't use this view -- they still read jfb_projects directly for the full list.",
   "authoring_mode": "direct_sql",
   "implementation": "function",
-  "direct_sql": "SELECT DISTINCT p.id, p.name, p.project_code, p.client_name, p.work_type, p.is_active, p.start_date, p.end_date, p.volume_goal, p.primary_measure, p.site_city, p.site_state, p.is_tsca_zone_tracking, p.is_soil_type, p.is_pipe_tracking FROM usdf.jfb_projects p JOIN usdf.jfb_project_members m ON m.project_id = p.id WHERE m.is_active IS NOT FALSE AND lower(trim(m.email)) = lower(trim(p_email)) ORDER BY p.name",
+  "direct_sql": "SELECT DISTINCT p.id, p.name, p.project_code, p.client_name, p.work_type, p.is_active, p.start_date, p.end_date, p.volume_goal, p.primary_measure, p.site_city, p.site_state, p.is_tsca_zone_tracking, p.is_soil_type, p.is_pipe_tracking FROM usdf.jfb_projects p JOIN usdf.jfb_project_members m ON m.project_id = p.id JOIN core.iam_entities_b u ON u.id = m.user_id AND u.entity_type = 'user' WHERE m.is_active IS NOT FALSE AND lower(trim(u.email)) = lower(trim(p_email)) ORDER BY p.name",
   "parameters": [
-    { "name": "p_email", "type": "text", "required": true, "description": "The logged-in pe/pm's token email, matched against jfb_project_members.email." }
+    { "name": "p_email", "type": "text", "required": true, "description": "The logged-in pe/pm's token email, matched (case/whitespace-insensitive) against core.iam_entities_b.email for the IAM user referenced by jfb_project_members.user_id." }
   ],
   "columns": [
     { "name": "id", "type": "uuid", "description": "jfb_projects.id." },

@@ -116,7 +116,7 @@ export default function WeeklySummaryPage() {
     if (!projectId) return
     let cancelled = false
     const startDate = project?.production_start_date || (project?.start_date ? project.start_date.slice(0, 10) : '2000-01-01')
-    executeDataView('dvw-jfb-realized-daily-totals', { p_project_id: projectId, p_start_date: startDate })
+    executeDataView('dvw-jfb-realized-daily-totals-v2', { p_project_id: projectId, p_start_date: startDate })
       .then((rows) => { if (!cancelled) setDailyTotals(rows) })
       .catch((err) => { if (!cancelled) setDailyTotalsError(err.message) })
     return () => { cancelled = true }
@@ -126,7 +126,7 @@ export default function WeeklySummaryPage() {
   useEffect(() => {
     if (!projectId) return
     let cancelled = false
-    executeDataView('dvw-jfb-realized-delay-summary', { p_project_id: projectId, p_start_date: weekStart, p_end_date: weekEnd })
+    executeDataView('dvw-jfb-realized-delay-summary-v2', { p_project_id: projectId, p_start_date: weekStart, p_end_date: weekEnd })
       .then((rows) => { if (!cancelled) setDelayRows(rows) })
       .catch(() => { if (!cancelled) setDelayRows([]) })
     return () => { cancelled = true }

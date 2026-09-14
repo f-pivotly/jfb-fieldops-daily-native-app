@@ -267,7 +267,7 @@ export default function SafetyTab({ project, report, reports = [] }) {
     if (!project?.id || !report?.report_date) return
     let cancelled = false
     const monthStart = `${report.report_date.slice(0, 7)}-01`
-    executeDataView('dvw-jfb-precip-sums', {
+    executeDataView('dvw-jfb-precip-sums-v2', {
       p_project_id: project.id, p_month_start: monthStart, p_end_date: report.report_date,
     })
       .then((rows) => {

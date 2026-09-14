@@ -23,7 +23,7 @@ export function useVisibleProjects() {
     let cancelled = false
     setMyProjectsLoading(true)
     setMyProjectsError(null)
-    executeDataView('dvw-jfb-visible-projects', { p_email: myEmail })
+    executeDataView('dvw-jfb-visible-projects-v2', { p_email: myEmail })
       .then((rows) => {
         if (!cancelled) setMyProjects(rows)
       })

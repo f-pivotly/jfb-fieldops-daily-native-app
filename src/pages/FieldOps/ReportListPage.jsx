@@ -54,7 +54,7 @@ export default function ReportListPage() {
   useEffect(() => {
     if (!projectId) return
     let cancelled = false
-    executeDataView('dvw-jfb-distinct-event-dates', { p_project_id: projectId })
+    executeDataView('dvw-jfb-distinct-event-dates-v2', { p_project_id: projectId })
       .then((rows) => {
         if (cancelled) return
         const dates = (Array.isArray(rows) ? rows : []).map((r) => String(r.event_date).slice(0, 10))

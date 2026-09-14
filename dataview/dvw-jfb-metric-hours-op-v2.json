@@ -1,5 +1,5 @@
 {
-  "slug": "dvw-jfb-metric-hours-op",
+  "slug": "dvw-jfb-metric-hours-op-v2",
   "description": "Operating Hours: sums jfb_daily_activities duration for a project across an inclusive report-date range, optionally scoped to one equipment unit. An activity counts as operating when its category is a productive label ('ACTIVE DREDGING' or 'ACTIVE PLACEMENT', the two values workType.js writes) or, for legacy rows saved before the category column existed, when category is null and delay_code_id is also null. Backs the 'Operating Hours' auto metric on the cover-page Metrics tab, matching the non-native app's category-based classification in eventTotals.ts.",
   "authoring_mode": "direct_sql",
   "implementation": "function",

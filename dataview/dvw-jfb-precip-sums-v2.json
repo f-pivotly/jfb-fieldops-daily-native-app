@@ -1,5 +1,5 @@
 {
-  "slug": "dvw-jfb-precip-sums",
+  "slug": "dvw-jfb-precip-sums-v2",
   "description": "Sums jfb_report_safety_v2.precip_today_in for a project across every report up to and including an end date, split into month-to-date (reports on/after a caller-supplied month start) and project-to-date (every report up to end date). Only rows with precip_today_in > 0 count, matching the non-native app's fetchPrecipSums. Backs the Safety tab's read-only Precip MTD / Precip Project Total fields -- these are never stored, always derived live.",
   "authoring_mode": "direct_sql",
   "implementation": "function",

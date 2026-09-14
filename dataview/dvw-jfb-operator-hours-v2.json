@@ -1,5 +1,5 @@
 {
-  "slug": "dvw-jfb-operator-hours",
+  "slug": "dvw-jfb-operator-hours-v2",
   "description": "Cross-project per-operator hours rollup: sums jfb_daily_activities duration per operator, split into operating hours (delay_code_id IS NULL) and delay hours (delay_code_id IS NOT NULL), plus how many distinct projects and how many activity rows each operator has. Optionally scoped to one project via p_project_id. CY moved is deliberately NOT included -- jfb_production_stats has no operator_id column, so a per-operator CY figure can only ever be an estimate (proportional split of each equipment/day's volume by operator hours share); that is a separate follow-up, not part of this view.",
   "authoring_mode": "direct_sql",
   "implementation": "function",

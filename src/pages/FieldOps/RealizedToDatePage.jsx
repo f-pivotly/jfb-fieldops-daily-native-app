@@ -43,7 +43,7 @@ export default function RealizedToDatePage() {
     if (!project?.id) return
     let cancelled = false
     const startDate = project.production_start_date || (project.start_date ? project.start_date.slice(0, 10) : '2000-01-01')
-    executeDataView('dvw-jfb-realized-daily-totals', { p_project_id: project.id, p_start_date: startDate })
+    executeDataView('dvw-jfb-realized-daily-totals-v2', { p_project_id: project.id, p_start_date: startDate })
       .then((rows) => {
         if (cancelled) return
         setDailyTotals(rows.map((r) => ({
@@ -62,7 +62,7 @@ export default function RealizedToDatePage() {
   useEffect(() => {
     if (!project?.id) return
     let cancelled = false
-    executeDataView('dvw-jfb-realized-delay-summary', {
+    executeDataView('dvw-jfb-realized-delay-summary-v2', {
       p_project_id: project.id, p_start_date: currentWeekStart, p_end_date: currentWeekEnd,
     })
       .then((rows) => { if (!cancelled) setDelayRows(rows) })

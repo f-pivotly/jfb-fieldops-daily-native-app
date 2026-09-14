@@ -1,5 +1,5 @@
 {
-    "slug": "dvw-jfb-distinct-event-dates",
+    "slug": "dvw-jfb-distinct-event-dates-v2",
     "description": "Every distinct calendar date a project has jfb_daily_activities on, timezone-aware per activity. Backs ReportListPage.jsx's 'pending' rows and the Start-a-report date picker's has-events warning -- the non-native app's equivalent (fetchDistinctEventDates) is a plain column select against daily_events.report_date, but jfb_daily_activities only has start_date_time + timezone, so the calendar-day extraction has to happen here rather than client-side. Deliberately unbounded (no date-range parameter) to match the non-native app's own unbounded 'ever' scope -- the result is one row per distinct day, inherently small even over a project's full history, not one row per activity, so it doesn't re-introduce the unscoped-row-count problem a bounded activity fetch would.",
     "authoring_mode": "direct_sql",
     "implementation": "function",

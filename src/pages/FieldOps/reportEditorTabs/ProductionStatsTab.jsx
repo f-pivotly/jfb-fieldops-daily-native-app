@@ -104,6 +104,7 @@ export default function ProductionStatsTab({ project, report, equipment = [], se
   const selectedEquipment = equipment.find((eq) => eq.id === selectedEquipmentId) ?? null
   const resolvedWorkType = equipmentWorkType(project, selectedEquipment, report?.report_date).toLowerCase()
   const isCapping = resolvedWorkType.includes('cap')
+  const workTypeUnset = resolvedWorkType.trim() === ''
   const { layers } = useProjectLayers(project?.id)
   const { materials } = useProjectMaterials(project?.id)
   const { layerMaterials } = useProjectLayerMaterials(project?.id)
@@ -330,7 +331,7 @@ export default function ProductionStatsTab({ project, report, equipment = [], se
           const existing = persistedByKey.get(t.combo.key)
           const parts = [`${existing?.area?.toLocaleString() ?? '—'} → ${t.sf.toLocaleString()} sq ft`]
           if (t.cy != null) parts.push(`${existing?.volume?.toLocaleString() ?? '—'} → ${t.cy.toLocaleString()} CY`)
-          return `${t.combo.areaLabel ?? ''} ${t.combo.passLabel ?? ''}: ${parts.join(', ')}`
+          return `• ${t.combo.areaLabel ?? ''} ${t.combo.passLabel ?? ''}: ${parts.join(', ')}`
         })
         .join('\n')
       if (!(await confirm(
@@ -415,6 +416,16 @@ export default function ProductionStatsTab({ project, report, equipment = [], se
     <Box>
       {stillLoading && <LoadingSpinner py={16} />}
       {!stillLoading && <SafeError message={error} />}
+
+      {!stillLoading && !error && workTypeUnset && (
+        <WarningBanner p={10} mb={10}>
+          <Text size="xs" fw={600} c="#7a5206">No work type set for this project</Text>
+          <Text size="xs" c="#7a5206">
+            Showing dredging entry by default. Set the work type in <strong>Project Settings</strong> so this
+            screen matches the work being done.
+          </Text>
+        </WarningBanner>
+      )}
 
       {!stillLoading && !error && !isCapping && unassignedCombo && (
         <WarningBanner p={10} mb={10}>

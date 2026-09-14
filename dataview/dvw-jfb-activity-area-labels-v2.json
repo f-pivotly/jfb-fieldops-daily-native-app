@@ -1,5 +1,5 @@
 {
-  "slug": "dvw-jfb-activity-area-labels",
+  "slug": "dvw-jfb-activity-area-labels-v2",
   "description": "Resolves jfb_daily_activities.area (a jsonb {area_id, sub_area_id, sub_sub_area_id}) to its three jfb_project_areas.name labels, for every activity in a project+date range. Replaces the client-side resolveArea()/areaNameById Map join in reportPdfData.js's buildDailyActivityByEquipmentParam -- same three-level lookup, done server-side. Also the id-to-label piece DREDGE_FEATURE_GAPS.md's Problem 2 flags as a real blocker for the eventual Production Stats combo computation (pass_number is the other one, not addressed here).",
   "authoring_mode": "direct_sql",
   "implementation": "function",
@@ -12,7 +12,7 @@
   "columns": [
     { "name": "activity_id", "type": "uuid", "description": "jfb_daily_activities.id." },
     { "name": "equipment_id", "type": "uuid", "description": "jfb_daily_activities.equipment_id." },
-    { "name": "start_date_time", "type": "timestamp with time zone", "description": "jfb_daily_activities.start_date_time." },
+    { "name": "start_date_time", "type": "timestamptz", "description": "jfb_daily_activities.start_date_time." },
     { "name": "area_l1", "type": "text", "description": "jfb_project_areas.name for area->>'area_id'; null when the activity has no area set." },
     { "name": "area_l2", "type": "text", "description": "jfb_project_areas.name for area->>'sub_area_id'; null when not set." },
     { "name": "area_l3", "type": "text", "description": "jfb_project_areas.name for area->>'sub_sub_area_id'; null when not set." }

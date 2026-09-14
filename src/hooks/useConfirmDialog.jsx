@@ -20,7 +20,7 @@ export function useConfirmDialog() {
 
   const modal = (
     <Modal opened={message !== null} onClose={() => settle(false)} title={<Text fw={700} size="sm">Confirm</Text>} size="sm">
-      <Text size="sm" mb={16}>{message}</Text>
+      <Text size="sm" mb={16} style={{ whiteSpace: 'pre-wrap' }}>{message}</Text>
       <Group justify="flex-end">
         <Button size="xs" variant="default" onClick={() => settle(false)}>Cancel</Button>
         <Button size="xs" color="red" onClick={() => settle(true)}>Confirm</Button>

@@ -258,7 +258,7 @@ export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, p
       filters: { project_id: projectId, start_date_time: { gte, lt } },
       limit: 1000,
     }),
-    executeDataView('dvw-jfb-activity-area-labels', {
+    executeDataView('dvw-jfb-activity-area-labels-v2', {
       p_project_id: projectId,
       p_start_date: gte.slice(0, 10),
       p_end_date: lt.slice(0, 10),
@@ -723,7 +723,7 @@ export async function buildCoverProductionTotalsParam({ projectId, project, date
   const projectStart = project?.production_start_date || (project?.start_date ? project.start_date.slice(0, 10) : '2000-01-01')
   const weekStart = sundayStartISO(dateISO)
 
-  const rows = await executeDataView('dvw-jfb-realized-daily-totals', { p_project_id: projectId, p_start_date: projectStart })
+  const rows = await executeDataView('dvw-jfb-realized-daily-totals-v2', { p_project_id: projectId, p_start_date: projectStart })
   const days = (rows ?? []).map((r) => ({
     date: r.report_date,
     cy: Number(r.cy) || 0,
@@ -893,10 +893,10 @@ export async function buildSafetyPageDataParam({ appSlug, projectId, reportId, d
     fetchDomainRecords({ domain: 'jfb_report_crew_summary_v2', system: 'core', appSlug, filters: { report_id: reportId }, limit: 200 }),
     fetchDomainRecords({ domain: 'jfb_project_site_equipment', system: 'core', appSlug, filters: { project_id: projectId }, limit: 1000 }),
     fetchPicklistValues('pkl-jfb-site-equipment-category'),
-    executeDataView('dvw-jfb-precip-sums', {
+    executeDataView('dvw-jfb-precip-sums-v2', {
       p_project_id: projectId, p_month_start: `${dateISO.slice(0, 7)}-01`, p_end_date: dateISO,
     }),
-    executeDataView('dvw-jfb-crew-hours-total', { p_project_id: projectId }),
+    executeDataView('dvw-jfb-crew-hours-total-v2', { p_project_id: projectId }),
   ])
 
   const safety = (safetyRes?.data ?? [])[0] ?? null
