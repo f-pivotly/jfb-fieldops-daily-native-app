@@ -89,6 +89,27 @@
         "code": "lww"
       },
       "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "is_active",
+      "slug": "is_active",
+      "type": "boolean",
+      "label": "Is Active",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "boolean",
+      "column_name": "is_active",
+      "description": "Retires a unit from the operator app's equipment picker without deleting it, so its historical daily activities still resolve. Matches the non-native app's project_equipment.active, which this domain had no equivalent for -- a demobilised dredge stayed selectable forever. NULL (the default, and every pre-existing row) is treated as active, so nothing disappears on migration.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
     }
   ],
   "archive": true,

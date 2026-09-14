@@ -1,5 +1,49 @@
 
 
+## jfb_air_monitoring_config
+TABLE
+
+| Field | Type |
+|---|---|
+| project_id | uuid, FK → jfb_projects.id |
+| provider | text |
+| base_url | text |
+| timezone | text |
+| window_start | text |
+| window_end | text |
+| interval_minutes | integer |
+| stations | jsonb |
+| thresholds | jsonb |
+| equipment_text | text |
+| calibration_text | text |
+| notes_text | text |
+| aerial_path | text |
+
+## jfb_air_monitoring_daily
+TABLE
+
+| Field | Type |
+|---|---|
+| project_id | uuid, FK → jfb_projects.id |
+| report_id | uuid, unique, FK → jfb_reports.id |
+| activity | text |
+| notes | text |
+
+## jfb_air_quality_readings
+TABLE
+
+| Field | Type |
+|---|---|
+| project_id | uuid, FK → jfb_projects.id |
+| sensor_id | text |
+| station_key | text |
+| parameter | text |
+| unit | text |
+| value | numeric |
+| reading_at | timestamp with time zone |
+| source | text |
+| fetched_at | timestamp with time zone |
+
 ## jfb_component_types
 TABLE
 
@@ -38,6 +82,7 @@ TABLE
 | notes | text |
 | tsca | boolean |
 | delay_code_id | uuid, FK → jfb_project_delay_codes.id |
+| category | text |
 | layer_id | uuid, FK → jfb_project_layers.id |
 
 ## jfb_delay_codes
@@ -73,21 +118,48 @@ TABLE
 | bg_path | text |
 | colorbar_path | text |
 | georef | jsonb |
-| area | text |
-| materials | text |
-| title | text |
+| default_area_id | uuid, FK → jfb_project_areas.id |
+| default_material_note | text |
+| chart_title_override | text |
 | cells_path | text |
 | aerial_path | text |
 | aerial_georef | jsonb |
-| crs_proj4 | text |
+| crs_definition | text |
 | aerial_tiles | jsonb |
 | data_source | text |
-| water_elev | numeric |
-| design_path | text |
+| water_elev_ft | numeric |
+| earthworks_design_path | text |
 | require_stations | boolean |
 | reference_lines_path | text |
 | alignment_path | text |
 | reference_surface_path | text |
+| split_gap_ft | integer |
+| isopach_tiles | jsonb |
+| cells_reference_only | boolean |
+| bucket_width_ft | numeric |
+| track_bed_tolerance_ft | numeric |
+| alignment_snap_ft | numeric |
+| volume_mode | text |
+| design_elev_ft | numeric |
+| reference_surface_date | date |
+| reference_cell_ft | numeric |
+| volume_recovery_factor | numeric |
+| bg_original_name | text |
+| bg_storage_path | text |
+| colorbar_original_name | text |
+| colorbar_storage_path | text |
+| cells_original_name | text |
+| cells_storage_path | text |
+| aerial_original_name | text |
+| aerial_storage_path | text |
+| earthworks_design_original_name | text |
+| earthworks_design_storage_path | text |
+| reference_lines_original_name | text |
+| reference_lines_storage_path | text |
+| alignment_original_name | text |
+| alignment_storage_path | text |
+| reference_surface_original_name | text |
+| reference_surface_storage_path | text |
 
 ## jfb_dredge_equipment_config
 TABLE
@@ -108,6 +180,7 @@ TABLE
 | report_id | uuid, FK → jfb_reports.id |
 | equipment_id | uuid, FK → jfb_equipments.id |
 | chart_path | text |
+| surface_export_path | text |
 | coverage_rings | jsonb |
 | footprint_rings | jsonb |
 | today_sqft | numeric |
@@ -132,6 +205,9 @@ TABLE
 |---|---|
 | name | text |
 | project_id | uuid, FK → jfb_projects.id |
+| work_type | text |
+| work_type_from | date |
+| is_active | boolean |
 
 ## jfb_hydraulic_flow_stats
 TABLE
@@ -144,6 +220,7 @@ TABLE
 | pipe_dia_inches | numeric |
 | avg_line_velocity | numeric |
 | avg_flow_rate | numeric |
+| daily_total_gal | numeric |
 
 ## jfb_hydraulic_pipe_configurations
 TABLE
@@ -231,6 +308,45 @@ TABLE
 | name | text |
 | favourite_activity_ids | text |
 
+## jfb_placement_config
+TABLE
+
+| Field | Type |
+|---|---|
+| project_id | uuid, FK → jfb_projects.id |
+| label | text |
+| grid_path | text |
+| grid_original_name | text |
+| grid_storage_path | text |
+| aerial_path | text |
+| aerial_original_name | text |
+| aerial_storage_path | text |
+| aerial_georef | jsonb |
+| reference_lines_path | text |
+| reference_lines_original_name | text |
+| reference_lines_storage_path | text |
+| active | boolean |
+
+## jfb_placement_progress
+TABLE
+
+| Field | Type |
+|---|---|
+| project_id | uuid, FK → jfb_projects.id |
+| report_id | uuid, FK → jfb_reports.id |
+| equipment_id | uuid, FK → jfb_equipments.id |
+| source_filename | text |
+| source_header | text |
+| placements | jsonb |
+| bucket_count | integer |
+| first_secs | integer |
+| last_secs | integer |
+| distinct_cells | integer |
+| today_sqft | numeric |
+| problems | jsonb |
+| chart_path | text |
+| generated_by_user_id | uuid |
+
 ## jfb_production_stats
 TABLE
 
@@ -247,6 +363,18 @@ TABLE
 | volume | numeric |
 | area | numeric |
 | notes | text |
+| tons | numeric |
+| conversion_factor | numeric |
+
+## jfb_production_week_breaks
+TABLE
+
+| Field | Type |
+|---|---|
+| project_id | uuid, FK → jfb_projects.id |
+| shutdown_start | date |
+| shutdown_end | date |
+| reason | text |
 
 ## jfb_project_area_layers
 TABLE
@@ -371,6 +499,15 @@ TABLE
 | sort_order | integer |
 | active | boolean |
 
+## jfb_project_members
+TABLE
+
+| Field | Type |
+|---|---|
+| project_id | uuid, FK → jfb_projects.id |
+| user_id | uuid |
+| is_active | boolean |
+
 ## jfb_project_operators
 TABLE
 
@@ -387,6 +524,7 @@ TABLE
 |---|---|
 | project_id | uuid, FK → jfb_projects.id |
 | narrative_label | text |
+| section_key | text |
 | is_active | boolean |
 | date | timestamp with time zone |
 | sort_order | integer |
@@ -422,8 +560,29 @@ TABLE
 | is_tsca_zone_tracking | boolean |
 | is_soil_type | boolean |
 | is_pipe_tracking | boolean |
+| show_ssho_field | boolean |
+| show_next_day_summary | boolean |
+| latitude | numeric |
+| longitude | numeric |
+| cy_goh_goal | numeric |
+| expected_goh_per_day | numeric |
+| production_days_per_week | numeric |
+| production_start_date | date |
+| cap_conversion_factor | numeric |
+| placement_start_date | date |
+| prior_work_type | text |
+| is_spreader_active | boolean |
 
-## jfb_report_crew_summary
+## jfb_realized_excluded_days
+TABLE
+
+| Field | Type |
+|---|---|
+| project_id | uuid, FK → jfb_projects.id |
+| exclude_date | date |
+| reason | text |
+
+## jfb_report_crew_summary_v2
 TABLE
 
 | Field | Type |
@@ -443,6 +602,7 @@ TABLE
 | project_id | uuid, FK → jfb_projects.id |
 | report_date | date |
 | report_slug | text |
+| report_type | text |
 | generated_at | timestamp with time zone |
 | generated_by_user_id | uuid |
 | generated_by_email | text |
@@ -460,16 +620,6 @@ TABLE
 | metric_id | uuid, FK → jfb_metrics.id |
 | value | numeric |
 
-## jfb_report_narratives
-TABLE
-
-| Field | Type |
-|---|---|
-| project_id | uuid, FK → jfb_projects.id |
-| report_id | uuid, FK → jfb_reports.id |
-| narrative_label | text |
-| content | text |
-
 ## jfb_report_narratives_v2
 TABLE
 
@@ -478,6 +628,7 @@ TABLE
 | project_id | uuid, FK → jfb_projects.id |
 | report_id | uuid, FK → jfb_reports.id |
 | narrative_label | text |
+| section_key | text |
 | content | text (fww) |
 
 ## jfb_report_photos
@@ -495,7 +646,7 @@ TABLE
 | report_id | uuid, FK → jfb_reports.id |
 | pm_comment | text |
 
-## jfb_report_safety
+## jfb_report_safety_v2
 TABLE
 
 | Field | Type |
@@ -532,6 +683,98 @@ TABLE
 | project_id | uuid, FK → jfb_projects.id |
 | report_date | date |
 | status | text |
+| released_at | timestamp with time zone |
+| released_by_user_id | uuid |
+| no_production_day | boolean |
+
+## jfb_spreader_config
+TABLE
+
+| Field | Type |
+|---|---|
+| project_id | uuid, FK → jfb_projects.id |
+| spreader_name | text |
+| layer_title | text |
+| aerial_path | text |
+| aerial_original_name | text |
+| aerial_storage_path | text |
+| aerial_georef | jsonb |
+| boundaries | jsonb |
+| planned_lanes | jsonb |
+| plan_cell_len_ft | numeric |
+| broadcast_ft | numeric |
+| min_step_tons | numeric |
+| forward_throw_ft | numeric |
+| cross_extra_ft | numeric |
+| transition_ft | numeric |
+| active | boolean |
+
+## jfb_spreader_progress
+TABLE
+
+| Field | Type |
+|---|---|
+| project_id | uuid, FK → jfb_projects.id |
+| report_id | uuid, FK → jfb_reports.id |
+| equipment_id | uuid, FK → jfb_equipments.id |
+| source_filename | text |
+| steps | jsonb |
+| coverage | jsonb |
+| override_rings | jsonb |
+| today_sqft | numeric |
+| cumulative_sqft | numeric |
+| chart_path | text |
+| generated_by_user_id | uuid |
+
+## jfb_user_signatures
+TABLE
+
+| Field | Type |
+|---|---|
+| user_id | uuid (unique) |
+| signature_image_path | text |
+
+## jfb_water_monitoring_config
+TABLE
+
+| Field | Type |
+|---|---|
+| project_id | uuid, FK → jfb_projects.id |
+| provider | text |
+| timezone | text |
+| window_start | text |
+| window_end | text |
+| interval_minutes | integer |
+| locations | jsonb |
+| thresholds | jsonb |
+| mode | text |
+| aerial_path | text |
+| active | boolean |
+
+## jfb_water_monitoring_notes
+TABLE
+
+| Field | Type |
+|---|---|
+| project_id | uuid, FK → jfb_projects.id |
+| report_id | uuid, unique, FK → jfb_reports.id |
+| notes | text |
+| reference_ntu | numeric |
+
+## jfb_water_quality_readings
+TABLE
+
+| Field | Type |
+|---|---|
+| project_id | uuid, FK → jfb_projects.id |
+| location_id | text |
+| role | text |
+| parameter | text |
+| unit | text |
+| value | numeric |
+| reading_at | timestamp with time zone |
+| source | text |
+| fetched_at | timestamp with time zone |
 
 ## jfb_weekly_summaries
 TABLE
