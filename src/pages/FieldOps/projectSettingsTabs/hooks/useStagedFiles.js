@@ -11,6 +11,14 @@ export function useStagedFiles() {
     setStagedFiles((s) => ({ ...s, [field]: { file, originalName: originalName ?? file.name, extra } }))
   }
 
+  function unstageFile(field) {
+    setStagedFiles((s) => {
+      const next = { ...s }
+      delete next[field]
+      return next
+    })
+  }
+
   function stageTiles(key, list) {
     setStagedTiles((s) => ({ ...s, [key]: list }))
   }
@@ -26,7 +34,7 @@ export function useStagedFiles() {
         previousFileId: existing?.[field] ?? null,
         metadataPrefix: field.replace(/_path$/, ''),
         extra: staged.extra,
-        update,
+        update: (_id, patch) => update(patch),
       })
     }
     if (Object.keys(stagedFiles).length) setStagedFiles({})
@@ -38,7 +46,7 @@ export function useStagedFiles() {
       const uploadedTiles = []
       for (const t of list) {
         const res = await uploadAttachment({ coreRecordId: recordId, domain, file: t.file })
-        uploadedTiles.push({ file_id: res.fileId, georef: t.georef })
+        uploadedTiles.push({ file_id: res.fileId, georef: t.georef, original_name: t.originalName ?? t.file.name })
       }
       const merged = [...(existing?.[fieldName] ?? []), ...uploadedTiles]
       await update({ [fieldName]: merged })
@@ -46,5 +54,5 @@ export function useStagedFiles() {
     if (Object.values(stagedTiles).some((l) => l?.length)) setStagedTiles({})
   }
 
-  return { stagedFiles, stagedTiles, stageFile, stageTiles, flushFiles, flushTiles }
+  return { stagedFiles, stagedTiles, stageFile, unstageFile, stageTiles, flushFiles, flushTiles }
 }

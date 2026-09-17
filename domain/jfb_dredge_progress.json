@@ -459,6 +459,69 @@
                 "code": "lww"
             },
             "triggers_version_change": true
+        },
+        {
+            "pii": false,
+            "name": "source_batch_path",
+            "slug": "source_batch_path",
+            "type": "text",
+            "label": "Source Batch Path",
+            "unique": false,
+            "indexed": false,
+            "masking": {
+                "masked": false
+            },
+            "nullable": true,
+            "required": false,
+            "data_type": "text",
+            "column_name": "source_batch_path",
+            "description": "The day's survey source files for this dredge, stored as a single compressed zip attachment on this row -- the operator picks a folder of RAW files (or, on earthworks projects, the Tracking .dxf and/or surface .csv) and the whole set is archived verbatim. One archive per report date per equipment, and the geometry in coverage_rings was computed from exactly these files, so the two can always be checked against each other. Null only on rows saved before source retention existed. Note that on earthworks full-surface days the picked .csv is also held separately in surface_export_path, re-encoded for cross-day diffing; this field keeps the original upload instead.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
+            "name": "source_batch_info",
+            "slug": "source_batch_info",
+            "type": "jsonb",
+            "label": "Source Batch Info",
+            "unique": false,
+            "indexed": false,
+            "masking": {
+                "masked": false
+            },
+            "nullable": true,
+            "required": false,
+            "data_type": "jsonb",
+            "column_name": "source_batch_info",
+            "description": "Manifest of the archive in source_batch_path: checksum, file_count, file_names, total_bytes, compressed_bytes, source_date (the date parsed out of the batch's own RAW log filename, which can disagree with report_date and is warned about at upload), uploaded_at and uploaded_by. checksum is a content fingerprint over the sorted name:size manifest, not a cryptographic hash -- its only job is to recognise a re-pick of the same folder so an unchanged batch is never re-uploaded.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
+            "name": "source_batch_history",
+            "slug": "source_batch_history",
+            "type": "jsonb",
+            "label": "Source Batch History",
+            "unique": false,
+            "indexed": false,
+            "masking": {
+                "masked": false
+            },
+            "nullable": true,
+            "required": false,
+            "data_type": "jsonb",
+            "column_name": "source_batch_history",
+            "description": "Append-only record of superseded source batches, one entry per replacement: file_id of the archive that was replaced, its checksum and file_count, replaced_at, replaced_by, and the reason the user typed. The superseded file itself is soft-deleted rather than purged, so an entry here is enough to recover a batch replaced in error. Null until a batch is replaced for the first time.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
         }
     ],
     "archive": true,

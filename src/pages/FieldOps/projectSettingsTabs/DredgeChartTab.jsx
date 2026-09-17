@@ -7,7 +7,10 @@ import { useDomainData } from '../../../hooks/useDomainData'
 import { useReports } from '../../../hooks/useReports'
 import { useAttachmentUpload } from '../../../hooks/useAttachmentUpload'
 import { useAsyncAction } from '../../../hooks/useAsyncAction'
-import { downloadAttachment, readWrittenRecordId } from '../../../data'
+import { useConfirmDialog } from '../../../hooks/useConfirmDialog'
+import { deleteAttachment, downloadAttachment, readWrittenRecordId } from '../../../data'
+import { dredgeFileName, fileExtension, renameFile } from '../../../lib/dredge/fileNames'
+import { todayISO } from '../lib/realizedToDate'
 import { parseSurveyXyz, encodeRefSurface, gzipBytes, surveyFilenameDateISO, DEFAULT_REF_CELL_FT } from '../../../lib/dredge/designVolume'
 import { isopachCsvToImage } from '../../../lib/dredge/earthworks'
 import { fetchAerial } from '../../../lib/dredge/aerial'
@@ -17,6 +20,7 @@ import { loadAttachmentImage, loadPublicImage, loadTiles } from '../../../lib/dr
 import { makeZip } from '../../../lib/zip'
 import { useStagedFiles } from './hooks/useStagedFiles'
 import UploadedFile from './components/UploadedFile'
+import StagedFilePreview from './components/StagedFilePreview'
 
 const DATA_SOURCES = [
   { value: 'hypack', label: 'HYPACK RAW folder — hydraulic dredge cutter track' },
@@ -50,15 +54,31 @@ function fieldsToGeoref(f) {
 const DREDGE_CONFIG_DOMAIN = 'jfb_dredge_config'
 const EQUIPMENT_CONFIG_DOMAIN = 'jfb_dredge_equipment_config'
 
+const FILE_KINDS = {
+  bg_path: 'isopach',
+  colorbar_path: 'colorbar',
+  aerial_path: 'aerial',
+  cells_path: 'cells',
+  reference_lines_path: 'mile-markers',
+  alignment_path: 'alignment',
+  earthworks_design_path: 'design-grade',
+  reference_surface_path: 'reference-survey',
+}
+
 export default function DredgeChartTab({ project }) {
   const hasProject = !!project?.id
   const { records: dredgeConfigRecords, loading: configLoading, create: createDredgeConfig, update: updateDredgeConfig } =
     useDomainData({ domain: 'jfb_dredge_config', system: 'core', projectId: project?.id })
+  const [loadedProjectId, setLoadedProjectId] = useState(null)
+
+  if (hasProject && !configLoading && loadedProjectId !== project.id) {
+    setLoadedProjectId(project.id)
+  }
 
   if (!hasProject) {
     return <Text size="xs" c="dimmed" ta="center" py={24}>Select a project to manage its dredge chart.</Text>
   }
-  if (configLoading) {
+  if (loadedProjectId !== project.id) {
     return <Text size="xs" c="dimmed" ta="center" py={24}>Loading dredge chart settings…</Text>
   }
 
@@ -66,7 +86,7 @@ export default function DredgeChartTab({ project }) {
 
   return (
     <DredgeChartTabForm
-      key={existingConfig?.id ?? 'new'}
+      key={project.id}
       project={project}
       existingConfig={existingConfig}
       createDredgeConfig={createDredgeConfig}
@@ -124,9 +144,82 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
   const { busy: previewBusy, message: previewMsg, error: previewError, run: runPreview, markError: markPreviewError } = useAsyncAction()
   const { busy: dxfBusy, message: dxfMsg, error: dxfError, run: runDxf } = useAsyncAction()
 
-  const { stagedFiles, stagedTiles, stageFile, stageTiles, flushFiles, flushTiles } = useStagedFiles()
+  const { stagedFiles, stagedTiles, stageFile, unstageFile, stageTiles, flushFiles, flushTiles } = useStagedFiles()
+  const { confirm, modal: confirmModal } = useConfirmDialog()
+  const [removingField, setRemovingField] = useState(null)
 
   const showVolumeRecovery = volumeMode !== '' || dataSource === 'earthworks'
+
+  function stageRenamed(field, file, { originalName, extra, ext } = {}) {
+    const name = dredgeFileName({
+      project,
+      kind: FILE_KINDS[field],
+      dateISO: todayISO(),
+      ext: ext ?? fileExtension(file.name),
+    })
+    stageFile(field, renameFile(file, name), { originalName: originalName ?? file.name, extra })
+  }
+
+  function renameTile(kind) {
+    return (file, number) => renameFile(file, dredgeFileName({
+      project,
+      kind,
+      dateISO: todayISO(),
+      index: number,
+      ext: fileExtension(file.name),
+    }))
+  }
+
+  async function handleRemoveFile(field) {
+    const fileId = existingConfig?.[field]
+    if (!existingConfig || !fileId) return
+    const prefix = field.replace(/_path$/, '')
+    const name = existingConfig[`${prefix}_original_name`] || 'this file'
+    if (!(await confirm(`Remove ${name}? The stored file will be deleted.`))) return
+    setRemovingField(field)
+    setUploadErrors((e) => ({ ...e, [field]: '' }))
+    try {
+      await updateDredgeConfig(existingConfig.id, {
+        [field]: null,
+        [`${prefix}_original_name`]: null,
+        [`${prefix}_storage_path`]: null,
+        ...(field === 'reference_surface_path' ? { reference_surface_date: null } : {}),
+      })
+      await deleteAttachment({ fileId, domain: DREDGE_CONFIG_DOMAIN, coreRecordId: existingConfig.id })
+        .catch((err) => console.error('Could not delete the removed file:', err.message))
+    } catch (err) {
+      setUploadErrors((e) => ({ ...e, [field]: err.message }))
+    } finally {
+      setRemovingField(null)
+    }
+  }
+
+  async function handleRemoveSavedTile(key, idx) {
+    const tiles = existingConfig?.[key] ?? []
+    const tile = tiles[idx]
+    if (!existingConfig || !tile) return
+    const name = tile.original_name ? ` (${tile.original_name})` : ''
+    if (!(await confirm(`Remove tile ${idx + 1}${name}? The stored file will be deleted.`))) return
+    await updateDredgeConfig(existingConfig.id, { [key]: tiles.filter((_, i) => i !== idx) })
+    if (tile.file_id) {
+      await deleteAttachment({ fileId: tile.file_id, domain: DREDGE_CONFIG_DOMAIN, coreRecordId: existingConfig.id })
+        .catch((err) => console.error('Could not delete the removed tile file:', err.message))
+    }
+  }
+
+  function fileControlProps(field) {
+    const prefix = field.replace(/_path$/, '')
+    return {
+      uploading: uploading[field],
+      fileId: existingConfig?.[field],
+      fileName: existingConfig?.[`${prefix}_original_name`],
+      staged: stagedFiles[field],
+      error: uploadErrors[field],
+      onUnstage: () => unstageFile(field),
+      onRemove: () => handleRemoveFile(field),
+      removing: removingField === field,
+    }
+  }
 
   async function handleSaveBackground() {
     await runSaveAll(async () => {
@@ -170,7 +263,7 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
   function handleUploadImage(field, file) {
     if (!file) return
     setUploadErrors((e) => ({ ...e, [field]: '' }))
-    stageFile(field, file)
+    stageRenamed(field, file)
   }
 
   async function handleIsopachFile(file) {
@@ -182,7 +275,7 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
     setUploading((u) => ({ ...u, bg_path: true }))
     try {
       const { file: pngFile, georef: computedGeoref } = await isopachCsvToImage(await file.text())
-      stageFile('bg_path', pngFile, { originalName: file.name, extra: { georef: computedGeoref } })
+      stageRenamed('bg_path', pngFile, { originalName: file.name, extra: { georef: computedGeoref }, ext: 'png' })
       setGeoref(georefToFields(computedGeoref))
     } catch (err) {
       setUploadErrors((e) => ({ ...e, bg_path: err.message }))
@@ -202,7 +295,7 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
       const gz = await gzipBytes(encodeRefSurface(surface))
       const gzFile = new File([gz], `${file.name}.jfbs.gz`, { type: 'application/gzip' })
       const surveyDate = surveyFilenameDateISO(file.name)
-      stageFile('reference_surface_path', gzFile, { originalName: file.name, extra: { reference_surface_date: surveyDate, reference_cell_ft: cell } })
+      stageRenamed('reference_surface_path', gzFile, { originalName: file.name, ext: 'jfbs.gz', extra: { reference_surface_date: surveyDate, reference_cell_ft: cell } })
       const mb = (gz.size / 1e6).toFixed(1)
       const flownSuffix = surveyDate ? `, flown ${surveyDate}` : ''
       return `Read ${points.toLocaleString()} survey points → ${surface.nx}x${surface.ny} grid at ${cell} ft (${mb} MB)${flownSuffix} — click Save to apply.`
@@ -226,7 +319,7 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
         wL: Math.round(fetchedGeoref.wL), wR: Math.round(fetchedGeoref.wR),
         wT: Math.round(fetchedGeoref.wT), wB: Math.round(fetchedGeoref.wB),
       }
-      stageFile('aerial_path', file, { originalName: 'aerial.png', extra: { aerial_georef: rounded } })
+      stageRenamed('aerial_path', file, { originalName: `usgs-${basemap}-basemap.png`, ext: 'png', extra: { aerial_georef: rounded } })
       setAerialGeoref(georefToFields(rounded))
       return 'Aerial fetched & aligned — click "Save background & labels" to apply.'
     })
@@ -354,6 +447,7 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
 
   return (
     <Stack gap="lg">
+      {confirmModal}
       <Section
         title="Project background & labels"
         help="Used as the chart backdrop and header text. The background image is optional; without one the chart shows coverage on a plain map."
@@ -385,11 +479,7 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
                 <Field label="Design-grade surface CSV (X,Y,ELEV — optional)" help="Lets cuts in very shallow areas (design near water level) still count as progress.">
                   <FileControl
                     accept=".csv,.asc"
-                    uploading={uploading.earthworks_design_path}
-                    fileId={existingConfig?.earthworks_design_path}
-                    fileName={existingConfig?.earthworks_design_original_name}
-                    staged={!!stagedFiles.earthworks_design_path}
-                    error={uploadErrors.earthworks_design_path}
+                    {...fileControlProps('earthworks_design_path')}
                     onChange={(file) => handleUploadImage('earthworks_design_path', file)}
                   />
                 </Field>
@@ -411,11 +501,7 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
                   <Field label="Hard-structure alignment DXF (optional)" help="Sheet-pile wall / bulkhead alignment. The teeth can't sit on the sheets, so coverage that stops just short of it gets carried to it.">
                     <FileControl
                       accept=".dxf,application/dxf"
-                      uploading={uploading.alignment_path}
-                      fileId={existingConfig?.alignment_path}
-                      fileName={existingConfig?.alignment_original_name}
-                      staged={!!stagedFiles.alignment_path}
-                      error={uploadErrors.alignment_path}
+                      {...fileControlProps('alignment_path')}
                       onChange={(file) => handleUploadImage('alignment_path', file)}
                     />
                   </Field>
@@ -466,11 +552,9 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
                 <Field label="Latest QA pay survey (gridded 1x1 .xyz)" help="The surveyor's Gridded 1x1 Points.xyz deliverable. Re-upload after each survey so the estimate tracks the real bed.">
                   <FileControl
                     accept=".xyz,.csv,.txt"
+                    {...fileControlProps('reference_surface_path')}
                     uploading={refUploading}
-                    fileId={existingConfig?.reference_surface_path}
-                    fileName={existingConfig?.reference_surface_original_name}
-                    staged={!!stagedFiles.reference_surface_path}
-                    error={refError}
+                    error={refError || uploadErrors.reference_surface_path}
                     onChange={handleUploadReferenceSurvey}
                   />
                   {existingConfig?.reference_surface_date && (
@@ -502,22 +586,14 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
           <Field label="Isopach / difference chart" help="Image (PNG/JPG) with corners entered below -- or a raw CSV/ASC grid export (X,Y,DIFF), which is colored and georeferenced automatically.">
             <FileControl
               accept="image/png,image/jpeg,image/webp,.csv,.asc"
-              uploading={uploading.bg_path}
-              fileId={existingConfig?.bg_path}
-              fileName={existingConfig?.bg_original_name}
-              staged={!!stagedFiles.bg_path}
-              error={uploadErrors.bg_path}
+              {...fileControlProps('bg_path')}
               onChange={handleIsopachFile}
             />
           </Field>
           <Field label="Isopach color-bar legend">
             <FileControl
               accept="image/png,image/jpeg"
-              uploading={uploading.colorbar_path}
-              fileId={existingConfig?.colorbar_path}
-              fileName={existingConfig?.colorbar_original_name}
-              staged={!!stagedFiles.colorbar_path}
-              error={uploadErrors.colorbar_path}
+              {...fileControlProps('colorbar_path')}
               onChange={(file) => handleUploadImage('colorbar_path', file)}
             />
           </Field>
@@ -528,8 +604,9 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
           help="Optional — for lake-sized isopachs one image can't cover. Every tile whose corners overlap the day's view gets drawn; leave empty to use the single isopach image above."
           tiles={existingConfig?.isopach_tiles}
           stagedTiles={stagedTiles.isopach_tiles}
+          renameTile={renameTile('isopach-tile')}
           onStagedTilesChange={(list) => stageTiles('isopach_tiles', list)}
-          onRemoveSavedTile={(idx) => updateDredgeConfig(existingConfig.id, { isopach_tiles: (existingConfig.isopach_tiles ?? []).filter((_, i) => i !== idx) })}
+          onRemoveSavedTile={(idx) => handleRemoveSavedTile('isopach_tiles', idx)}
         />
 
         <Box p={12} style={{ border: '1px solid var(--mantine-color-gray-2)', borderRadius: 6, background: 'var(--mantine-color-gray-0)' }}>
@@ -558,11 +635,7 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
             <Field label="Aerial image (PNG/JPG, project coords, clipped to the area)">
               <FileControl
                 accept="image/png,image/jpeg,image/webp"
-                uploading={uploading.aerial_path}
-                fileId={existingConfig?.aerial_path}
-                fileName={existingConfig?.aerial_original_name}
-                staged={!!stagedFiles.aerial_path}
-                error={uploadErrors.aerial_path}
+                {...fileControlProps('aerial_path')}
                 onChange={(file) => handleUploadImage('aerial_path', file)}
               />
             </Field>
@@ -574,8 +647,9 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
               help="Optional — multiple aerial tiles instead of one. Leave empty to use the single aerial image above."
               tiles={existingConfig?.aerial_tiles}
               stagedTiles={stagedTiles.aerial_tiles}
+              renameTile={renameTile('aerial-tile')}
               onStagedTilesChange={(list) => stageTiles('aerial_tiles', list)}
-              onRemoveSavedTile={(idx) => updateDredgeConfig(existingConfig.id, { aerial_tiles: (existingConfig.aerial_tiles ?? []).filter((_, i) => i !== idx) })}
+              onRemoveSavedTile={(idx) => handleRemoveSavedTile('aerial_tiles', idx)}
             />
           </Stack>
         </Box>
@@ -583,11 +657,7 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
         <Field label="CSC / cell-grid DXF" help="Numbered confirmation-sampling cells (world coords), drawn as an outline + label overlay. Leave empty for open-water/isopach projects.">
           <FileControl
             accept=".dxf,application/dxf"
-            uploading={uploading.cells_path}
-            fileId={existingConfig?.cells_path}
-            fileName={existingConfig?.cells_original_name}
-            staged={!!stagedFiles.cells_path}
-            error={uploadErrors.cells_path}
+            {...fileControlProps('cells_path')}
             onChange={(file) => handleUploadImage('cells_path', file)}
           />
         </Field>
@@ -602,11 +672,7 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
         <Field label="Mile markers / stationing DXF" help="Open line segments + text labels (world coords) drawn as a thin reference overlay. Purely visual; not used in any calculation.">
           <FileControl
             accept=".dxf,application/dxf"
-            uploading={uploading.reference_lines_path}
-            fileId={existingConfig?.reference_lines_path}
-            fileName={existingConfig?.reference_lines_original_name}
-            staged={!!stagedFiles.reference_lines_path}
-            error={uploadErrors.reference_lines_path}
+            {...fileControlProps('reference_lines_path')}
             onChange={(file) => handleUploadImage('reference_lines_path', file)}
           />
         </Field>
@@ -634,10 +700,11 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
               <EquipmentShapeRow
                 key={eq.id}
                 equipment={eq}
-                projectId={project.id}
+                project={project}
                 existingEquipmentConfig={equipmentConfigByEquipmentId.get(eq.id) ?? null}
                 createEquipmentConfig={createEquipmentConfig}
                 updateEquipmentConfig={updateEquipmentConfig}
+                confirm={confirm}
               />
             ))}
           </Stack>
@@ -726,9 +793,12 @@ function Field({ label, help, children }) {
   )
 }
 
-function TileManager({ label, help, tiles, stagedTiles, onStagedTilesChange, onRemoveSavedTile }) {
+function TileManager({ label, help, tiles, stagedTiles, renameTile, onStagedTilesChange, onRemoveSavedTile }) {
   const [georefFields, setGeorefFields] = useState({ westX: '', eastX: '', northY: '', southY: '' })
   const [error, setError] = useState('')
+  const [removingIdx, setRemovingIdx] = useState(null)
+  const savedCount = (tiles ?? []).length
+  const stagedCount = (stagedTiles ?? []).length
 
   function handleAddTile(file) {
     if (!file) return
@@ -738,7 +808,9 @@ function TileManager({ label, help, tiles, stagedTiles, onStagedTilesChange, onR
       return
     }
     setError('')
-    onStagedTilesChange([...(stagedTiles ?? []), { file, georef }])
+    const number = savedCount + stagedCount + 1
+    const stored = renameTile ? renameTile(file, number) : file
+    onStagedTilesChange([...(stagedTiles ?? []), { file: stored, originalName: file.name, georef }])
     setGeorefFields({ westX: '', eastX: '', northY: '', southY: '' })
   }
 
@@ -746,25 +818,43 @@ function TileManager({ label, help, tiles, stagedTiles, onStagedTilesChange, onR
     onStagedTilesChange((stagedTiles ?? []).filter((_, i) => i !== idx))
   }
 
+  async function handleRemoveSavedTile(idx) {
+    setError('')
+    setRemovingIdx(idx)
+    try {
+      await onRemoveSavedTile(idx)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setRemovingIdx(null)
+    }
+  }
+
+  const corners = (g) => `X [${g?.wL}, ${g?.wR}] · Y [${g?.wB}, ${g?.wT}]`
+
   return (
     <Box p={10} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 6 }}>
-      <Text size="xs" fw={600} mb={4}>{label} tiles ({(tiles ?? []).length + (stagedTiles ?? []).length})</Text>
+      <Text size="xs" fw={600} mb={4}>{label} tiles ({savedCount + stagedCount})</Text>
       {help && <Text size="10px" c="dimmed" mb={8}>{help}</Text>}
-      {((tiles ?? []).length > 0 || (stagedTiles ?? []).length > 0) && (
+      {(savedCount > 0 || stagedCount > 0) && (
         <Stack gap={6} mb={10}>
           {(tiles ?? []).map((t, idx) => (
-            <Group key={t.file_id ?? idx} justify="space-between" p={6} style={{ background: 'var(--mantine-color-gray-0)', borderRadius: 4 }}>
-              <Text size="10px" c="dimmed">
-                Tile {idx + 1}: X [{t.georef?.wL}, {t.georef?.wR}] · Y [{t.georef?.wB}, {t.georef?.wT}]
-              </Text>
-              <Button size="xs" variant="subtle" color="red" onClick={() => onRemoveSavedTile(idx)}>Remove</Button>
+            <Group key={t.file_id ?? idx} justify="space-between" wrap="nowrap" p={6} style={{ background: 'var(--mantine-color-gray-0)', borderRadius: 4 }}>
+              <Group gap={10} wrap="nowrap" style={{ minWidth: 0 }}>
+                <Text size="10px" c="dimmed" style={{ whiteSpace: 'nowrap' }}>Tile {idx + 1}</Text>
+                {t.file_id && <UploadedFile key={t.file_id} fileId={t.file_id} fileName={t.original_name} />}
+                <Text size="10px" c="dimmed" style={{ whiteSpace: 'nowrap' }}>{corners(t.georef)}</Text>
+              </Group>
+              <Button size="xs" variant="subtle" color="red" loading={removingIdx === idx} onClick={() => handleRemoveSavedTile(idx)}>Remove</Button>
             </Group>
           ))}
           {(stagedTiles ?? []).map((t, idx) => (
-            <Group key={`staged-${idx}`} justify="space-between" p={6} style={{ background: 'var(--mantine-color-orange-0)', borderRadius: 4 }}>
-              <Text size="10px" c="orange">
-                Staged: {t.file.name} — X [{t.georef?.wL}, {t.georef?.wR}] · Y [{t.georef?.wB}, {t.georef?.wT}] (will upload on Save)
-              </Text>
+            <Group key={`staged-${idx}`} justify="space-between" wrap="nowrap" p={6} style={{ background: 'var(--mantine-color-orange-0)', borderRadius: 4 }}>
+              <Group gap={10} wrap="nowrap" style={{ minWidth: 0 }}>
+                <Text size="10px" c="orange" style={{ whiteSpace: 'nowrap' }}>Tile {savedCount + idx + 1}</Text>
+                <StagedFilePreview file={t.file} name={t.originalName} />
+                <Text size="10px" c="orange" style={{ whiteSpace: 'nowrap' }}>{corners(t.georef)}</Text>
+              </Group>
               <Button size="xs" variant="subtle" color="red" onClick={() => handleRemoveStagedTile(idx)}>Remove</Button>
             </Group>
           ))}
@@ -784,7 +874,9 @@ function TileManager({ label, help, tiles, stagedTiles, onStagedTilesChange, onR
   )
 }
 
-function FileControl({ accept, label, onChange, uploading, fileId, fileName, staged, error }) {
+function FileControl({ accept, label, onChange, uploading, fileId, fileName, staged, error, onUnstage, onRemove, removing }) {
+  const showSaved = !!fileId && !uploading && !staged
+  const showStaged = !!staged && !uploading
   return (
     <Box>
       {label && <Text size="xs" c="dimmed" mb={4}>{label}</Text>}
@@ -792,8 +884,14 @@ function FileControl({ accept, label, onChange, uploading, fileId, fileName, sta
         <FileButton onChange={onChange ?? (() => {})} accept={accept}>
           {(props) => <Button {...props} variant="default" size="xs" loading={uploading}>Choose File</Button>}
         </FileButton>
-        {fileId && !uploading && !staged && <UploadedFile key={fileId} fileId={fileId} fileName={fileName} />}
-        {staged && !uploading && <Text size="xs" c="orange">Staged — will upload on Save</Text>}
+        {showSaved && <UploadedFile key={fileId} fileId={fileId} fileName={fileName} />}
+        {showSaved && onRemove && (
+          <Button size="xs" variant="subtle" color="red" loading={removing} onClick={onRemove}>Remove</Button>
+        )}
+        {showStaged && <StagedFilePreview file={staged.file} name={staged.originalName} />}
+        {showStaged && onUnstage && (
+          <Button size="xs" variant="subtle" color="gray" onClick={onUnstage}>Undo</Button>
+        )}
       </Group>
       {error && <Text size="10px" c="red" mt={2}>{error}</Text>}
     </Box>
@@ -812,16 +910,17 @@ function GeoreferenceGrid({ value, onChange }) {
   )
 }
 
-function EquipmentShapeRow({ equipment, projectId, existingEquipmentConfig, createEquipmentConfig, updateEquipmentConfig }) {
+function EquipmentShapeRow({ equipment, project, existingEquipmentConfig, createEquipmentConfig, updateEquipmentConfig, confirm }) {
   const [label, setLabel] = useState(existingEquipmentConfig?.chart_label_override ?? equipment.name ?? '')
   const [stagedShape, setStagedShape] = useState(null)
   const { busy: saving, message: saveMsg, error: saveError, run: runSave } = useAsyncAction()
+  const { busy: removing, error: removeError, run: runRemove } = useAsyncAction()
   const shapeUpload = useAttachmentUpload()
 
   async function handleSave() {
     await runSave(async () => {
       const recordData = {
-        project_id: projectId,
+        project_id: project.id,
         equipment_id: equipment.id,
         chart_label_override: label.trim() || null,
       }
@@ -837,10 +936,11 @@ function EquipmentShapeRow({ equipment, projectId, existingEquipmentConfig, crea
           recordId: rowId,
           domain: EQUIPMENT_CONFIG_DOMAIN,
           field: 'shape_path',
-          file: stagedShape,
+          file: stagedShape.file,
+          originalName: stagedShape.originalName,
           previousFileId: existingEquipmentConfig?.shape_path ?? null,
           metadataPrefix: 'shape',
-          update: (patch) => updateEquipmentConfig(rowId, patch),
+          update: (id, patch) => updateEquipmentConfig(id, patch),
         })
         setStagedShape(null)
       }
@@ -850,7 +950,30 @@ function EquipmentShapeRow({ equipment, projectId, existingEquipmentConfig, crea
 
   function handleUploadShape(file) {
     if (!file) return
-    setStagedShape(file)
+    const name = dredgeFileName({
+      project,
+      kind: 'dredge-shape',
+      dateISO: todayISO(),
+      equipment,
+      ext: fileExtension(file.name),
+    })
+    setStagedShape({ file: renameFile(file, name), originalName: file.name })
+  }
+
+  async function handleRemoveShape() {
+    const fileId = existingEquipmentConfig?.shape_path
+    if (!fileId) return
+    const name = existingEquipmentConfig.shape_original_name || 'this dredge shape'
+    if (!(await confirm(`Remove ${name}? The stored file will be deleted.`))) return
+    await runRemove(async () => {
+      await updateEquipmentConfig(existingEquipmentConfig.id, {
+        shape_path: null,
+        shape_original_name: null,
+        shape_storage_path: null,
+      })
+      await deleteAttachment({ fileId, domain: EQUIPMENT_CONFIG_DOMAIN, coreRecordId: existingEquipmentConfig.id })
+        .catch((err) => console.error('Could not delete the removed dredge shape:', err.message))
+    })
   }
 
   return (
@@ -863,12 +986,17 @@ function EquipmentShapeRow({ equipment, projectId, existingEquipmentConfig, crea
         accept=".dxf,application/dxf"
         label="Dredge shape DXF"
         fileId={existingEquipmentConfig?.shape_path}
-        staged={!!stagedShape}
+        fileName={existingEquipmentConfig?.shape_original_name}
+        staged={stagedShape}
         onChange={handleUploadShape}
+        onUnstage={() => setStagedShape(null)}
+        onRemove={handleRemoveShape}
+        removing={removing}
       />
       <Button size="xs" variant="default" loading={saving} onClick={handleSave}>Save</Button>
       {saveMsg && <Text size="xs" c="green">{saveMsg}</Text>}
       {saveError && <Text size="xs" c="red">{saveError}</Text>}
+      {removeError && <Text size="xs" c="red">{removeError}</Text>}
     </Group>
   )
 }

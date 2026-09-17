@@ -84,6 +84,10 @@ TABLE
 | delay_code_id | uuid, FK → jfb_project_delay_codes.id |
 | category | text |
 | layer_id | uuid, FK → jfb_project_layers.id |
+| lane | text |
+| step | text |
+| local_id | text (unique) |
+| device_id | text |
 
 ## jfb_delay_codes
 TABLE
@@ -197,6 +201,9 @@ TABLE
 | chart_paths | jsonb |
 | gross_cy | numeric |
 | adjusted_cy | numeric |
+| source_batch_path | text |
+| source_batch_info | jsonb |
+| source_batch_history | jsonb |
 
 ## jfb_equipments
 TABLE

@@ -1,7 +1,7 @@
 import axios from 'axios'
 import { requestNewToken, setAuthToken } from '../helpers/pivotlyHelpers'
 
-const IS_LOCAL = false
+const IS_LOCAL = true
 
 function resolveApiBase() {
   const runtimeConfig = window.__PIVOTLY_RUNTIME_CONFIG__;
@@ -194,18 +194,21 @@ export async function deleteDomainRecord({ domain, system, appSlug, recordId }) 
 }
 
 function uniqueFileName(name) {
-  const dot = name.lastIndexOf('.')
-  const base = dot > 0 ? name.slice(0, dot) : name
-  const ext = dot > 0 ? name.slice(dot) : ''
+  const match = /\.[a-z0-9]{1,5}\.gz$/i.exec(name) ?? /\.[^.]+$/.exec(name)
+  const ext = match && match.index > 0 ? match[0] : ''
+  const base = ext ? name.slice(0, -ext.length) : name
   const safeBase = base.replace(/[^\x20-\x7E]/g, '_').trim() || 'file'
   return `${safeBase}-${crypto.randomUUID().slice(0, 8)}${ext}`
 }
 
-export async function uploadAttachment({ coreRecordId, domain, file }) {
+export async function uploadAttachment({ coreRecordId, domain, file, tags, timeout, onUploadProgress }) {
   const form = new FormData()
+  if (tags?.length) form.append('tags', JSON.stringify(tags))
   form.append('file', file, uniqueFileName(file.name))
   const { data } = await api.post(`/attachments/${coreRecordId}/${domain}/save`, form, {
     headers: { 'Content-Type': undefined },
+    ...(timeout != null ? { timeout } : {}),
+    ...(onUploadProgress ? { onUploadProgress } : {}),
   })
   return data?.data ?? data
 }

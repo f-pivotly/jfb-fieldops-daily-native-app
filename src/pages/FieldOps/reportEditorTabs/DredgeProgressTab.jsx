@@ -1,6 +1,11 @@
 import { useState } from 'react'
 import { Box, Button, Checkbox, Group, Stack, Text } from '@mantine/core'
 import WarningBanner from './components/WarningBanner'
+import ReasonDialog from '../../../components/ReasonDialog'
+import SafeError from '../../../components/SafeError'
+import { batchFingerprint, batchDateWarning, readStoredBatch } from '../../../lib/dredge/rawBatch'
+import { dredgeFileName } from '../../../lib/dredge/fileNames'
+import { downloadAttachment } from '../../../data'
 import { useDomainData } from '../../../hooks/useDomainData'
 import { useProjectAreas } from '../../../hooks/useProjectAreas'
 import { useDredgeEquipmentConfig } from '../../../hooks/useDredgeEquipmentConfig'
@@ -13,6 +18,23 @@ import GenerateForm from './components/GenerateForm'
 import ChartStatsSummary from './components/ChartStatsSummary'
 import EditToolbar from './components/EditToolbar'
 import CellChipsPanel from './components/CellChipsPanel'
+
+function formatSize(bytes) {
+  if (!bytes && bytes !== 0) return '—'
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function saveBlob(blob, name) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = name
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
+}
 
 const MODE_HINTS = {
   'add-second': (n) => `Click to outline a 2nd-pass area (${n} point${n === 1 ? '' : 's'}), then Done.`,
@@ -44,6 +66,10 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
   const [materialText, setMaterialText] = useState('')
   const [recovery, setRecovery] = useState('')
   const [activeCellLabels, setActiveCellLabels] = useState([])
+  const [confirmingReplace, setConfirmingReplace] = useState(false)
+  const [batchBusy, setBatchBusy] = useState('')
+  const [batchError, setBatchError] = useState(null)
+  const [showBatchFiles, setShowBatchFiles] = useState(false)
 
   const displayedRecovery = recovery !== '' ? recovery : (effectiveConfig?.volume_recovery_factor ?? '')
 
@@ -114,8 +140,45 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
     surfaceDiffRef,
     clusterWindows, splitViews,
     resetPreview: () => previewView(null),
+    rawFiles: files,
   })
-  const { saving, saved, saveError, resetSaveState, handleSave } = save
+  const { saving, saved, saveError, savePhase, resetSaveState, handleSave } = save
+
+  const savedBatchChecksum = existingProgressRecord?.source_batch_info?.checksum ?? null
+  const isReplacingBatch =
+    files.length > 0 && !!savedBatchChecksum && batchFingerprint(files) !== savedBatchChecksum
+  const batchWarning = files.length ? batchDateWarning(files, report?.report_date) : ''
+
+  const storedBatchPath = existingProgressRecord?.source_batch_path ?? null
+  const storedBatch = existingProgressRecord?.source_batch_info ?? null
+
+  const storedBatchName = () => dredgeFileName({
+    project, kind: 'dredge-raw', dateISO: report?.report_date, equipment: selected, ext: 'zip',
+  })
+
+  const handleDownloadStoredBatch = async () => {
+    setBatchError(null)
+    setBatchBusy('download')
+    try {
+      saveBlob(await downloadAttachment(storedBatchPath), storedBatchName())
+    } catch (err) {
+      setBatchError(err.message)
+    } finally {
+      setBatchBusy('')
+    }
+  }
+
+  const handleLoadStoredBatch = async () => {
+    setBatchError(null)
+    setBatchBusy('load')
+    try {
+      handleFilesChange(await readStoredBatch(storedBatchPath))
+    } catch (err) {
+      setBatchError(err.message)
+    } finally {
+      setBatchBusy('')
+    }
+  }
 
   if (configLoading) {
     return <Text size="xs" c="dimmed" ta="center" py={24}>Loading dredge chart configuration…</Text>
@@ -184,11 +247,64 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
           priorAdvanceFt={priorAdvanceFt}
           refSurfaceError={refSurfaceError}
           notice={notice}
-          dateWarning={dateWarning}
+          dateWarning={dateWarning || batchWarning}
           error={error}
           saveError={saveError}
         />
       </Box>
+
+      {storedBatchPath && (
+        <Box p={16} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }}>
+          <Text size="xs" fw={700} tt="uppercase" c="dimmed" mb={4}>Stored source files</Text>
+          <Text size="xs" c="dimmed" mb={10}>
+            {storedBatch?.file_count ?? '—'} file(s) · {formatSize(storedBatch?.total_bytes)} ({formatSize(storedBatch?.compressed_bytes)} compressed)
+            {storedBatch?.source_date ? ` · dated ${storedBatch.source_date}` : ''}
+            {storedBatch?.uploaded_at ? ` · saved ${storedBatch.uploaded_at.slice(0, 10)}` : ''}
+          </Text>
+          <Group gap={10}>
+            <Button
+              size="xs"
+              variant="default"
+              loading={batchBusy === 'download'}
+              disabled={!!batchBusy}
+              onClick={handleDownloadStoredBatch}
+            >
+              Download zip
+            </Button>
+            <Button
+              size="xs"
+              variant="default"
+              loading={batchBusy === 'load'}
+              disabled={!!batchBusy || generating}
+              onClick={handleLoadStoredBatch}
+            >
+              Load stored files
+            </Button>
+            {!!storedBatch?.file_names?.length && (
+              <Text
+                size="xs"
+                c="blue"
+                style={{ cursor: 'pointer', textDecoration: 'underline' }}
+                onClick={() => setShowBatchFiles((v) => !v)}
+              >
+                {showBatchFiles ? 'Hide file list' : 'Show file list'}
+              </Text>
+            )}
+          </Group>
+          <Text size="10px" c="dimmed" mt={6}>
+            Loading puts the stored files back in the picker so the day can be charted again without the original folder.
+            Manual edits from the saved chart are not replayed.
+          </Text>
+          {showBatchFiles && (
+            <Box mt={8} p={8} mah={160} style={{ overflowY: 'auto', background: 'var(--mantine-color-gray-0)', borderRadius: 4 }}>
+              {storedBatch.file_names.map((name) => (
+                <Text key={name} size="10px" c="dimmed">{name}</Text>
+              ))}
+            </Box>
+          )}
+          <SafeError message={batchError} />
+        </Box>
+      )}
 
       {generated && (
         <Box p={16} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }}>
@@ -259,14 +375,42 @@ export default function DredgeProgressTab({ project, report, reports, equipment,
             </WarningBanner>
           )}
           {hint && <Text size="xs" c="dimmed" mt={8}>{hint}</Text>}
+          {isReplacingBatch && (
+            <WarningBanner mt={12} p={10}>
+              <Text size="xs">
+                Saving will replace the {existingProgressRecord?.source_batch_info?.file_count ?? 0} source
+                file(s) already stored for this day with the {files.length} now selected. The saved chart and
+                totals are recomputed from the new batch.
+              </Text>
+            </WarningBanner>
+          )}
           <Group gap={10} mt={12}>
-            <Button size="xs" variant="light" disabled={saving} loading={saving} onClick={handleSave}>
+            <Button
+              size="xs"
+              variant="light"
+              disabled={saving}
+              loading={saving}
+              onClick={() => (isReplacingBatch ? setConfirmingReplace(true) : handleSave())}
+            >
               {existingProgressRecord ? 'Update saved progress' : 'Save to report'}
             </Button>
             <Button size="xs" variant="default" onClick={handleDownloadDxf}>Download DXF</Button>
             <Button size="xs" variant="default" onClick={handleDownloadPng}>Download PNG</Button>
+            {saving && savePhase && <Text size="xs" c="dimmed">{savePhase}</Text>}
             {saved && <Text size="xs" c="teal">✓ Saved to report</Text>}
           </Group>
+          <ReasonDialog
+            opened={confirmingReplace}
+            onClose={() => setConfirmingReplace(false)}
+            title="Replace stored source files?"
+            label="Why are these files being replaced?"
+            placeholder="e.g. wrong folder picked, survey re-exported"
+            confirmLabel="Replace and save"
+            onConfirm={(reason) => {
+              setConfirmingReplace(false)
+              handleSave({ replaceReason: reason })
+            }}
+          />
         </Box>
       )}
 

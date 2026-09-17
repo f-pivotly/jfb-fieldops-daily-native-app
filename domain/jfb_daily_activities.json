@@ -180,7 +180,7 @@
       "required": false,
       "data_type": "text",
       "column_name": "pass_type",
-      "description": "The pass type selected for this activity in the field app (jfb-dot-to-dot). Value from the pkl-jfb-pass-type picklist, not a domain FK.",
+      "description": "Which pass or lift this activity was working, as selected in the field app (jfb-dot-to-dot). A picklist value, not a domain FK, and it can come from either of two lists depending on the machine's discipline: pkl-jfb-pass-type on dredging work, pkl-jfb-lift on capping and placement work, where the operator picks a lift rather than a pass. The two lists are kept separate so a dredging project is never offered lifts and vice versa, and their values never collide (1st_pass, lift_1, ...). Anything resolving a label for display must therefore look in BOTH lists -- reading needs the union, only the write-side dropdown needs the discipline-scoped subset. Null on multi-layer capping projects, where layer_id carries the same meaning instead.",
       "conflict_resolution": {
         "code": "lww"
       },
@@ -346,6 +346,90 @@
       },
       "column_name": "layer_id",
       "description": "Which capping layer was being placed during this activity. Null on dredging projects and on single-layer capping projects (the layer is implicit there). Matches the non-native app's daily_events.layer_id.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "lane",
+      "slug": "lane",
+      "type": "text",
+      "label": "Lane",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "lane",
+      "description": "Which numbered lane a hydraulic capping spreader barge was working during this activity. Free text, captured per activity in the field app and matching the non-native app's daily_events.lane. Set only on Hydraulic Capping work -- a spreader lays cap material along numbered lanes in numbered steps. Null on dredging, and null on Mechanical Capping, where an excavator places by the named layer instead and lane has no meaning.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "step",
+      "slug": "step",
+      "type": "text",
+      "label": "Step",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "step",
+      "description": "Which step along the lane the spreader was working during this activity. Free text rather than an integer, matching the non-native app's daily_events.step, because the field app accepts whatever the operator types. Companion to lane and set under the same conditions: Hydraulic Capping only, null everywhere else.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "local_id",
+      "slug": "local_id",
+      "type": "text",
+      "label": "Local Id",
+      "unique": true,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "local_id",
+      "description": "The field app's own UUID for this activity, generated on the device before the write is attempted. Matches the non-native app's daily_events.local_id and does the same two jobs. First, it makes a retry idempotent: the operator app queues writes offline and re-sends them, so a write that succeeded but whose response was lost would otherwise land twice -- keying on local_id lets the second attempt be recognised as the same row. Second, its presence is the source marker: a row with local_id set came from an operator's tablet, a row with it null was entered by a PM in the report app, which is exactly how the non-native stack's eventSource() tells them apart. Null on every PM-entered row, by design.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "device_id",
+      "slug": "device_id",
+      "type": "text",
+      "label": "Device Id",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "device_id",
+      "description": "Which tablet wrote this activity, stable per install. Matches the non-native app's daily_events.device_id, where it is the companion to local_id. Useful for tracing a bad run back to one iPad -- a unit whose clock is wrong, or one stuck offline -- without which a sync problem can only be seen per project. Null on PM-entered rows, like local_id.",
       "conflict_resolution": {
         "code": "lww"
       },

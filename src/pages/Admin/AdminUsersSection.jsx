@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { Box, Text, Group, Button, Table, Badge, Modal, TextInput, Select, PasswordInput, Tabs } from "@mantine/core";
+import { Box, Text, Group, Button, Table, Badge, Modal, TextInput, Select, PasswordInput } from "@mantine/core";
 import { IconPlus } from "@tabler/icons-react";
 import { USER_ROLES } from "../../data/adminSampleData";
-import AttachmentTestPanel from "./AttachmentTestPanel";
 
 const LIVE_PROJECTS_PLACEHOLDER = [];
 
@@ -51,31 +50,18 @@ export default function AdminUsersSection() {
     <Box>
       <Text fw={700} size="lg" mb={12}>Users</Text>
 
-      <Tabs defaultValue="users" keepMounted={false}>
-        <Tabs.List mb={16}>
-          <Tabs.Tab value="users">Users</Tabs.Tab>
-          <Tabs.Tab value="attachment-test">Attachment Test</Tabs.Tab>
-        </Tabs.List>
-
-        <Tabs.Panel value="users">
-          <UsersTab
-            users={users}
-            openAdd={openAdd}
-            toggleActive={toggleActive}
-            modalOpen={modalOpen}
-            setModalOpen={setModalOpen}
-            form={form}
-            setField={setField}
-            passwordValid={passwordValid}
-            canSave={canSave}
-            handleSave={handleSave}
-          />
-        </Tabs.Panel>
-
-        <Tabs.Panel value="attachment-test">
-          <AttachmentTestPanel />
-        </Tabs.Panel>
-      </Tabs>
+      <UsersTab
+        users={users}
+        openAdd={openAdd}
+        toggleActive={toggleActive}
+        modalOpen={modalOpen}
+        setModalOpen={setModalOpen}
+        form={form}
+        setField={setField}
+        passwordValid={passwordValid}
+        canSave={canSave}
+        handleSave={handleSave}
+      />
     </Box>
   );
 }

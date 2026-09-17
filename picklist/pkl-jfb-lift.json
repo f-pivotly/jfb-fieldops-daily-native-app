@@ -1,0 +1,43 @@
+{
+  "source": {
+    "type": "static",
+    "values": [
+      {
+        "label": "Lift 1",
+        "value": "lift_1"
+      },
+      {
+        "label": "Lift 2",
+        "value": "lift_2"
+      },
+      {
+        "label": "Lift 3",
+        "value": "lift_3"
+      },
+      {
+        "label": "Lift 4",
+        "value": "lift_4"
+      },
+      {
+        "label": "Lift 5",
+        "value": "lift_5"
+      },
+      {
+        "label": "Lift 6",
+        "value": "lift_6"
+      },
+      {
+        "label": "Lift 7",
+        "value": "lift_7"
+      },
+      {
+        "label": "Lift 8",
+        "value": "lift_8"
+      },
+      {
+        "label": "N/A",
+        "value": "lift_na"
+      }
+    ]
+  }
+}
