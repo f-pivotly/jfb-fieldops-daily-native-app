@@ -84,7 +84,7 @@
       "required": true,
       "data_type": "text",
       "column_name": "source",
-      "description": "Which jfb_metric_sources.value this row uses -- 'manual' for a PE-typed value, or a data-view slug (e.g. 'dvw-jfb-metric-cy') for a live-computed one. No picklist binding -- pkl-jfb-metric-source is disabled (GET /picklists/:slug/values doesn't resolve domain_query sources yet; MetricsTab.jsx reads jfb_metric_sources directly instead, see METRICS_MIGRATION_PLAN.md).",
+      "description": "Which jfb_metric_sources.value this row uses -- 'manual' for a PE-typed value, or a data-view slug (e.g. 'dvw-jfb-metric-cy-v2') for a live-computed one. No picklist binding -- pkl-jfb-metric-source is disabled (GET /picklists/:slug/values doesn't resolve domain_query sources yet; MetricsTab.jsx reads jfb_metric_sources directly instead, see METRICS_MIGRATION_PLAN.md).",
       "conflict_resolution": {
         "code": "lww"
       },

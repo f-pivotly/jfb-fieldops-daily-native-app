@@ -485,6 +485,27 @@
     },
     {
       "pii": false,
+      "name": "tons_goh_goal",
+      "slug": "tons_goh_goal",
+      "type": "numeric",
+      "label": "Tons GOH Goal",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "tons_goh_goal",
+      "description": "Capping bid goal rate in tons per gross operating hour, entered on Project Settings next to cap_conversion_factor. Null on projects with no tonnage bid goal; CY-measured projects use cy_goh_goal instead. Matches the non-native app's projects.tons_goh_goal.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
       "name": "placement_start_date",
       "slug": "placement_start_date",
       "type": "date",
@@ -541,6 +562,27 @@
       "data_type": "boolean",
       "column_name": "is_spreader_active",
       "description": "Whether this project runs a spreader barge, gating the Spreader Progress tab. Spreader placement is a per-project rig choice rather than a discipline, so it cannot be inferred from work_type the way the placement and dredge tabs are. Null/false hides the tab. Replaces the non-native app's reliance on spreader_config.active.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "show_dredge_chart",
+      "slug": "show_dredge_chart",
+      "type": "boolean",
+      "label": "Show Dredge Chart",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "boolean",
+      "column_name": "show_dredge_chart",
+      "description": "Whether this project shows the dredge chart in Field Ops: the Dredge Chart tab on Project Settings, the Dredge Progress tab on dredging-phase report dates, and the weekly progress chart status on the Weekly Summary. Null/false hides them. Replaces the non-native app's hardcoded project-name list (DREDGE_ENABLED_PROJECTS in src/lib/dredge/config.ts).",
       "conflict_resolution": {
         "code": "lww"
       },

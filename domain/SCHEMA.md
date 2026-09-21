@@ -215,6 +215,9 @@ TABLE
 | work_type | text |
 | work_type_from | date |
 | is_active | boolean |
+| sort_order | integer |
+| mobilized_on | date |
+| demobilized_on | date |
 
 ## jfb_hydraulic_flow_stats
 TABLE
@@ -505,6 +508,8 @@ TABLE
 | material_report_name | text |
 | sort_order | integer |
 | active | boolean |
+| tons_goal | numeric |
+| tons_per_hour_goal | numeric |
 
 ## jfb_project_members
 TABLE
@@ -576,9 +581,11 @@ TABLE
 | production_days_per_week | numeric |
 | production_start_date | date |
 | cap_conversion_factor | numeric |
+| tons_goh_goal | numeric |
 | placement_start_date | date |
 | prior_work_type | text |
 | is_spreader_active | boolean |
+| show_dredge_chart | boolean |
 
 ## jfb_realized_excluded_days
 TABLE
@@ -625,6 +632,7 @@ TABLE
 |---|---|
 | report_id | uuid, FK → jfb_reports.id |
 | metric_id | uuid, FK → jfb_metrics.id |
+| metric_key | text |
 | value | numeric |
 
 ## jfb_report_narratives_v2

@@ -137,6 +137,48 @@
         "code": "lww"
       },
       "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "tons_goal",
+      "slug": "tons_goal",
+      "type": "numeric",
+      "label": "Tons Goal",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "tons_goal",
+      "description": "Total tons of this material the contract is bid to place. Summed across a project's active materials to give the Realized To-Date report its goal on tonnage-paid placement projects, which are measured in TON rather than CY. Null on projects and materials with no tonnage bid quantity. Matches the non-native app's project_materials.tons_goal.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "tons_per_hour_goal",
+      "slug": "tons_per_hour_goal",
+      "type": "numeric",
+      "label": "Tons per Hour Goal",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "tons_per_hour_goal",
+      "description": "Bid placement rate for this material, in tons per gross operating hour. Combined with tons_goal across the project's active materials to give the Realized To-Date report its blended bid rate (total tons / total bid hours). Null when the material has no rate; a material with a tons_goal but no rate still counts toward the goal but not the rate. Matches the non-native app's project_materials.tons_per_hour_goal.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
     }
   ],
   "archive": true,

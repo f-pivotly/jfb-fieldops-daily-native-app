@@ -110,6 +110,69 @@
         "code": "lww"
       },
       "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "sort_order",
+      "slug": "sort_order",
+      "type": "integer",
+      "label": "Sort Order",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "integer",
+      "column_name": "sort_order",
+      "description": "Display order of this unit within its project: equipment buttons in the report editor, production sheets in the daily PDF, and the admin Equipment list, ascending. NULL sorts last. Matches the non-native app's project_equipment.sort_order.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "mobilized_on",
+      "slug": "mobilized_on",
+      "type": "date",
+      "label": "Mobilized On",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "date",
+      "column_name": "mobilized_on",
+      "description": "First report date this unit appears on (inclusive). Reports dated before it leave the unit out of the report editor and the daily PDF. NULL means no start bound. Matches the non-native app's project_equipment.mobilized_on (equipmentOnReport in src/lib/projectPhase.ts).",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "demobilized_on",
+      "slug": "demobilized_on",
+      "type": "date",
+      "label": "Demobilized On",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "date",
+      "column_name": "demobilized_on",
+      "description": "Last report date this unit appears on (inclusive). Reports dated after it leave the unit out of the report editor and the daily PDF, so a demobilized dredge stops printing empty production sheets without being deactivated. NULL means no end bound. Matches the non-native app's project_equipment.demobilized_on.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
     }
   ],
   "archive": true,

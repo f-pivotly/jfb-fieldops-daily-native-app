@@ -56,6 +56,27 @@
     },
     {
       "pii": false,
+      "name": "metric_key",
+      "slug": "metric_key",
+      "type": "text",
+      "label": "Metric Key",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "metric_key",
+      "description": "The project metric's metric_key (jfb_metrics.metric_key) this value belongs to. Values are matched to a metric by (report_id, metric_key), like the non-native app's report_metrics_data.metric_key, so a metric's Week/Total history follows its key even if the jfb_metrics row is deleted and re-created with the same key. Null on rows written before this column existed; app code falls back to metric_id for those.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
       "name": "value",
       "slug": "value",
       "type": "numeric",
