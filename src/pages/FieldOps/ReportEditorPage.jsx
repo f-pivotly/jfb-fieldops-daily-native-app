@@ -6,6 +6,7 @@ import { shouldShowDredgeProgress } from '../../config/dredgeProgress'
 import { shouldShowPlacementProgress } from '../../config/placementProgress'
 import { shouldShowSpreaderProgress } from '../../config/spreaderProgress'
 import { pickDensity } from './lib/coverDensity'
+import { dayOfWeek, prettyDate } from '../../lib/reportDates'
 import { equipmentForReport } from './lib/workType'
 import { downloadAndLogReport } from './lib/reportDownload'
 import { useProject } from '../../hooks/project/useProject'
@@ -248,8 +249,9 @@ export default function ReportEditorPage() {
           <Grid.Col span={{ base: 12, lg: 3 }}>
             <Stack gap="md" p={16} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }}>
               <Box>
-                <Text fw={700} size="md">{date}</Text>
-                {project && <Text size="xs" c="dimmed">{project.name} · #{project.project_code}</Text>}
+                <Text fw={700} size="lg">{prettyDate(date)}</Text>
+                <Text size="xs" c="dimmed">{dayOfWeek(date, true)}</Text>
+                {project && <Text size="xs" c="dimmed" mt={2}>{project.name} · #{project.project_code}</Text>}
               </Box>
 
               <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>

@@ -1,9 +1,13 @@
-import { useState } from 'react'
-import { Box, Button, Select, Table, Text, TextInput } from '@mantine/core'
+import { useEffect, useRef, useState } from 'react'
+import { Box, Button, Group, Select, Table, Text, TextInput } from '@mantine/core'
 import { IconTrash } from '@tabler/icons-react'
+import { readWrittenRecordId } from '../../../../data'
+import SaveIndicator from '../../../../components/SaveIndicator'
 import { hoursBetween } from '../../lib/eventTotals'
 import { isProductiveActivity } from '../../lib/workType'
-import { deriveCap, num, LIFT_THICKNESS_WARN_IN } from '../../../../lib/productionValues'
+import { deriveCap, fmt, num, LIFT_THICKNESS_WARN_IN } from '../../../../lib/productionValues'
+
+const DEBOUNCE_MS = 1500
 
 const areaKeyOf = (areaId, subAreaId, subSubAreaId) =>
   `${areaId ?? ''}|${subAreaId ?? ''}|${subSubAreaId ?? ''}`
@@ -47,9 +51,22 @@ export default function CappingProductionTable({
   remove,
   confirm,
 }) {
-  const [capEdits, setCapEdits] = useState({})
+  const [drafts, setDrafts] = useState({})
+  const [slots, setSlots] = useState({})
+  const [saveState, setSaveState] = useState({})
+  const slotSeq = useRef(0)
+  const timers = useRef(new Map())
+  const pending = useRef(new Map())
+  const createdIds = useRef({})
+  const draftsRef = useRef(drafts)
+  const rowsRef = useRef(rows)
+  useEffect(() => {
+    draftsRef.current = drafts
+    rowsRef.current = rows
+  })
 
   const multiLayer = layers.length > 1
+  const factorDefault = project?.cap_conversion_factor != null ? String(project.cap_conversion_factor) : ''
   const materialsForLayer = (layerId) => {
     if (!layerId) return materials
     const mapped = layerMaterials.filter((lm) => lm.layer_id === layerId).map((lm) => lm.material_id)
@@ -61,6 +78,7 @@ export default function CappingProductionTable({
     const mats = materialsForLayer(layerId)
     return mats.length === 1 ? mats[0].id : null
   }
+  const materialName = (id) => materials.find((m) => m.id === id)?.material_name ?? null
 
   const cappingGroups = buildCappingAreaGroups(activities ?? [])
   const rowsByArea = new Map()
@@ -77,71 +95,227 @@ export default function CappingProductionTable({
       (a, b) => (layerOrderIndex.get(a.layer_id) ?? 999) - (layerOrderIndex.get(b.layer_id) ?? 999),
     )
 
+  function entriesForGroup(g) {
+    const saved = rowsForGroup(g).map((r) => ({ key: r.id, row: r }))
+    const extra = (slots[g.key] ?? []).map((key) => ({ key, row: null }))
+    const list = [...saved, ...extra]
+    if (list.length === 0 && (!g.unassigned || !multiLayer)) {
+      list.push({ key: `${g.key}##blank`, row: null })
+    }
+    return list
+  }
+
+  function readCell(entry, field, source) {
+    const k = `${entry.key}:${field}`
+    if (k in source) return source[k]
+    if (field === 'conversion_factor') {
+      return entry.row?.conversion_factor != null ? String(entry.row.conversion_factor) : factorDefault
+    }
+    return entry.row?.[field] != null ? String(entry.row[field]) : ''
+  }
+
+  const cellValue = (entry, field) => readCell(entry, field, drafts)
+
+  function layerIdOf(entry, source = drafts) {
+    const k = `${entry.key}:layer_id`
+    if (k in source) return source[k] || null
+    if (entry.row) return entry.row.layer_id ?? null
+    return multiLayer ? null : (sortedLayers[0]?.id ?? null)
+  }
+
+  function materialIdOf(entry, source = drafts) {
+    const k = `${entry.key}:material_id`
+    if (k in source) return source[k] || null
+    if (entry.row) return entry.row.material_id ?? null
+    return soleMaterialFor(layerIdOf(entry, source))
+  }
+
+  function settleDrafts(entryKey, newId, sent) {
+    setDrafts((prev) => {
+      const next = {}
+      for (const [k, v] of Object.entries(prev)) {
+        if (!k.startsWith(`${entryKey}:`)) {
+          next[k] = v
+          continue
+        }
+        const field = k.slice(entryKey.length + 1)
+        if (sent[field] === v) continue
+        if (newId) next[`${newId}:${field}`] = v
+      }
+      return next
+    })
+  }
+
+  function clearEntryDrafts(entryKey) {
+    setDrafts((prev) => {
+      const next = {}
+      for (const [k, v] of Object.entries(prev)) if (!k.startsWith(`${entryKey}:`)) next[k] = v
+      return next
+    })
+  }
+
+  function markSaved(oldKey, newId) {
+    setSaveState((prev) => {
+      const next = { ...prev, [oldKey]: 'saved' }
+      if (newId && newId !== oldKey) next[newId] = 'saved'
+      return next
+    })
+  }
+
+  function addSlot(g) {
+    slotSeq.current += 1
+    const key = `${g.key}##new${slotSeq.current}`
+    setSlots((prev) => ({ ...prev, [g.key]: [...(prev[g.key] ?? []), key] }))
+  }
+
+  function dropSlot(groupKey, slotKey) {
+    setSlots((prev) => {
+      const list = prev[groupKey]
+      if (!list?.includes(slotKey)) return prev
+      return { ...prev, [groupKey]: list.filter((k) => k !== slotKey) }
+    })
+  }
+
   function areaCombinationsFor(g) {
     return [g.areaId, g.subAreaId, g.subSubAreaId]
       .filter(Boolean)
       .map((id) => ({ area_level_id: areasById.get(id)?.area_level_id ?? null, area_id: id, label: areasById.get(id)?.name ?? null }))
   }
 
-  async function addCappingRow(g, layerId) {
-    await create({
-      report_id: report.id,
-      equipment_id: selectedEquipmentId,
-      area_level_combinations: areaCombinationsFor(g),
-      layer_id: layerId ?? null,
-      material_id: soleMaterialFor(layerId ?? null),
-      conversion_factor: project?.cap_conversion_factor ?? null,
-    })
+  async function persist(key) {
+    const timer = timers.current.get(key)
+    if (timer) {
+      clearTimeout(timer)
+      timers.current.delete(key)
+    }
+    const item = pending.current.get(key)
+    if (!item) return
+    pending.current.delete(key)
+
+    const source = draftsRef.current
+    const createdId = createdIds.current[key]
+    const resolved =
+      item.entry.row ??
+      (createdId ? rowsRef.current.find((r) => r.id === createdId) ?? { id: createdId } : null)
+    const entry = { key, row: resolved }
+    const g = item.g
+
+    const layerId = layerIdOf(entry, source)
+    if (!resolved && multiLayer && !layerId) return
+
+    const sent = {
+      layer_id: layerId ?? '',
+      material_id: materialIdOf(entry, source) ?? '',
+      pass_value: readCell(entry, 'pass_value', source),
+      tons: readCell(entry, 'tons', source),
+      conversion_factor: readCell(entry, 'conversion_factor', source),
+      area: readCell(entry, 'area', source),
+      notes: readCell(entry, 'notes', source),
+    }
+    const tons = num(sent.tons, 2)
+    const factor = num(sent.conversion_factor, 4)
+    const sf = num(sent.area, 0)
+    const fields = {
+      tons,
+      conversion_factor: factor,
+      area: sf,
+      volume: deriveCap(tons, factor, sf).cy,
+      notes: sent.notes.trim() || null,
+      pass_value: multiLayer ? null : (sent.pass_value.trim() || null),
+    }
+
+    setSaveState((prev) => ({ ...prev, [key]: 'saving' }))
+    try {
+      if (resolved) {
+        await update(resolved.id, fields)
+        settleDrafts(key, resolved.id, sent)
+        markSaved(key, resolved.id)
+        return
+      }
+      const res = await create({
+        report_id: report.id,
+        equipment_id: selectedEquipmentId,
+        area_level_combinations: areaCombinationsFor(g),
+        layer_id: layerId,
+        material_id: materialIdOf(entry, source),
+        ...fields,
+      })
+      const newId = readWrittenRecordId(res)
+      if (newId) createdIds.current[key] = newId
+      settleDrafts(key, newId, sent)
+      dropSlot(g.key, key)
+      markSaved(key, newId)
+    } catch {
+      setSaveState((prev) => ({ ...prev, [key]: 'error' }))
+    }
   }
 
-  async function handleDelete(row) {
+  function scheduleSave(entry, g) {
+    pending.current.set(entry.key, { entry, g })
+    setSaveState((prev) => ({ ...prev, [entry.key]: 'pending' }))
+    const existing = timers.current.get(entry.key)
+    if (existing) clearTimeout(existing)
+    timers.current.set(entry.key, setTimeout(() => void persist(entry.key), DEBOUNCE_MS))
+  }
+
+  useEffect(
+    () => () => {
+      for (const key of Array.from(pending.current.keys())) void persist(key)
+      timers.current.forEach((t) => clearTimeout(t))
+      timers.current.clear()
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  )
+
+  function setCell(entry, g, field, value) {
+    setDrafts((prev) => ({ ...prev, [`${entry.key}:${field}`]: value }))
+    scheduleSave(entry, g)
+  }
+
+  async function setLayer(entry, g, layerId) {
+    if (!layerId) return
+    if (entry.row) {
+      setSaveState((prev) => ({ ...prev, [entry.key]: 'saving' }))
+      try {
+        await update(entry.row.id, { layer_id: layerId, material_id: soleMaterialFor(layerId) })
+        markSaved(entry.key, entry.row.id)
+      } catch {
+        setSaveState((prev) => ({ ...prev, [entry.key]: 'error' }))
+      }
+      return
+    }
+    setDrafts((prev) => ({
+      ...prev,
+      [`${entry.key}:layer_id`]: layerId,
+      [`${entry.key}:material_id`]: soleMaterialFor(layerId) ?? '',
+    }))
+    pending.current.set(entry.key, { entry, g })
+    await persist(entry.key)
+  }
+
+  async function setMaterial(entry, g, materialId) {
+    if (entry.row) {
+      setSaveState((prev) => ({ ...prev, [entry.key]: 'saving' }))
+      try {
+        await update(entry.row.id, { material_id: materialId ?? null })
+        markSaved(entry.key, entry.row.id)
+      } catch {
+        setSaveState((prev) => ({ ...prev, [entry.key]: 'error' }))
+      }
+      return
+    }
+    setCell(entry, g, 'material_id', materialId ?? '')
+  }
+
+  async function handleDelete(entry, g) {
+    if (!entry.row) {
+      clearEntryDrafts(entry.key)
+      dropSlot(g.key, entry.key)
+      return
+    }
     if (!(await confirm('Delete this production stat row?'))) return
-    await remove(row.id)
-  }
-
-  function capCellValue(row, field) {
-    const editKey = `${row.id}:${field}`
-    if (editKey in capEdits) return capEdits[editKey]
-    if (field === 'conversion_factor' && row.conversion_factor == null) {
-      return project?.cap_conversion_factor != null ? String(project.cap_conversion_factor) : ''
-    }
-    return row[field] != null ? String(row[field]) : ''
-  }
-
-  function setCapCellValue(row, field, value) {
-    setCapEdits((prev) => ({ ...prev, [`${row.id}:${field}`]: value }))
-  }
-
-  async function commitCapCell(row, field, digits) {
-    const editKey = `${row.id}:${field}`
-    if (!(editKey in capEdits)) return
-    const raw = capEdits[editKey]
-    const value = field === 'pass_value' ? (String(raw ?? '').trim() || null) : num(raw, digits)
-    setCapEdits((prev) => {
-      const next = { ...prev }
-      delete next[editKey]
-      return next
-    })
-    if (value === (row[field] ?? null)) return
-    const patch = { [field]: value }
-    if (field === 'tons' || field === 'conversion_factor') {
-      const tons = field === 'tons' ? value : num(capCellValue(row, 'tons'), 2)
-      const factor = field === 'conversion_factor' ? value : num(capCellValue(row, 'conversion_factor'), 4)
-      patch.volume = deriveCap(tons, factor, null).cy
-      patch.conversion_factor = factor
-    }
-    await update(row.id, patch)
-  }
-
-  let totTons = 0, totCy = 0, totSf = 0
-  for (const r of rows) {
-    const tons = num(capCellValue(r, 'tons'), 2)
-    const factor = num(capCellValue(r, 'conversion_factor'), 4)
-    const sf = num(capCellValue(r, 'area'), 0)
-    const { cy } = deriveCap(tons, factor, sf)
-    if (tons != null) totTons += tons
-    if (cy != null) totCy += cy
-    if (sf != null) totSf += sf
+    await remove(entry.row.id)
   }
 
   if (layers.length === 0) {
@@ -167,182 +341,236 @@ export default function CappingProductionTable({
     )
   }
 
-  return (
-    <Table withTableBorder verticalSpacing="xs" fz="sm">
-      <Table.Thead>
-        <Table.Tr>
-          <Table.Th>{multiLayer ? 'Area / Layer' : 'Area'}</Table.Th>
-          {!multiLayer && <Table.Th>Lift</Table.Th>}
-          <Table.Th>Material</Table.Th>
-          {!multiLayer && <Table.Th ta="right">GOH</Table.Th>}
-          {!multiLayer && <Table.Th ta="right">NOH</Table.Th>}
-          <Table.Th ta="right">Tons</Table.Th>
-          <Table.Th ta="right">Factor</Table.Th>
-          <Table.Th ta="right">CY</Table.Th>
-          <Table.Th ta="right">SF</Table.Th>
-          <Table.Th ta="right">Thk (in)</Table.Th>
-          <Table.Th ta="right">Acres</Table.Th>
-          <Table.Th>Notes</Table.Th>
-          <Table.Th style={{ width: 40 }} />
-        </Table.Tr>
-      </Table.Thead>
-      <Table.Tbody>
-        {cappingGroups.map((g) => {
-          const groupRows = rowsForGroup(g)
-          const used = new Set(groupRows.map((r) => r.layer_id).filter(Boolean))
-          const remaining = sortedLayers.filter((l) => !used.has(l.id))
-          const areaLabel = g.unassigned
-            ? 'Unassigned'
-            : [g.areaId, g.subAreaId, g.subSubAreaId].filter(Boolean).map((id) => areasById.get(id)?.name).filter(Boolean).join(' ‣ ')
-          const cols = multiLayer ? 12 : 13
+  const groupEntries = cappingGroups.map((g) => ({ g, entries: entriesForGroup(g) }))
 
-          const renderRow = (r, showAreaCell) => {
-            const tons = num(capCellValue(r, 'tons'), 2)
-            const factor = num(capCellValue(r, 'conversion_factor'), 4)
-            const sf = num(capCellValue(r, 'area'), 0)
-            const { cy, thickness, acres } = deriveCap(tons, factor, sf)
-            const overTarget = thickness != null && thickness > LIFT_THICKNESS_WARN_IN
-            return (
-              <Table.Tr key={r.id}>
-                <Table.Td style={multiLayer ? { paddingLeft: 24 } : undefined}>
-                  {multiLayer
-                    ? (layers.find((l) => l.id === r.layer_id)?.layer_name ?? '—')
-                    : (showAreaCell ? areaLabel : '')}
-                </Table.Td>
-                {!multiLayer && (
+  let totTons = 0, totCy = 0, totSf = 0
+  for (const { entries } of groupEntries) {
+    for (const entry of entries) {
+      const tons = num(cellValue(entry, 'tons'), 2)
+      const factor = num(cellValue(entry, 'conversion_factor'), 4)
+      const sf = num(cellValue(entry, 'area'), 0)
+      const { cy } = deriveCap(tons, factor, sf)
+      if (tons != null) totTons += tons
+      if (cy != null) totCy += cy
+      if (sf != null) totSf += sf
+    }
+  }
+
+  return (
+    <>
+      <Table withTableBorder verticalSpacing="xs" fz="sm">
+        <Table.Thead>
+          <Table.Tr>
+            <Table.Th>{multiLayer ? 'Area / Layer' : 'Area'}</Table.Th>
+            {!multiLayer && <Table.Th>Lift</Table.Th>}
+            {!multiLayer && <Table.Th>Material</Table.Th>}
+            {!multiLayer && <Table.Th ta="right">GOH</Table.Th>}
+            {!multiLayer && <Table.Th ta="right">NOH</Table.Th>}
+            <Table.Th ta="right">Tons</Table.Th>
+            <Table.Th ta="right">Factor</Table.Th>
+            <Table.Th ta="right">CY</Table.Th>
+            <Table.Th ta="right">SF</Table.Th>
+            <Table.Th ta="right">Thk (in)</Table.Th>
+            <Table.Th ta="right">Acres</Table.Th>
+            <Table.Th>Notes</Table.Th>
+            <Table.Th style={{ width: 96 }} />
+          </Table.Tr>
+        </Table.Thead>
+        <Table.Tbody>
+          {groupEntries.map(({ g, entries }) => {
+            const used = new Set()
+            for (const entry of entries) {
+              const id = layerIdOf(entry)
+              if (id) used.add(id)
+            }
+            const remaining = sortedLayers.filter((l) => !used.has(l.id))
+            const areaLabel = g.unassigned
+              ? 'Unassigned'
+              : [g.areaId, g.subAreaId, g.subSubAreaId].filter(Boolean).map((id) => areasById.get(id)?.name).filter(Boolean).join(' ‣ ')
+            const cols = multiLayer ? 9 : 13
+            const disabled = g.unassigned
+
+            const renderRow = (entry, showAreaCell) => {
+              const tons = num(cellValue(entry, 'tons'), 2)
+              const factor = num(cellValue(entry, 'conversion_factor'), 4)
+              const sf = num(cellValue(entry, 'area'), 0)
+              const { cy, thickness, acres } = deriveCap(tons, factor, sf)
+              const overTarget = thickness != null && thickness > LIFT_THICKNESS_WARN_IN
+              const entryLayerId = layerIdOf(entry)
+              const entryMaterialId = materialIdOf(entry)
+              return (
+                <Table.Tr key={entry.key}>
+                  <Table.Td style={multiLayer ? { paddingLeft: 24 } : undefined}>
+                    {multiLayer ? (
+                      <Group gap={8} wrap="nowrap">
+                        <Select
+                          size="xs"
+                          w={200}
+                          placeholder="Select layer…"
+                          disabled={disabled}
+                          data={sortedLayers
+                            .filter((l) => l.id === entryLayerId || !used.has(l.id))
+                            .map((l) => ({ value: l.id, label: l.layer_name }))}
+                          value={entryLayerId}
+                          onChange={(v) => setLayer(entry, g, v)}
+                        />
+                        {entryMaterialId && <Text size="xs" c="dimmed">{materialName(entryMaterialId)}</Text>}
+                      </Group>
+                    ) : (showAreaCell ? areaLabel : '')}
+                  </Table.Td>
+                  {!multiLayer && (
+                    <Table.Td>
+                      <TextInput
+                        size="xs" ta="right" w={56}
+                        disabled={disabled}
+                        value={cellValue(entry, 'pass_value')}
+                        onChange={(e) => setCell(entry, g, 'pass_value', e.currentTarget.value)}
+                        onBlur={() => persist(entry.key)}
+                      />
+                    </Table.Td>
+                  )}
+                  {!multiLayer && (
+                    <Table.Td>
+                      {materialsForLayer(entryLayerId).length > 1 ? (
+                        <Select
+                          size="xs" placeholder="—"
+                          disabled={disabled}
+                          data={materialsForLayer(entryLayerId).map((m) => ({ value: m.id, label: m.material_name }))}
+                          value={entryMaterialId}
+                          onChange={(v) => setMaterial(entry, g, v)}
+                          clearable
+                        />
+                      ) : (
+                        <Text size="sm">{materialName(entryMaterialId) ?? '—'}</Text>
+                      )}
+                    </Table.Td>
+                  )}
+                  {!multiLayer && <Table.Td ta="right" c="dimmed">{fmt(g.goh, 2)}</Table.Td>}
+                  {!multiLayer && <Table.Td ta="right" c="dimmed">{fmt(g.noh, 2)}</Table.Td>}
                   <Table.Td>
                     <TextInput
-                      size="xs" ta="right" w={56}
-                      value={capCellValue(r, 'pass_value')}
-                      onChange={(e) => setCapCellValue(r, 'pass_value', e.currentTarget.value)}
-                      onBlur={() => commitCapCell(r, 'pass_value', 0)}
+                      size="xs" ta="right"
+                      disabled={disabled}
+                      value={cellValue(entry, 'tons')}
+                      onChange={(e) => setCell(entry, g, 'tons', e.currentTarget.value)}
+                      onBlur={() => persist(entry.key)}
                     />
                   </Table.Td>
-                )}
-                <Table.Td>
-                  <Select
-                    size="xs" placeholder="—"
-                    data={materialsForLayer(r.layer_id).map((m) => ({ value: m.id, label: m.material_name }))}
-                    value={r.material_id ?? null}
-                    onChange={(v) => update(r.id, { material_id: v ?? null })}
-                    clearable
-                  />
-                </Table.Td>
-                {!multiLayer && <Table.Td ta="right" c="dimmed">{g.goh.toFixed(2)}</Table.Td>}
-                {!multiLayer && <Table.Td ta="right" c="dimmed">{g.noh.toFixed(2)}</Table.Td>}
-                <Table.Td>
-                  <TextInput
-                    size="xs" ta="right"
-                    value={capCellValue(r, 'tons')}
-                    onChange={(e) => setCapCellValue(r, 'tons', e.currentTarget.value)}
-                    onBlur={() => commitCapCell(r, 'tons', 2)}
-                  />
-                </Table.Td>
-                <Table.Td>
-                  <TextInput
-                    size="xs" ta="right"
-                    value={capCellValue(r, 'conversion_factor')}
-                    onChange={(e) => setCapCellValue(r, 'conversion_factor', e.currentTarget.value)}
-                    onBlur={() => commitCapCell(r, 'conversion_factor', 4)}
-                  />
-                </Table.Td>
-                <Table.Td ta="right" c="dimmed">{cy != null ? cy.toFixed(1) : '—'}</Table.Td>
-                <Table.Td>
-                  <TextInput
-                    size="xs" ta="right"
-                    value={capCellValue(r, 'area')}
-                    onChange={(e) => setCapCellValue(r, 'area', e.currentTarget.value)}
-                    onBlur={() => commitCapCell(r, 'area', 0)}
-                  />
-                </Table.Td>
-                <Table.Td ta="right" c={overTarget ? 'orange.8' : 'dimmed'} fw={overTarget ? 700 : 400}>
-                  {thickness != null ? thickness.toFixed(2) : '—'}
-                  {overTarget && <span title={`Placed lift over the ${LIFT_THICKNESS_WARN_IN} in target`}> ⚠</span>}
-                </Table.Td>
-                <Table.Td ta="right" c="dimmed">{acres != null ? acres.toFixed(2) : '—'}</Table.Td>
-                <Table.Td>
-                  <TextInput
-                    size="xs"
-                    defaultValue={r.notes ?? ''}
-                    onBlur={(e) => {
-                      const v = e.currentTarget.value.trim() || null
-                      if (v !== (r.notes ?? null)) update(r.id, { notes: v })
-                    }}
-                  />
-                </Table.Td>
-                <Table.Td>
-                  <Box onClick={() => handleDelete(r)} style={{ cursor: 'pointer', color: '#ef4444', display: 'flex' }} title="Delete">
-                    <IconTrash size={13} />
-                  </Box>
-                </Table.Td>
-              </Table.Tr>
-            )
-          }
+                  <Table.Td>
+                    <TextInput
+                      size="xs" ta="right"
+                      disabled={disabled}
+                      value={cellValue(entry, 'conversion_factor')}
+                      onChange={(e) => setCell(entry, g, 'conversion_factor', e.currentTarget.value)}
+                      onBlur={() => persist(entry.key)}
+                    />
+                  </Table.Td>
+                  <Table.Td ta="right" c="dimmed">{fmt(cy, 1)}</Table.Td>
+                  <Table.Td>
+                    <TextInput
+                      size="xs" ta="right"
+                      disabled={disabled}
+                      value={cellValue(entry, 'area')}
+                      onChange={(e) => setCell(entry, g, 'area', e.currentTarget.value)}
+                      onBlur={() => persist(entry.key)}
+                    />
+                  </Table.Td>
+                  <Table.Td ta="right" c={overTarget ? 'orange.8' : 'dimmed'} fw={overTarget ? 700 : 400}>
+                    {fmt(thickness, 2)}
+                    {overTarget && <span title={`Placed lift over the ${LIFT_THICKNESS_WARN_IN} in target`}> ⚠</span>}
+                  </Table.Td>
+                  <Table.Td ta="right" c="dimmed">{fmt(acres, 2)}</Table.Td>
+                  <Table.Td>
+                    <TextInput
+                      size="xs"
+                      disabled={disabled}
+                      value={cellValue(entry, 'notes')}
+                      onChange={(e) => setCell(entry, g, 'notes', e.currentTarget.value)}
+                      onBlur={() => persist(entry.key)}
+                    />
+                  </Table.Td>
+                  <Table.Td>
+                    <Group gap={6} wrap="nowrap" justify="flex-end">
+                      <SaveIndicator state={saveState[entry.key]} />
+                      {!disabled && (entry.row || entries.length > 1) && (
+                        <Box
+                          onClick={() => handleDelete(entry, g)}
+                          style={{ cursor: 'pointer', color: '#ef4444', display: 'flex' }}
+                          title={entry.row ? 'Delete' : 'Remove this row'}
+                        >
+                          <IconTrash size={13} />
+                        </Box>
+                      )}
+                    </Group>
+                  </Table.Td>
+                </Table.Tr>
+              )
+            }
 
-          if (!multiLayer) {
-            const only = groupRows[0]
-            return only
-              ? [renderRow(only, true)]
-              : [
-                  <Table.Tr key={`new-${g.key}`} style={g.unassigned ? { background: 'var(--mantine-color-yellow-0)' } : undefined}>
-                    <Table.Td>{g.unassigned ? <Text span fs="italic" c="orange.8">Unassigned</Text> : areaLabel}</Table.Td>
-                    <Table.Td colSpan={cols - 1}>
-                      <Button size="compact-xs" variant="subtle" disabled={g.unassigned}
-                        onClick={() => addCappingRow(g, sortedLayers[0]?.id ?? null)}>
-                        + Add production for this area
-                      </Button>
-                    </Table.Td>
-                  </Table.Tr>,
-                ]
-          }
+            if (!multiLayer) return entries.map((entry, i) => renderRow(entry, i === 0))
 
-          return [
-            <Table.Tr key={`hdr-${g.key}`} style={{ background: g.unassigned ? 'var(--mantine-color-yellow-0)' : 'var(--mantine-color-gray-1)' }}>
-              <Table.Td fw={700}>
-                {g.unassigned ? <Text span fs="italic" c="orange.8">Unassigned</Text> : areaLabel}
-              </Table.Td>
-              <Table.Td colSpan={cols - 1}>
-                <Text size="xs" c="dimmed">
-                  GOH <strong>{g.goh.toFixed(2)}</strong> · NOH <strong>{g.noh.toFixed(2)}</strong>
-                </Text>
-              </Table.Td>
-            </Table.Tr>,
-            ...groupRows.map((r) => renderRow(r, false)),
-            remaining.length > 0 && !g.unassigned && (
-              <Table.Tr key={`add-${g.key}`}>
-                <Table.Td colSpan={cols} style={{ paddingLeft: 24 }}>
-                  <Select
-                    size="xs" w={260} placeholder="+ Add layer placed in this area"
-                    data={remaining.map((l) => ({ value: l.id, label: l.layer_name }))}
-                    value={null}
-                    onChange={(v) => v && addCappingRow(g, v)}
-                  />
+            return [
+              <Table.Tr key={`hdr-${g.key}`} style={{ background: g.unassigned ? 'var(--mantine-color-yellow-0)' : 'var(--mantine-color-gray-1)' }}>
+                <Table.Td fw={700}>
+                  {g.unassigned ? <Text span fs="italic" c="orange.8">Unassigned</Text> : areaLabel}
                 </Table.Td>
-              </Table.Tr>
-            ),
-          ]
-        })}
-      </Table.Tbody>
-      <Table.Tfoot>
-        <Table.Tr>
-          <Table.Td colSpan={multiLayer ? 2 : 3} fw={700}>
-            Totals
-            <Text span size="xs" c="dimmed" fw={400}>
-              {'  '}GOH {cappingGroups.reduce((a, g) => a + g.goh, 0).toFixed(2)} · NOH{' '}
-              {cappingGroups.reduce((a, g) => a + g.noh, 0).toFixed(2)}
-            </Text>
-          </Table.Td>
-          {!multiLayer && <Table.Td colSpan={2} />}
-          <Table.Td ta="right" fw={700}>{totTons.toFixed(2)}</Table.Td>
-          <Table.Td />
-          <Table.Td ta="right" fw={700}>{totCy.toFixed(1)}</Table.Td>
-          <Table.Td ta="right" fw={700}>{totSf.toFixed(0)}</Table.Td>
-          <Table.Td />
-          <Table.Td />
-          <Table.Td />
-          <Table.Td />
-        </Table.Tr>
-      </Table.Tfoot>
-    </Table>
+                <Table.Td colSpan={cols - 1}>
+                  <Text size="xs" c="dimmed">
+                    GOH <strong>{fmt(g.goh, 2)}</strong> · NOH <strong>{fmt(g.noh, 2)}</strong>
+                  </Text>
+                </Table.Td>
+              </Table.Tr>,
+              ...entries.map((entry) => renderRow(entry, false)),
+              remaining.length > 0 && !g.unassigned && (
+                <Table.Tr key={`add-${g.key}`}>
+                  <Table.Td colSpan={cols} style={{ paddingLeft: 24 }}>
+                    <Button size="compact-xs" variant="subtle" onClick={() => addSlot(g)}>
+                      + Add layer
+                    </Button>
+                  </Table.Td>
+                </Table.Tr>
+              ),
+            ]
+          })}
+        </Table.Tbody>
+        <Table.Tfoot>
+          <Table.Tr>
+            <Table.Td colSpan={multiLayer ? 1 : 3} fw={700}>
+              Totals
+              <Text span size="xs" c="dimmed" fw={400}>
+                {'  '}GOH {fmt(cappingGroups.reduce((a, g) => a + g.goh, 0), 2)} · NOH{' '}
+                {fmt(cappingGroups.reduce((a, g) => a + g.noh, 0), 2)}
+              </Text>
+            </Table.Td>
+            {!multiLayer && <Table.Td colSpan={2} />}
+            <Table.Td ta="right" fw={700}>{fmt(totTons, 1)}</Table.Td>
+            <Table.Td />
+            <Table.Td ta="right" fw={700}>{fmt(totCy, 1)}</Table.Td>
+            <Table.Td ta="right" fw={700}>{fmt(totSf, 1)}</Table.Td>
+            <Table.Td />
+            <Table.Td />
+            <Table.Td />
+            <Table.Td />
+          </Table.Tr>
+        </Table.Tfoot>
+      </Table>
+
+      <Text size="xs" c="dimmed" mt={6}>
+        {multiLayer ? (
+          <>
+            Areas come from the event log; <strong>GOH/NOH</strong> are summed from that area&apos;s events
+            and sit on the area header, so hours never double-count when several layers are placed in a
+            day. Add one row per <strong>layer</strong> placed and enter its <strong>Tons</strong> and{' '}
+            <strong>SF</strong>. Each layer&apos;s tons roll up against its own design-tons goal.
+          </>
+        ) : (
+          <>
+            One row per area from the event log. <strong>GOH/NOH</strong> are summed from that area&apos;s
+            events (Totals match the event-log daily totals). Enter the <strong>Lift</strong>,{' '}
+            <strong>Tons</strong> and <strong>SF</strong>; CY = tons ÷ factor, thickness = CY × 324 ÷ SF.
+          </>
+        )}
+      </Text>
+    </>
   )
 }

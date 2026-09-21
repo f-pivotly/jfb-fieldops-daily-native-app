@@ -1,7 +1,9 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { readWrittenRecordId } from '../../data'
 import { buildCombosFromActivities, comboNOH, comboKey, isUnassigned } from '../../lib/productionCombos'
 import { computeAvgFace, num } from '../../lib/productionValues'
+
+const DEBOUNCE_MS = 2000
 
 function comboKeyOfPersisted(p) {
   const combo = Array.isArray(p.area_level_combinations) ? p.area_level_combinations : []
@@ -27,7 +29,12 @@ export function useComboProduction({
   update,
 }) {
   const [comboEdits, setComboEdits] = useState({})
+  const [saveState, setSaveState] = useState({})
   const inFlightByKey = useRef(new Map())
+  const timers = useRef(new Map())
+  const pending = useRef(new Map())
+  const editsRef = useRef(comboEdits)
+  const persistRef = useRef(null)
 
   const combos = buildCombosFromActivities(activities ?? [], { passKeyOf: (a) => a.pass_type }).map((c) => ({
     ...c,
@@ -71,29 +78,75 @@ export function useComboProduction({
     }
   }
 
-  function comboCellValue(combo, field) {
+  function readCell(combo, field, source) {
     const editKey = `${combo.key}:${field}`
-    if (editKey in comboEdits) return comboEdits[editKey]
+    if (editKey in source) return source[editKey]
     const existing = persistedByKey.get(combo.key)
     return existing?.[field] ?? ''
   }
 
-  function setComboCellValue(combo, field, value) {
-    setComboEdits((prev) => ({ ...prev, [`${combo.key}:${field}`]: value }))
+  const comboCellValue = (combo, field) => readCell(combo, field, comboEdits)
+
+  async function flushCombo(key) {
+    const timer = timers.current.get(key)
+    if (timer) {
+      clearTimeout(timer)
+      timers.current.delete(key)
+    }
+    const combo = pending.current.get(key)
+    if (!combo) return
+    pending.current.delete(key)
+
+    const source = editsRef.current
+    const sent = {
+      volume: String(readCell(combo, 'volume', source) ?? ''),
+      area: String(readCell(combo, 'area', source) ?? ''),
+      notes: String(readCell(combo, 'notes', source) ?? ''),
+    }
+    const patch = {
+      volume: num(sent.volume, 1),
+      area: num(sent.area, 0),
+      notes: sent.notes.trim() || null,
+    }
+
+    setSaveState((prev) => ({ ...prev, [key]: 'saving' }))
+    try {
+      await persistCombo(combo, patch)
+      setComboEdits((prev) => {
+        const next = {}
+        for (const [k, v] of Object.entries(prev)) {
+          if (!k.startsWith(`${key}:`)) next[k] = v
+          else if (sent[k.slice(key.length + 1)] !== v) next[k] = v
+        }
+        return next
+      })
+      setSaveState((prev) => ({ ...prev, [key]: 'saved' }))
+    } catch {
+      setSaveState((prev) => ({ ...prev, [key]: 'error' }))
+    }
   }
 
-  async function commitComboCell(combo, field, digits) {
-    const editKey = `${combo.key}:${field}`
-    if (!(editKey in comboEdits)) return
-    const value = digits != null ? num(comboEdits[editKey], digits) : (comboEdits[editKey].trim() || null)
-    setComboEdits((prev) => {
-      const next = { ...prev }
-      delete next[editKey]
-      return next
-    })
-    const existing = persistedByKey.get(combo.key)
-    if (value === (existing?.[field] ?? null)) return
-    await persistCombo(combo, { [field]: value })
+  useEffect(() => {
+    editsRef.current = comboEdits
+    persistRef.current = flushCombo
+  })
+
+  useEffect(
+    () => () => {
+      for (const key of Array.from(pending.current.keys())) void persistRef.current?.(key)
+      timers.current.forEach((t) => clearTimeout(t))
+      timers.current.clear()
+    },
+    [],
+  )
+
+  function setComboCellValue(combo, field, value) {
+    setComboEdits((prev) => ({ ...prev, [`${combo.key}:${field}`]: value }))
+    pending.current.set(combo.key, combo)
+    setSaveState((prev) => ({ ...prev, [combo.key]: 'pending' }))
+    const existing = timers.current.get(combo.key)
+    if (existing) clearTimeout(existing)
+    timers.current.set(combo.key, setTimeout(() => void flushCombo(combo.key), DEBOUNCE_MS))
   }
 
   const unassignedCombo = combos.find((c) => isUnassigned(c)) ?? null
@@ -118,7 +171,8 @@ export function useComboProduction({
     persistCombo,
     comboCellValue,
     setComboCellValue,
-    commitComboCell,
+    flushCombo,
+    comboSaveState: saveState,
     comboTotals,
     unassignedCombo,
   }

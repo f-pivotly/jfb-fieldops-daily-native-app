@@ -20,3 +20,8 @@ export function deriveCap(tons, factor, sf) {
   const acres = sf != null && sf !== 0 ? sf / SF_PER_ACRE : null
   return { cy, thickness, acres }
 }
+
+export function fmt(value, digits = 1) {
+  if (value == null || !Number.isFinite(value)) return '—'
+  return value.toLocaleString(undefined, { maximumFractionDigits: digits })
+}

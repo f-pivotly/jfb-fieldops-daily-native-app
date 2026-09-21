@@ -42,12 +42,9 @@ export function todayISO() {
   return formatDate(new Date())
 }
 
-export function prettyDate(dateISO) {
-  const [y, m, d] = dateISO.split('-').map(Number)
-  return new Date(y, m - 1, d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
-}
 
 export { addDaysISO, mondayStartISO, daysBetween }
+export { prettyDate } from '../../../lib/reportDates'
 
 export function blobToDataUri(blob) {
   return new Promise((resolve, reject) => {

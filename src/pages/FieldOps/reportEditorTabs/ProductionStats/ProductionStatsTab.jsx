@@ -19,6 +19,7 @@ import BucketSfControls from './BucketSfControls'
 import ChartSfControls from './ChartSfControls'
 import CappingProductionTable from './CappingProductionTable'
 import DredgeProductionTable from './DredgeProductionTable'
+import UnassignedBanner from './UnassignedBanner'
 import { usePlacementConfig } from '../../../../hooks/placement/usePlacementConfig'
 import { loadPlacementGrid } from '../../../../lib/placement/loaders'
 import { attributeBuckets, windowsFromActivities } from '../../../../lib/placement/attribution'
@@ -30,12 +31,9 @@ export default function ProductionStatsTab({ project, report, equipment = [], se
   const { stats, loading, error, update, remove, create } = useProductionStats(report?.id)
   const { areas, loading: areasLoading } = useProjectAreas(project?.id)
   const { areaLevels } = useAreaLevels(project?.id)
-  // Only show the area columns this project actually uses -- a one-level
-  // project has no Sub-Area to fill, matching the non-native app's
-  // area_l2_label / area_l3_label gate.
-  const maxAreaDepth = areaLevels.reduce((m, l) => Math.max(m, l.depth ?? 0), 0)
-  const hasSubArea = maxAreaDepth >= 2
-  const hasSubSubArea = maxAreaDepth >= 3
+  const areaLabels = [...areaLevels]
+    .sort((a, b) => (a.depth ?? 0) - (b.depth ?? 0))
+    .map((l) => l.label)
   const { attachments } = useProjectAttachments(project?.id)
   const { labels: passTypeLabels } = usePicklist('pkl-jfb-pass-type')
 
@@ -133,18 +131,7 @@ export default function ProductionStatsTab({ project, report, equipment = [], se
         </WarningBanner>
       )}
 
-      {!stillLoading && !error && !isCapping && combo.unassignedCombo && (
-        <WarningBanner p={10} mb={10}>
-          <Text size="xs" fw={600} c="#7a5206">
-            {combo.unassignedCombo.timeHours.toFixed(2)} h logged with no area
-          </Text>
-          <Text size="xs" c="#7a5206">
-            Those hours are shown as an <strong>Unassigned</strong> row below and counted in the totals,
-            so they reconcile to the event log — but they can&apos;t be credited to an area until the
-            events carry one. Set the area on those events in the Event Log.
-          </Text>
-        </WarningBanner>
-      )}
+      {!stillLoading && !error && <UnassignedBanner activities={activities} />}
 
       {!stillLoading && !error && !isCapping && (
         <ChartSfControls
@@ -201,11 +188,12 @@ export default function ProductionStatsTab({ project, report, equipment = [], se
         <DredgeProductionTable
           combos={combo.combos}
           totals={combo.comboTotals}
-          hasSubArea={hasSubArea}
-          hasSubSubArea={hasSubSubArea}
+          areaLabels={areaLabels}
+          useTsca={!!project?.is_tsca_zone_tracking}
           cellValue={combo.comboCellValue}
           setCellValue={combo.setComboCellValue}
-          commitCell={combo.commitComboCell}
+          flushCell={combo.flushCombo}
+          saveState={combo.comboSaveState}
         />
       )}
 
