@@ -9,6 +9,26 @@
       {
         "label": "2nd Pass",
         "value": "2nd_pass"
+      },
+      {
+        "label": "Residual",
+        "value": "residual"
+      },
+      {
+        "label": "Rework",
+        "value": "rework"
+      },
+      {
+        "label": "Spot Check",
+        "value": "spot_check"
+      },
+      {
+        "label": "Verification",
+        "value": "verification"
+      },
+      {
+        "label": "N/A",
+        "value": "n_a"
       }
     ]
   }
