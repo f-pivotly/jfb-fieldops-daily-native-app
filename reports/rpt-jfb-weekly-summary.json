@@ -56,14 +56,14 @@
       "type": "json",
       "label": "Weekly production",
       "required": false,
-      "description": "Caller-computed, pre-formatted production figures for the week + project-to-date: {weekCy, weekSf, weekGoh, weekNoh, weekCyPerGoh, toDateCy, goal, pctComplete, hasPlan, plannedWeekCy, weekVariance, weekVariancePositive, plannedToDateCy, toDateVariance, toDateVariancePositive}. Sourced from dvw-jfb-realized-daily-totals (same per-day cy/sf/goh/noh rows the Realized To-Date report uses) and the project's cy_goh_goal/expected_goh_per_day production plan -- same planned = bid rate x expected GOH/day x production days definition as Realized To-Date. hasPlan/plannedX/variance fields are null when the project's production plan isn't set."
+      "description": "Caller-computed, pre-formatted production figures for the week + project-to-date: {weekCy, weekSf, weekGoh, weekNoh, weekCyPerGoh, toDateCy, goal, pctComplete, hasPlan, plannedWeekCy, weekVariance, weekVariancePositive, plannedToDateCy, toDateVariance, toDateVariancePositive}. Sourced from dvw-jfb-realized-daily-totals-v2 (same per-day cy/sf/goh/noh rows the Realized To-Date report uses) and the project's cy_goh_goal/expected_goh_per_day production plan -- same planned = bid rate x expected GOH/day x production days definition as Realized To-Date. hasPlan/plannedX/variance fields are null when the project's production plan isn't set."
     },
     {
       "name": "weeklyDelayRowsLeft",
       "type": "json",
       "label": "Weekly delay breakdown (left column)",
       "required": false,
-      "description": "Caller-computed [{description, hours, pct, barPct}] from dvw-jfb-realized-delay-summary, scoped to this week's date range, sorted descending by hours and split into left/right halves (Math.ceil(length/2)) for the 2-column bar chart. barPct is the bar width as a percent of the single largest delay code's hours, matching the reference app's WeeklySummaryDocument.tsx delay chart exactly (itself the same pattern as RealizedToDateDocument.tsx / native's own realizedPdfData.js delayRowsLeft/Right)."
+      "description": "Caller-computed [{description, hours, pct, barPct}] from dvw-jfb-realized-delay-summary-v2, scoped to this week's date range, sorted descending by hours and split into left/right halves (Math.ceil(length/2)) for the 2-column bar chart. barPct is the bar width as a percent of the single largest delay code's hours, matching the reference app's WeeklySummaryDocument.tsx delay chart exactly (itself the same pattern as RealizedToDateDocument.tsx / native's own realizedPdfData.js delayRowsLeft/Right)."
     },
     {
       "name": "weeklyDelayTotalHours",

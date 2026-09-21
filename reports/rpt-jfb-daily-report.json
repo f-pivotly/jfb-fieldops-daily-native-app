@@ -58,7 +58,7 @@
       "type": "json",
       "label": "Equipment filter",
       "required": true,
-      "description": "Caller-built: {\"project_id\": \"<projectId>\"}"
+      "description": "Caller-built: {\"project_id\": \"<projectId>\", \"id\": [<equipment ids on this report date>]} -- only active equipment whose mobilized_on/demobilized_on window includes the report date, matching the non-native app's fetchProjectEquipment(projectId, reportDate). A placeholder all-zero id is sent when no equipment applies, because an empty id list is rejected by the read."
     },
     {
       "name": "narrativeSections",
@@ -100,7 +100,7 @@
       "type": "json",
       "label": "Safety page data",
       "required": false,
-      "description": "Caller-resolved object binding the whole Safety Report sheet: the 7(+1) Daily Safety Updates fields (Culture Tenant resolved to \"name: description\", next-day summary included only when project.show_next_day_summary), jfb_report_crew_summary_v2 rows, jfb_project_site_equipment rows mobilized as of this report's date, and both signatures as data URIs. Resolved client-side (not a domain-query source) because Culture Tenant needs a join and equipment needs an as-of-date window filter, neither expressible as a single domain-query source or in this engine's Handlebars. Also includes crewTotals (totalCount/todayHours from this report's own crew rows, previousProjectHours/totalProjectHours derived from dvw-jfb-crew-hours-total, a project-lifetime no-date-filter sum -- mirrors the reference app's PDF-only cumulative crew-hours figures) and a climate object (temp/wind/precip, Precip MTD/Project Total via dvw-jfb-precip-sums, conditions), each field pre-formatted with a unit string or an em dash fallback matching the reference app's PDF convention."
+      "description": "Caller-resolved object binding the whole Safety Report sheet: the 7(+1) Daily Safety Updates fields (Culture Tenant resolved to \"name: description\", next-day summary included only when project.show_next_day_summary), jfb_report_crew_summary_v2 rows, jfb_project_site_equipment rows mobilized as of this report's date, and both signatures as data URIs. Resolved client-side (not a domain-query source) because Culture Tenant needs a join and equipment needs an as-of-date window filter, neither expressible as a single domain-query source or in this engine's Handlebars. Also includes crewTotals (totalCount/todayHours from this report's own crew rows, previousProjectHours/totalProjectHours derived from dvw-jfb-crew-hours-total-v2, a project-lifetime no-date-filter sum -- mirrors the reference app's PDF-only cumulative crew-hours figures) and a climate object (temp/wind/precip, Precip MTD/Project Total via dvw-jfb-precip-sums-v2, conditions), each field pre-formatted with a unit string or an em dash fallback matching the reference app's PDF convention."
     },
     {
       "name": "opSummaryByEquipment",
@@ -121,7 +121,7 @@
       "type": "json",
       "label": "Cover production metrics",
       "required": false,
-      "description": "Caller-computed {rows: [{label, unit, day, week, project}]}, one row per fixed metric (Total Volume Removed/CY, Total Area Covered/SF, Operating Hours/hrs, Delay Hours/hrs, Efficiency/%). Matches the reference app's cover-page Project Production Table exactly: Day is today's value (null/em-dash if no released report or no activity logged that day), Week sums Sunday-of-this-week through today, Project sums the whole project history through today. Efficiency is a ratio of summed GOH/NOH over each window, not an average of daily efficiencies. Built by buildCoverProductionTotalsParam() in reportPdfData.js from dvw-jfb-realized-daily-totals (released reports only, same view Weekly Summary/Realized To-Date use)."
+      "description": "Caller-computed {rows: [{label, unit, day, week, project}]}, one row per fixed metric (Total Volume Removed/CY, Total Area Covered/SF, Operating Hours/hrs, Delay Hours/hrs, Efficiency/%). Matches the reference app's cover-page Project Production Table exactly: Day is today's value (null/em-dash if no released report or no activity logged that day), Week sums Sunday-of-this-week through today, Project sums the whole project history through today. Efficiency is a ratio of summed GOH/NOH over each window, not an average of daily efficiencies. Built by buildCoverProductionTotalsParam() in reportPdfData.js from dvw-jfb-realized-daily-totals-v2 (released reports only, same view Weekly Summary/Realized To-Date use)."
     },
     {
       "name": "weekday",
@@ -236,7 +236,9 @@
       "slug": "jfb_equipments",
       "type": "domain-query",
       "queryParams": {
-        "limit": 50
+        "limit": 50,
+        "sortCol": "sort_order",
+        "sortDir": "asc"
       },
       "parameterMapping": {
         "filters": "{{parameters.equipmentFilter}}"
