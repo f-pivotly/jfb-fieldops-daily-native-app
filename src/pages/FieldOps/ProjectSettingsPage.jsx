@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { Box, ScrollArea, Text, Group, Tabs, TextInput, Button } from '@mantine/core'
-import { useProject } from '../../hooks/useProject'
-import { useEquipment } from '../../hooks/useEquipment'
-import { useRealizedExcludedDays } from '../../hooks/useRealizedExcludedDays'
+import { useProject } from '../../hooks/project/useProject'
+import { useEquipment } from '../../hooks/project/useEquipment'
+import { useRealizedExcludedDays } from '../../hooks/project/useRealizedExcludedDays'
 import { projectShowsDredgeChart } from '../../config/dredgeProgress'
 import { isPlacementEquipment } from '../../config/placementProgress'
 import ScheduledOffDaysCard from '../../components/ScheduledOffDaysCard'
@@ -22,11 +22,6 @@ export default function ProjectSettingsPage() {
   const { equipment } = useEquipment(projectId)
   const { excludedDays, create: createExcluded, remove: removeExcluded } = useRealizedExcludedDays(projectId)
   const isDredging = projectShowsDredgeChart(project)
-  // The project's own default work_type isn't enough here -- a project
-  // defaulting to dredging can still have specific equipment (e.g. a
-  // capping barge) individually pinned to placement via that equipment's
-  // own work_type/work_type_from override, and that equipment still needs
-  // its placement chart configured.
   const isPlacement =
     isPlacementEquipment(project, null, null) ||
     (equipment ?? []).some((eq) => isPlacementEquipment(project, eq, todayISO()))

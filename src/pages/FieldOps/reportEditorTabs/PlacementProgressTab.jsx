@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Box, Button, FileButton, Group, Stack, Table, Text } from '@mantine/core'
-import { useDomainData } from '../../../hooks/useDomainData'
-import { usePlacementConfig } from '../../../hooks/usePlacementConfig'
-import { useProjectLayers } from '../../../hooks/useProjectLayers'
+import { useDomainData } from '../../../hooks/core/useDomainData'
+import { usePlacementConfig } from '../../../hooks/placement/usePlacementConfig'
+import { useProjectLayers } from '../../../hooks/capping/useProjectLayers'
 import { useAppConfig } from '../../../contexts/appConfigContext'
-import { useAsyncAction } from '../../../hooks/useAsyncAction'
-import { useConfirmDialog } from '../../../hooks/useConfirmDialog'
+import { useAsyncAction } from '../../../hooks/ui/useAsyncAction'
+import { useConfirmDialog } from '../../../hooks/ui/useConfirmDialog'
 import { loadAttachmentImage, loadPublicImage } from '../../../lib/dredge/imageLoaders'
 import { bktGaps, bktTimeSpan, parseBkt } from '../../../lib/placement/bkt'
 import {
@@ -25,7 +25,7 @@ import {
 } from '../../../lib/placement/chart'
 import { loadPlacementGrid, loadPlacementReferenceLines } from '../../../lib/placement/loaders'
 import { isProductiveActivity } from '../lib/workType'
-import { usePlacementProgressSave } from './hooks/usePlacementProgressSave'
+import { usePlacementProgressSave } from '../../../hooks/placement/usePlacementProgressSave'
 
 const PLACEMENT_PROGRESS_DOMAIN = 'jfb_placement_progress'
 

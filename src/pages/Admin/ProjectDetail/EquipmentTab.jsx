@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Box, Text, Group, Button, Modal, TextInput, Select, NumberInput, Switch } from "@mantine/core";
 import { IconAnchor } from "@tabler/icons-react";
-import { useEquipment } from "../../../hooks/useEquipment";
-import { useConfirmDialog } from "../../../hooks/useConfirmDialog";
-import { useDomainData } from "../../../hooks/useDomainData";
+import { useEquipment } from "../../../hooks/project/useEquipment";
+import { useConfirmDialog } from "../../../hooks/ui/useConfirmDialog";
+import { useDomainData } from "../../../hooks/core/useDomainData";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import SafeError from "../../../components/SafeError";
 import TabToolbar from "./TabToolbar";

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Box, Text, Select } from "@mantine/core";
-import { useDomainData } from "../../hooks/useDomainData";
+import { useDomainData } from "../../hooks/core/useDomainData";
 import TeamTab from "./ProjectDetail/TeamTab";
 
 export default function AdminTeamSection() {

@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Box, Text, Group, Button, Modal, TextInput, Select, Checkbox, Avatar, SegmentedControl } from "@mantine/core";
 import { IconPlus, IconRefresh } from "@tabler/icons-react";
-import { useDomainData } from "../../../hooks/useDomainData";
-import { useConfirmDialog } from "../../../hooks/useConfirmDialog";
+import { useDomainData } from "../../../hooks/core/useDomainData";
+import { useConfirmDialog } from "../../../hooks/ui/useConfirmDialog";
 import { useDomainAccess } from "../../../contexts/adminAccessContext";
 import { readWrittenRecordId } from "../../../data";
 

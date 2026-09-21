@@ -5,6 +5,7 @@ import { equipmentWorkType, isProductiveActivity } from './workType'
 import { prettyDate, blobToDataUri, fmtNum, fmtHrs } from './realizedToDate'
 import { UNATTRIBUTED_CATEGORY, shiftTotals } from './eventTotals'
 import { metricValueKey } from '../../../lib/metricValueKey'
+import { sameCalendarDay, utcDayRange } from '../../../lib/reportDates'
 
 function isCappingEquipment(project, equipment, dateISO) {
   return equipmentWorkType(project, equipment, dateISO).toLowerCase().includes('cap')
@@ -161,29 +162,12 @@ function durationMinutes(startISO, endISO) {
   return Math.round(ms / 60000)
 }
 
-export function sameCalendarDay(iso, dateISO, timeZone) {
-  if (!iso || !dateISO) return false
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return false
-  const local = timeZone
-    ? new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d)
-    : `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`
-  return local === dateISO
-}
-
 function resolveDelayCode(delayCodeId, projectDelayCodeById, masterDelayCodeById) {
   if (!delayCodeId) return '—'
   const row = projectDelayCodeById.get(delayCodeId)
   if (!row) return '—'
   const master = row.delay_code_id ? masterDelayCodeById.get(row.delay_code_id) : null
   return (master ? master.code : row.code) || '—'
-}
-
-export function utcDayRange(dateISO) {
-  const start = new Date(`${dateISO}T00:00:00.000Z`)
-  const gte = new Date(start.getTime() - 24 * 60 * 60 * 1000).toISOString()
-  const lt = new Date(start.getTime() + 48 * 60 * 60 * 1000).toISOString()
-  return { gte, lt }
 }
 
 function buildDelaySummary(activities, projectDelayCodeById, masterDelayCodeById) {

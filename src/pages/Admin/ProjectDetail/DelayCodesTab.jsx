@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { Box, Text, Group, Button, Modal, TextInput, Select, Switch } from "@mantine/core";
 import { IconPlus, IconList, IconRefresh } from "@tabler/icons-react";
-import { useDomainData } from "../../../hooks/useDomainData";
-import { useConfirmDialog } from "../../../hooks/useConfirmDialog";
-import { useDelayCodes } from "../../../hooks/useDelayCodes";
-import { useProjectDelayCodes } from "../../../hooks/useProjectDelayCodes";
+import { useDomainData } from "../../../hooks/core/useDomainData";
+import { useConfirmDialog } from "../../../hooks/ui/useConfirmDialog";
+import { useDelayCodes } from "../../../hooks/production/useDelayCodes";
+import { useProjectDelayCodes } from "../../../hooks/production/useProjectDelayCodes";
 import { useAppConfig } from "../../../contexts/appConfigContext";
 import { useDomainAccess } from "../../../contexts/adminAccessContext";
 import { createDomainRecord } from "../../../data";

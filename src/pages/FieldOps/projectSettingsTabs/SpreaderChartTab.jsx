@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { Box, Button, Checkbox, FileButton, Group, Stack, Text, TextInput } from '@mantine/core'
-import { useSpreaderConfig } from '../../../hooks/useSpreaderConfig'
-import { useAsyncAction } from '../../../hooks/useAsyncAction'
+import { useSpreaderConfig } from '../../../hooks/spreader/useSpreaderConfig'
+import { useAsyncAction } from '../../../hooks/ui/useAsyncAction'
 import { readWrittenRecordId } from '../../../data'
-import { useStagedFiles } from './hooks/useStagedFiles'
+import { useStagedFiles } from '../../../hooks/ui/useStagedFiles'
 
 const SPREADER_CONFIG_DOMAIN = 'jfb_spreader_config'
 

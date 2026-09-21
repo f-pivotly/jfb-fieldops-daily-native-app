@@ -1,14 +1,14 @@
 import { useRef, useState } from 'react'
 import { Box, Button, Checkbox, FileButton, Group, Stack, Text, TextInput } from '@mantine/core'
-import { usePlacementConfig } from '../../../hooks/usePlacementConfig'
-import { useProjectLayers } from '../../../hooks/useProjectLayers'
-import { useAsyncAction } from '../../../hooks/useAsyncAction'
+import { usePlacementConfig } from '../../../hooks/placement/usePlacementConfig'
+import { useProjectLayers } from '../../../hooks/capping/useProjectLayers'
+import { useAsyncAction } from '../../../hooks/ui/useAsyncAction'
 import { readWrittenRecordId } from '../../../data'
 import { loadAttachmentImage, loadPublicImage } from '../../../lib/dredge/imageLoaders'
 import { prepareGrid, validatePlacementGrid } from '../../../lib/placement/grid'
 import { buildLiftPalette, renderPlacementChart } from '../../../lib/placement/chart'
 import { loadPlacementGrid, loadPlacementReferenceLines } from '../../../lib/placement/loaders'
-import { useStagedFiles } from './hooks/useStagedFiles'
+import { useStagedFiles } from '../../../hooks/ui/useStagedFiles'
 
 const PLACEMENT_CONFIG_DOMAIN = 'jfb_placement_config'
 

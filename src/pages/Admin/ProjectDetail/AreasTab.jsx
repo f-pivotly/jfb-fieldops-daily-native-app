@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Box, Text, Group, Button, Modal, TextInput, NumberInput, Textarea, Checkbox, Stack } from "@mantine/core";
 import { IconPlus, IconFolder, IconRefresh } from "@tabler/icons-react";
-import { useConfirmDialog } from "../../../hooks/useConfirmDialog";
-import { useProjectAreas } from "../../../hooks/useProjectAreas";
-import { useAreaLevels } from "../../../hooks/useAreaLevels";
+import { useConfirmDialog } from "../../../hooks/ui/useConfirmDialog";
+import { useProjectAreas } from "../../../hooks/project/useProjectAreas";
+import { useAreaLevels } from "../../../hooks/project/useAreaLevels";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import SafeError from "../../../components/SafeError";
 

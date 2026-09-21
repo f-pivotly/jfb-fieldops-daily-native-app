@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { Box, Text, Group, Button, Modal, Select, Checkbox, Avatar, SegmentedControl } from "@mantine/core";
 import { IconPlus, IconRefresh } from "@tabler/icons-react";
-import { useDomainData } from "../../../hooks/useDomainData";
-import { useConfirmDialog } from "../../../hooks/useConfirmDialog";
+import { useDomainData } from "../../../hooks/core/useDomainData";
+import { useConfirmDialog } from "../../../hooks/ui/useConfirmDialog";
 import { useDomainAccess } from "../../../contexts/adminAccessContext";
-import { useRoleUsers } from "../../../hooks/useRoleUsers";
-import { useRoleByCode } from "../../../hooks/useRoleByCode";
+import { useRoleUsers } from "../../../hooks/iam/useRoleUsers";
+import { useRoleByCode } from "../../../hooks/iam/useRoleByCode";
 
 const PE_ROLE_CODE = "jfb_project_engineers";
 const PM_ROLE_CODE = "jfb_project_managers";

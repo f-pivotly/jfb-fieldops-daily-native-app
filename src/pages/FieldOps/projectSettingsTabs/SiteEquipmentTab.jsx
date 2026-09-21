@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { Box, Text, Group, Button, Modal, TextInput, NumberInput, Select, Table } from '@mantine/core'
 import { IconPencil, IconTrash, IconRefresh } from '@tabler/icons-react'
-import { useProjectSiteEquipment } from '../../../hooks/useProjectSiteEquipment'
-import { usePicklist } from '../../../hooks/usePicklist'
-import { useConfirmDialog } from '../../../hooks/useConfirmDialog'
+import { useProjectSiteEquipment } from '../../../hooks/project/useProjectSiteEquipment'
+import { usePicklist } from '../../../hooks/core/usePicklist'
+import { useConfirmDialog } from '../../../hooks/ui/useConfirmDialog'
 import LoadingSpinner from '../../../components/LoadingSpinner'
 import SafeError from '../../../components/SafeError'
 

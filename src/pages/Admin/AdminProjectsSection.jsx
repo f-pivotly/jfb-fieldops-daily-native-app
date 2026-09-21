@@ -13,9 +13,9 @@ import {
   SimpleGrid,
 } from "@mantine/core";
 import { IconPlus, IconRefresh } from "@tabler/icons-react";
-import { useDomainData } from "../../hooks/useDomainData";
+import { useDomainData } from "../../hooks/core/useDomainData";
 import { readWrittenRecordId } from "../../data";
-import { usePicklist } from "../../hooks/usePicklist";
+import { usePicklist } from "../../hooks/core/usePicklist";
 import { useDomainAccess } from "../../contexts/adminAccessContext";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import SafeError from "../../components/SafeError";

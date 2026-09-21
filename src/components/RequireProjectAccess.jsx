@@ -1,6 +1,6 @@
 import { useParams, Navigate } from "react-router-dom";
 import { Box, Loader } from "@mantine/core";
-import { useVisibleProjects } from "../hooks/useVisibleProjects";
+import { useVisibleProjects } from "../hooks/project/useVisibleProjects";
 
 export default function RequireProjectAccess({ children }) {
   const { projectId } = useParams();

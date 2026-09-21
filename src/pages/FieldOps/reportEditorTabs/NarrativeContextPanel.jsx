@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Box, Text, Stack, Group, UnstyledButton } from '@mantine/core'
 import { IconChevronDown, IconChevronRight } from '@tabler/icons-react'
-import { useNarrativeContext } from './hooks/useNarrativeContext'
+import { useNarrativeContext } from '../../../hooks/report/useNarrativeContext'
 
 const AUTO_GAP_CATEGORY = 'STARTUP/SHUTDOWN'
 const LABEL_COLOR = '#374151'

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Box, Text, Group, Button, Table, Modal, TextInput, NumberInput, Checkbox } from "@mantine/core";
-import { useDomainData } from "../../../hooks/useDomainData";
-import { useConfirmDialog } from "../../../hooks/useConfirmDialog";
+import { useDomainData } from "../../../hooks/core/useDomainData";
+import { useConfirmDialog } from "../../../hooks/ui/useConfirmDialog";
 import { useAppConfig } from "../../../contexts/appConfigContext";
 import { createDomainRecord } from "../../../data";
 import LoadingSpinner from "../../../components/LoadingSpinner";

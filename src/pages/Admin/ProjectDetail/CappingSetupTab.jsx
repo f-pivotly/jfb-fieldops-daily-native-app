@@ -1,16 +1,16 @@
 import { useState } from "react";
 import { Box, Text, Group, Button, Modal, TextInput, Select, NumberInput, Switch, Stack, UnstyledButton } from "@mantine/core";
 import { IconPlus } from "@tabler/icons-react";
-import { useCrudModal } from "../../../hooks/useCrudModal";
-import { useDomainData } from "../../../hooks/useDomainData";
-import { useProjectAreas } from "../../../hooks/useProjectAreas";
-import { useAreaLevels } from "../../../hooks/useAreaLevels";
-import { useProjectLayers } from "../../../hooks/useProjectLayers";
-import { useProjectMaterials } from "../../../hooks/useProjectMaterials";
-import { useProjectComponents } from "../../../hooks/useProjectComponents";
-import { useProjectAreaLayers } from "../../../hooks/useProjectAreaLayers";
-import { useProjectLayerMaterials } from "../../../hooks/useProjectLayerMaterials";
-import { useProjectMaterialComponents } from "../../../hooks/useProjectMaterialComponents";
+import { useCrudModal } from "../../../hooks/ui/useCrudModal";
+import { useDomainData } from "../../../hooks/core/useDomainData";
+import { useProjectAreas } from "../../../hooks/project/useProjectAreas";
+import { useAreaLevels } from "../../../hooks/project/useAreaLevels";
+import { useProjectLayers } from "../../../hooks/capping/useProjectLayers";
+import { useProjectMaterials } from "../../../hooks/capping/useProjectMaterials";
+import { useProjectComponents } from "../../../hooks/capping/useProjectComponents";
+import { useProjectAreaLayers } from "../../../hooks/project/useProjectAreaLayers";
+import { useProjectLayerMaterials } from "../../../hooks/capping/useProjectLayerMaterials";
+import { useProjectMaterialComponents } from "../../../hooks/capping/useProjectMaterialComponents";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import SafeError from "../../../components/SafeError";
 

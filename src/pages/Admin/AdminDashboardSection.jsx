@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Box, Text, SimpleGrid, Table } from "@mantine/core";
-import { useDomainData } from "../../hooks/useDomainData";
+import { useDomainData } from "../../hooks/core/useDomainData";
 import { useAppConfig } from "../../contexts/appConfigContext";
 import { fetchDomainRecords } from "../../data";
 import LoadingSpinner from "../../components/LoadingSpinner";
