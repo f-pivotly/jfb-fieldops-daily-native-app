@@ -1,0 +1,41 @@
+{
+  "slug": "dvw-jfb-metric-tons-v2",
+  "description": "Sums jfb_production_stats.tons for a project across an inclusive report_date range, optionally scoped to one equipment unit. Backs the 'Total Tons Placed' auto metric on the cover-page Metrics tab for capping/placement projects, where tons off the scale are the primary quantity and CY is derived from tons / conversion_factor. Matches the non-native app's auto_tons source (sum of production_stats.tons, filtered by equipment when set). Auto metrics are never persisted -- app code calls this once per Day/Week/Total column with a different date range rather than storing a result.",
+  "authoring_mode": "direct_sql",
+  "implementation": "function",
+  "direct_sql": "SELECT COALESCE(SUM(ps.tons), 0) AS total_tons FROM usdf.jfb_production_stats ps JOIN usdf.jfb_reports r ON r.id = ps.report_id WHERE r.project_id = p_project_id AND r.report_date BETWEEN p_start_date AND p_end_date AND (p_equipment_id IS NULL OR ps.equipment_id = p_equipment_id)",
+  "parameters": [
+    {
+      "description": "Project to scope the sum to.",
+      "name": "p_project_id",
+      "required": true,
+      "type": "uuid"
+    },
+    {
+      "description": "Inclusive start of the report_date range -- today's date for Day, the week's start for Week, the project's start date (or a very early date) for Total.",
+      "name": "p_start_date",
+      "required": true,
+      "type": "date"
+    },
+    {
+      "description": "Inclusive end of the report_date range -- typically the report date being viewed.",
+      "name": "p_end_date",
+      "required": true,
+      "type": "date"
+    },
+    {
+      "default": null,
+      "description": "Optional equipment filter, matching the old app's equipment_filter column. Null (the default) includes all equipment.",
+      "name": "p_equipment_id",
+      "required": false,
+      "type": "uuid"
+    }
+  ],
+  "columns": [
+    {
+      "name": "total_tons",
+      "type": "numeric",
+      "description": "Summed tons across matched production_stats rows; 0 when none match."
+    }
+  ]
+}

@@ -1,0 +1,80 @@
+{
+  "slug": "dvw-jfb-narrative-context-events-v2",
+  "description": "Per-equipment daily event detail for the Narratives tab context panel: one row per non-deleted jfb_daily_activities event on the given project+date, with equipment name, duration, operational/delay classification, resolved delay label (2-tier: master code else project-custom code), raw pass_type, and resolved area path. Callers group by equipment_id client-side to compute Op/Delay hour totals and render the event list -- production stats (CY/SF) are fetched separately via the existing jfb_production_stats domain read, not part of this view.",
+  "authoring_mode": "direct_sql",
+  "implementation": "function",
+  "direct_sql": "SELECT da.id AS event_id, da.equipment_id, eq.name AS equipment_name, da.start_date_time, da.end_date_time, EXTRACT(EPOCH FROM (da.end_date_time - da.start_date_time)) / 3600.0 AS duration_hours, (da.delay_code_id IS NULL) AS is_operational, COALESCE(dc_master.code, pdc.code) AS delay_label, da.pass_type, da.category, NULLIF(concat_ws(' › ', a1.name, a2.name, a3.name), '') AS area_label FROM usdf.jfb_daily_activities da JOIN usdf.jfb_equipments eq ON eq.id = da.equipment_id AND eq.is_deleted IS NOT TRUE LEFT JOIN usdf.jfb_project_delay_codes pdc ON pdc.id = da.delay_code_id AND pdc.is_deleted IS NOT TRUE LEFT JOIN usdf.jfb_delay_codes dc_master ON dc_master.id = pdc.delay_code_id AND dc_master.is_deleted IS NOT TRUE LEFT JOIN usdf.jfb_project_areas a1 ON a1.id = (da.area->>'area_id')::uuid LEFT JOIN usdf.jfb_project_areas a2 ON a2.id = (da.area->>'sub_area_id')::uuid LEFT JOIN usdf.jfb_project_areas a3 ON a3.id = (da.area->>'sub_sub_area_id')::uuid WHERE da.is_deleted IS NOT TRUE AND da.project_id = p_project_id AND da.start_date_time::date = p_report_date ORDER BY da.equipment_id, da.start_date_time",
+  "parameters": [
+    {
+      "name": "p_project_id",
+      "type": "uuid",
+      "default": null,
+      "required": true,
+      "description": "Project to fetch context for."
+    },
+    {
+      "name": "p_report_date",
+      "type": "date",
+      "default": null,
+      "required": true,
+      "description": "Report date (YYYY-MM-DD) to fetch events for."
+    }
+  ],
+  "columns": [
+    {
+      "name": "event_id",
+      "type": "uuid",
+      "description": "jfb_daily_activities.id"
+    },
+    {
+      "name": "equipment_id",
+      "type": "uuid",
+      "description": "jfb_equipments.id"
+    },
+    {
+      "name": "equipment_name",
+      "type": "text",
+      "description": "Equipment name."
+    },
+    {
+      "name": "start_date_time",
+      "type": "timestamptz",
+      "description": "Event start."
+    },
+    {
+      "name": "end_date_time",
+      "type": "timestamptz",
+      "description": "Event end."
+    },
+    {
+      "name": "duration_hours",
+      "type": "numeric",
+      "description": "Event duration in hours, unrounded. The caller rounds for display but sums the full-precision values, so its Op/Delay totals match the non-native app, which sums daily_events.duration_hours the same way; rounding each event first shifted 0.01 h between the two totals."
+    },
+    {
+      "name": "is_operational",
+      "type": "boolean",
+      "description": "True when delay_code_id is null (productive time)."
+    },
+    {
+      "name": "delay_label",
+      "type": "text",
+      "description": "Delay code label -- master jfb_delay_codes.code if linked, else the project-custom jfb_project_delay_codes.code. Null when is_operational is true."
+    },
+    {
+      "name": "pass_type",
+      "type": "text",
+      "description": "Raw pkl-jfb-pass-type value (e.g. startup, active_dredging) -- caller resolves the label client-side. Null for delay events."
+    },
+    {
+      "name": "category",
+      "type": "text",
+      "description": "Raw jfb_daily_activities.category (e.g. ACTIVE PLACEMENT, a delay-code label, or STARTUP/SHUTDOWN). The panel greys out STARTUP/SHUTDOWN rows as auto-filled gap events, matching the non-native app's eventSource() rule."
+    },
+    {
+      "name": "area_label",
+      "type": "text",
+      "description": "Resolved area path (Area › Sub-area › Sub-sub-area), null segments omitted, matching the non-native app's ' › ' separator. Null when no area is set."
+    }
+  ]
+}
