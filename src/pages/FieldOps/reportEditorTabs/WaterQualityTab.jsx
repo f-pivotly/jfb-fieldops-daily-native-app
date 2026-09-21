@@ -5,6 +5,7 @@ import { useWaterMonitoringConfig } from '../../../hooks/monitoring/useWaterMoni
 import { useWaterQualityReadings } from '../../../hooks/monitoring/useWaterQualityReadings'
 import { useWaterMonitoringNotes } from '../../../hooks/monitoring/useWaterMonitoringNotes'
 import { useWaterMonitoringNotesForm } from '../../../hooks/monitoring/useWaterMonitoringNotesForm'
+import { isDirectImageUrl } from '../../../lib/imageSource'
 import { useAttachmentField } from '../../../hooks/ui/useAttachmentField'
 import { buildTurbidityDay } from '../../../lib/waterQuality/data'
 import { renderTurbidityChart } from '../../../lib/waterQuality/chart'
@@ -34,8 +35,9 @@ export default function WaterQualityTab({ project, report }) {
   const [coordSaving, setCoordSaving] = useState(false)
   const [savedAt, setSavedAt] = useState(null)
   const [saveError, setSaveError] = useState(null)
+  const aerialIsUrl = isDirectImageUrl(config?.aerial_path)
   const aerial = useAttachmentField({
-    existingFileId: config?.aerial_path,
+    existingFileId: aerialIsUrl ? null : config?.aerial_path,
     ensureRecordId: config?.id,
     updateRecord: updateConfig,
     domain: 'jfb_water_monitoring_config',
@@ -44,6 +46,7 @@ export default function WaterQualityTab({ project, report }) {
     onSaved: () => setSavedAt(new Date()),
     onError: setSaveError,
   })
+  const aerialSrc = aerialIsUrl ? config.aerial_path : aerial.url
   const loadError = configError || readingsError || notesHook.error
   const displayError = saveError || loadError
 
@@ -147,10 +150,10 @@ export default function WaterQualityTab({ project, report }) {
         </Box>
       )}
 
-      <Group align="flex-start" grow wrap="wrap">
+      <Group align="flex-start" wrap="wrap">
         {}
         <Box style={{ flex: '3 1 480px', border: '1px solid var(--mantine-color-gray-3)', borderRadius: 6, overflow: 'hidden' }}>
-          <Box style={{ maxHeight: 480, overflowY: 'auto' }}>
+          <Box style={{ maxHeight: 540, overflowY: 'auto' }}>
             <Table withTableBorder={false} verticalSpacing={4} fz="sm" stickyHeader>
               <Table.Thead bg="gray.0">
                 <Table.Tr>
@@ -180,8 +183,8 @@ export default function WaterQualityTab({ project, report }) {
         <Stack style={{ flex: '2 1 320px' }} gap="md">
           {}
           <Box p="xs" style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 6 }}>
-            {aerial.url ? (
-              <Image src={aerial.url} alt="Aerial site map with monitor locations" fit="contain" />
+            {aerialSrc ? (
+              <Image src={aerialSrc} alt="Aerial site map with monitor locations" fit="contain" />
             ) : (
               <Box style={{ border: '1px dashed var(--mantine-color-gray-4)', borderRadius: 6, padding: 24, textAlign: 'center' }}>
                 <Text size="xs" c="dimmed" fs="italic">No aerial site map uploaded yet.</Text>
@@ -192,7 +195,7 @@ export default function WaterQualityTab({ project, report }) {
                 {(props) => {
                   let label = 'Upload aerial image'
                   if (aerial.uploading) label = 'Uploading...'
-                  else if (aerial.url) label = 'Replace aerial image'
+                  else if (aerialSrc) label = 'Replace aerial image'
                   return (
                     <Button {...props} variant="default" size="compact-xs" loading={aerial.uploading}>
                       {label}

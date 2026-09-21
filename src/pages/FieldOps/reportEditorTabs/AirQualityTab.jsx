@@ -9,6 +9,8 @@ import { useAirMonitoringDailyForm } from '../../../hooks/monitoring/useAirMonit
 import { buildAirDay } from '../../../lib/airQuality/data'
 import { buildAirChartSpecs, renderAirChart } from '../../../lib/airQuality/chart'
 
+import { isDirectImageUrl } from '../../../lib/imageSource'
+
 function useAttachmentImageUrl(fileId) {
   const [resolved, setResolved] = useState({ fileId: null, url: null })
   useEffect(() => {
@@ -50,7 +52,9 @@ export default function AirQualityTab({ project, report }) {
   const [saveError, setSaveError] = useState(null)
   const loadError = configError || readingsError || dailyHook.error
   const displayError = saveError || loadError
-  const aerialUrl = useAttachmentImageUrl(config?.aerial_path)
+  const aerialIsUrl = isDirectImageUrl(config?.aerial_path)
+  const aerialFileUrl = useAttachmentImageUrl(aerialIsUrl ? null : config?.aerial_path)
+  const aerialUrl = aerialIsUrl ? config.aerial_path : aerialFileUrl
 
   const dailyKey = `${report?.id ?? 'none'}|${dailyHook.daily?.id ?? 'none'}`
   const [prevDailyKey, setPrevDailyKey] = useState(dailyKey)

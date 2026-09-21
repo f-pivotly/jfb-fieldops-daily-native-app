@@ -2,6 +2,7 @@ import { Table, TextInput, Text, Badge, Box, Group, Button, Modal, Select, Stack
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { IconSettings, IconTrash } from '@tabler/icons-react'
 import { useMetricSources } from '../../../hooks/metrics/useMetricSources'
+import { useEquipment } from '../../../hooks/project/useEquipment'
 import { useMetricDefaults } from '../../../hooks/metrics/useMetricDefaults'
 import { useMetrics } from '../../../hooks/metrics/useMetrics'
 import { useReports } from '../../../hooks/report/useReports'
@@ -106,6 +107,7 @@ export default function MetricsTab({ project, report, equipment = [] }) {
   const canManageSourceType = useFieldOpsAction('manage_metric_source_type')
   const canManageMetrics = canCreate || canUpdate
 
+  const { equipment: projectEquipment } = useEquipment(project?.id)
   const { metricSources } = useMetricSources()
   const activeSources = metricSources.filter((m) => m.active !== false)
   const sourceValues = activeSources.map((m) => m.value)
@@ -114,6 +116,9 @@ export default function MetricsTab({ project, report, equipment = [] }) {
   const { metrics, loading: metricsLoading, create, update, remove, reload } = useMetrics(project?.id)
   const [rows, setRows, resetSeeded] = useSeededMetricRows({ metrics, metricDefaults, metricsLoading, defaultsLoading })
   const visible = rows.filter((r) => !r.hidden)
+  const equipmentNameById = new Map((projectEquipment ?? []).map((e) => [e.id, e.name]))
+  const hasAutoRow = visible.some((r) => r.source === 'Auto')
+  const hasManualRow = visible.some((r) => r.source === 'Manual')
   const { reports } = useReports(project?.id)
   const {
     reportMetricValues,
@@ -220,7 +225,12 @@ export default function MetricsTab({ project, report, equipment = [] }) {
             const auto = r.source === 'Auto' ? autoValues[r.key] : null
             return (
               <Table.Tr key={r.key}>
-                <Table.Td>{r.label}</Table.Td>
+                <Table.Td>
+                  <Text size="sm">{r.label}</Text>
+                  {r.equipmentId && equipmentNameById.has(r.equipmentId) && (
+                    <Text size="11px" c="dimmed">For {equipmentNameById.get(r.equipmentId)} only</Text>
+                  )}
+                </Table.Td>
                 <Table.Td>
                   <Badge size="xs" variant="light" color={r.source === 'Auto' ? 'blue' : 'gray'}>
                     <SourceLabel r={r} sourceLabels={sourceLabels} />
@@ -240,6 +250,14 @@ export default function MetricsTab({ project, report, equipment = [] }) {
           })}
         </Table.Tbody>
       </Table>
+
+      {visible.length > 0 && (
+        <Text size="11px" c="dimmed" mt={8}>
+          {hasAutoRow && 'Auto metrics are calculated from the event log and production stats. '}
+          {hasManualRow && 'Manual rows save 2 seconds after the last keystroke. '}
+          Week resets each Sunday; Total runs from project start.
+        </Text>
+      )}
 
       <MetricsManagerDialog
         opened={managerOpen}
