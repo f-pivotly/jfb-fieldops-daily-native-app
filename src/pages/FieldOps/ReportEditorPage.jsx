@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { Box, ScrollArea, Grid, Text, Badge, Checkbox, Group, Stack, Button, Tabs } from '@mantine/core'
 import { REPORT_STATUS_LABEL, REPORT_STATUS_COLOR } from '../../config/reportStatus'
@@ -6,6 +6,7 @@ import { shouldShowDredgeProgress } from '../../config/dredgeProgress'
 import { shouldShowPlacementProgress } from '../../config/placementProgress'
 import { shouldShowSpreaderProgress } from '../../config/spreaderProgress'
 import { pickDensity } from './lib/coverDensity'
+import { equipmentForReport } from './lib/workType'
 import { downloadAndLogReport } from './lib/reportDownload'
 import { useProject } from '../../hooks/useProject'
 import { useReports } from '../../hooks/useReports'
@@ -40,6 +41,8 @@ import PlacementProgressTab from './reportEditorTabs/PlacementProgressTab'
 import SpreaderProgressTab from './reportEditorTabs/SpreaderProgressTab'
 import WaterQualityTab from './reportEditorTabs/WaterQualityTab'
 import AirQualityTab from './reportEditorTabs/AirQualityTab'
+
+const NO_EQUIPMENT_ID = '00000000-0000-0000-0000-000000000000'
 
 const CONTENT_TABS = [
   { key: 'event_log', label: 'Event Log', Comp: EventLogTab },
@@ -85,7 +88,8 @@ export default function ReportEditorPage() {
     })
   }, [project, reportsLoading, report, date, ensureReport])
 
-  const { equipment } = useEquipment(projectId)
+  const { equipment: projectEquipment } = useEquipment(projectId)
+  const equipment = useMemo(() => equipmentForReport(projectEquipment, date), [projectEquipment, date])
   const mobDay = report?.no_production_day ?? false
   const [selectedEquipment, setSelectedEquipment] = useState(null)
   const [tab, setTab] = useState('event_log')
@@ -93,7 +97,7 @@ export default function ReportEditorPage() {
   const [checklist, setChecklist] = useState(null)
   const [pdfIssues, setPdfIssues] = useState(null)
   const canSkipPdfValidation = useFieldOpsAction('skip_pdf_validation')
-  const effectiveEquipmentId = selectedEquipment ?? equipment[0]?.id ?? null
+  const effectiveEquipmentId = equipment.some((eq) => eq.id === selectedEquipment) ? selectedEquipment : equipment[0]?.id ?? null
   const effectiveEquipment = equipment.find((eq) => eq.id === effectiveEquipmentId) ?? null
   const canDownloadPdf = status === 'approved' || status === 'released'
   const canSubmitForReview = status === 'draft'
@@ -197,7 +201,7 @@ export default function ReportEditorPage() {
           noProductionDay: !!report?.no_production_day,
           projectFilter: { id: projectId },
           reportFilter: { report_id: reportId },
-          equipmentFilter: { project_id: projectId },
+          equipmentFilter: { project_id: projectId, id: equipment.length > 0 ? equipment.map((eq) => eq.id) : [NO_EQUIPMENT_ID] },
           narrativeSections,
           dailyActivityByEquipment,
           delaySummaryByEquipment,
@@ -277,15 +281,10 @@ export default function ReportEditorPage() {
                 </Button>
               )}
 
-              {canUnlock && (
-                <Button size="xs" variant="default" loading={reportSaving} onClick={handleUnlock}>
-                  Unlock
-                </Button>
-              )}
-
               <Checkbox
                 size="xs"
                 label="Mobilization day (no production)"
+                description="Skips event log / production stats / metrics checks, and omits per-equipment production sheets from the PDF."
                 checked={mobDay}
                 onChange={(e) => handleToggleNoProduction(e.currentTarget.checked)}
               />
@@ -358,6 +357,12 @@ export default function ReportEditorPage() {
                     </Box>
                   )}
                 </Stack>
+              )}
+
+              {canUnlock && (
+                <Button size="xs" variant="default" loading={reportSaving} onClick={handleUnlock}>
+                  Unlock for Edit
+                </Button>
               )}
             </Stack>
           </Grid.Col>

@@ -6,11 +6,16 @@ import { useProject } from '../../hooks/useProject'
 import { useReports } from '../../hooks/useReports'
 import { useFieldOpsAction } from '../../contexts/fieldOpsAccessContext'
 import { executeDataView } from '../../data'
-import { todayISO, addDaysISO } from './lib/realizedToDate'
+import { todayISO, addDaysISO, prettyDate } from './lib/realizedToDate'
 import { isoCalWeek, projectWeekNumber } from './lib/reportPdfData'
 import { WARNING_BG } from './reportEditorTabs/components/WarningBanner'
 
 const DAY_LABEL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+
+function isSaturday(dateISO) {
+  const [y, m, d] = String(dateISO).split('-').map(Number)
+  return new Date(y, m - 1, d).getDay() === 6
+}
 
 function dayOf(dateISO) {
   const d = new Date(`${dateISO}T00:00:00Z`)
@@ -184,7 +189,7 @@ export default function ReportListPage() {
                   >
                     <Table.Td>
                       <Text component={Link} to={`/projects/${projectId}/reports/${r.date}`} fw={500} size="sm">
-                        {r.date}
+                        {prettyDate(r.date)}
                       </Text>
                     </Table.Td>
                     <Table.Td>{r.day}</Table.Td>
@@ -196,7 +201,7 @@ export default function ReportListPage() {
                       )}
                     </Table.Td>
                     <Table.Td ta="right">
-                      {r.kind === 'report' && r.status === 'released' && (
+                      {r.kind === 'report' && r.status === 'released' && isSaturday(r.date) && (
                         <Text
                           component={Link}
                           to={`/projects/${projectId}/realized`}

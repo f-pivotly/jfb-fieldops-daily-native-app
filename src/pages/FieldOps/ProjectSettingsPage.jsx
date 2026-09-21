@@ -4,7 +4,7 @@ import { Box, ScrollArea, Text, Group, Tabs, TextInput, Button } from '@mantine/
 import { useProject } from '../../hooks/useProject'
 import { useEquipment } from '../../hooks/useEquipment'
 import { useRealizedExcludedDays } from '../../hooks/useRealizedExcludedDays'
-import { shouldShowDredgeProgress } from '../../config/dredgeProgress'
+import { projectShowsDredgeChart } from '../../config/dredgeProgress'
 import { isPlacementEquipment } from '../../config/placementProgress'
 import ScheduledOffDaysCard from '../../components/ScheduledOffDaysCard'
 import { todayISO } from './lib/realizedToDate'
@@ -21,7 +21,7 @@ export default function ProjectSettingsPage() {
   const { project, update: updateProject } = useProject(projectId)
   const { equipment } = useEquipment(projectId)
   const { excludedDays, create: createExcluded, remove: removeExcluded } = useRealizedExcludedDays(projectId)
-  const isDredging = shouldShowDredgeProgress(project)
+  const isDredging = projectShowsDredgeChart(project)
   // The project's own default work_type isn't enough here -- a project
   // defaulting to dredging can still have specific equipment (e.g. a
   // capping barge) individually pinned to placement via that equipment's
@@ -45,10 +45,6 @@ export default function ProjectSettingsPage() {
         </Box>
 
         <Box mb={16}>
-          <CappingSettingsCard project={project} onSave={updateProject} />
-        </Box>
-
-        <Box mb={16}>
           <ScheduledOffDaysCard
             projectId={projectId}
             excludedDays={excludedDays}
@@ -56,6 +52,10 @@ export default function ProjectSettingsPage() {
             onCreate={createExcluded}
             onRemove={removeExcluded}
           />
+        </Box>
+
+        <Box mb={16}>
+          <CappingSettingsCard project={project} onSave={updateProject} />
         </Box>
 
         <Tabs defaultValue="narratives">
@@ -180,6 +180,7 @@ function ProductionPlanCard({ project, onSave }) {
 
 function CappingSettingsCard({ project, onSave }) {
   const [factor, setFactor] = useState('')
+  const [tonsGoal, setTonsGoal] = useState('')
   const [saving, setSaving] = useState(false)
   const [savedAt, setSavedAt] = useState(null)
   const [error, setError] = useState(null)
@@ -188,6 +189,7 @@ function CappingSettingsCard({ project, onSave }) {
   if (project?.id && syncedFor !== project.id) {
     setSyncedFor(project.id)
     setFactor(project.cap_conversion_factor != null ? String(project.cap_conversion_factor) : '')
+    setTonsGoal(project.tons_goh_goal != null ? String(project.tons_goh_goal) : '')
   }
 
   useEffect(() => {
@@ -198,10 +200,12 @@ function CappingSettingsCard({ project, onSave }) {
 
   async function save() {
     if (!project?.id) return
-    const trimmed = factor.trim()
-    const factorN = trimmed === '' ? null : Number(trimmed)
-    if (factorN != null && !Number.isFinite(factorN)) {
-      setError('Enter a valid number.')
+    const factorTrimmed = factor.trim()
+    const tonsTrimmed = tonsGoal.trim()
+    const factorN = factorTrimmed === '' ? null : Number(factorTrimmed)
+    const tonsN = tonsTrimmed === '' ? null : Number(tonsTrimmed)
+    if ((factorN != null && !Number.isFinite(factorN)) || (tonsN != null && !Number.isFinite(tonsN))) {
+      setError('Enter valid numbers.')
       return
     }
     if (factorN != null && factorN <= 0) {
@@ -211,7 +215,7 @@ function CappingSettingsCard({ project, onSave }) {
     setSaving(true)
     setError(null)
     try {
-      await onSave(project.id, { cap_conversion_factor: factorN })
+      await onSave(project.id, { cap_conversion_factor: factorN, tons_goh_goal: tonsN })
       setSavedAt(Date.now())
     } catch (e) {
       setError(e.message)
@@ -229,7 +233,7 @@ function CappingSettingsCard({ project, onSave }) {
       <Text size="xs" c="dimmed" mb={10}>
         Tons → CY conversion factor (CY = tons ÷ factor). Pre-fills the capping daily entry; the
         value used is snapshotted onto each production row, so updating it here only affects
-        future rows.
+        future rows. Update + re-test as sand composition changes.
       </Text>
       <Group align="flex-end" gap="md">
         <TextInput
@@ -237,6 +241,12 @@ function CappingSettingsCard({ project, onSave }) {
           placeholder="e.g. 1.35"
           value={factor}
           onChange={(e) => { const v = e.currentTarget.value; setFactor(v) }}
+        />
+        <TextInput
+          label="Bid goal (tons/GOH)" size="xs" type="number" w={180}
+          placeholder="e.g. 25"
+          value={tonsGoal}
+          onChange={(e) => { const v = e.currentTarget.value; setTonsGoal(v) }}
         />
         <Button size="xs" loading={saving} onClick={save} style={{ background: '#0F2744', border: 'none' }}>Save</Button>
       </Group>

@@ -4,6 +4,7 @@ import { buildCombosFromActivities, comboNOH, isUnassigned } from '../../../lib/
 import { equipmentWorkType, isProductiveActivity } from './workType'
 import { prettyDate, blobToDataUri, fmtNum, fmtHrs } from './realizedToDate'
 import { UNATTRIBUTED_CATEGORY, shiftTotals } from './eventTotals'
+import { metricValueKey } from '../../../lib/metricValueKey'
 
 function isCappingEquipment(project, equipment, dateISO) {
   return equipmentWorkType(project, equipment, dateISO).toLowerCase().includes('cap')
@@ -811,9 +812,9 @@ export async function buildFlowAndPipeByEquipmentParam({ appSlug, projectId, dat
     const hasTodayValue = !!todaysRow && (todaysRow.avg_line_velocity != null || todaysRow.avg_flow_rate != null || todaysRow.daily_total_gal != null)
     if (!hasTodayValue && !hasHistory) continue
 
-    const projectTotalGal = rows
-      .filter((r) => dateOnlyPdf(r.log_date) <= dateISO)
-      .reduce((a, r) => a + (Number(r.daily_total_gal) || 0), 0)
+    // Whole history, every date -- same as the non-native app's buildFlowStats,
+    // which sums fetchProjectFlowHistory unbounded.
+    const projectTotalGal = rows.reduce((a, r) => a + (Number(r.daily_total_gal) || 0), 0)
     const dailyTotalGal = Number(todaysRow?.daily_total_gal) || 0
 
     flowStatsByEquipment[equipmentId] = {
@@ -1002,9 +1003,10 @@ export async function buildCompletionChecklist({ appSlug, projectId, reportId, d
   const productionEntered = production.filter((p) => p.volume !== null && p.volume !== undefined).length
 
   const manualMetrics = (metricsRes?.data ?? []).filter((m) => m.source === 'manual' && m.active !== false)
-  const manualMetricIds = new Set(manualMetrics.map((m) => m.id))
+  const manualMetricKeys = new Set(manualMetrics.map((m) => m.metric_key).filter(Boolean))
+  const metricKeyById = Object.fromEntries((metricsRes?.data ?? []).map((m) => [m.id, m.metric_key]))
   const metricValues = (metricValuesRes?.data ?? []).filter(
-    (v) => manualMetricIds.has(v.metric_id) && v.value !== null && v.value !== undefined && v.value !== '',
+    (v) => manualMetricKeys.has(metricValueKey(v, metricKeyById)) && v.value !== null && v.value !== undefined && v.value !== '',
   )
 
   const narrativesFilled = narrativeSections.filter((s) => s.content.trim().length > 0).length

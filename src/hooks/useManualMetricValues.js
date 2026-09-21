@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { metricValueKey } from '../lib/metricValueKey'
 
 const DEBOUNCE_MS = 2000
 
@@ -12,7 +13,7 @@ function startOfWeek(dateStr) {
   return toISODate(d)
 }
 
-export function useManualMetricValues({ project, report, reports, reportMetricValues, create, update, reload }) {
+export function useManualMetricValues({ project, report, reports, metrics, reportMetricValues, create, update, reload }) {
   const [drafts, setDrafts] = useState({})
   const timersRef = useRef(new Map())
   const pendingRef = useRef(new Map())
@@ -21,29 +22,41 @@ export function useManualMetricValues({ project, report, reports, reportMetricVa
     () => Object.fromEntries(reports.map((r) => [r.id, r.report_date])),
     [reports],
   )
+  const metricKeyById = useMemo(
+    () => Object.fromEntries((metrics ?? []).map((m) => [m.id, m.metric_key])),
+    [metrics],
+  )
+  const latestRef = useRef({ report, reportMetricValues, metricKeyById })
+  useEffect(() => {
+    latestRef.current = { report, reportMetricValues, metricKeyById }
+  })
+
   const endDate = report?.report_date
   const weekStart = endDate ? startOfWeek(endDate) : null
   const totalStartDate = project?.start_date ? project.start_date.slice(0, 10) : '1900-01-01'
 
-  async function persist(metricId, value) {
-    if (!report?.id) return
-    const existing = reportMetricValues.find((v) => v.report_id === report.id && v.metric_id === metricId)
+  async function persist(metricKey, metricId, value) {
+    const { report: currentReport, reportMetricValues: values, metricKeyById: keyById } = latestRef.current
+    if (!currentReport?.id || !metricKey) return
+    const existing = values.find(
+      (v) => v.report_id === currentReport.id && metricValueKey(v, keyById) === metricKey,
+    )
     if (existing) {
-      await update(existing.id, { value })
+      await update(existing.id, { value, metric_key: metricKey, metric_id: metricId })
     } else {
-      await create({ report_id: report.id, metric_id: metricId, value })
+      await create({ report_id: currentReport.id, metric_id: metricId, metric_key: metricKey, value })
     }
     await reload()
   }
 
-  function flush(metricId) {
-    const timer = timersRef.current.get(metricId)
+  function flush(metricKey) {
+    const timer = timersRef.current.get(metricKey)
     if (!timer) return
     clearTimeout(timer)
-    timersRef.current.delete(metricId)
-    const entry = pendingRef.current.get(metricId)
-    pendingRef.current.delete(metricId)
-    if (entry) void persist(metricId, entry.value)
+    timersRef.current.delete(metricKey)
+    const entry = pendingRef.current.get(metricKey)
+    pendingRef.current.delete(metricKey)
+    if (entry) void persist(metricKey, entry.metricId, entry.value)
   }
 
   useEffect(() => {
@@ -52,34 +65,34 @@ export function useManualMetricValues({ project, report, reports, reportMetricVa
       timersRef.current.forEach((t) => clearTimeout(t))
       timersRef.current.clear()
       pendingRef.current.clear()
-      pending.forEach((entry, metricId) => { void persist(metricId, entry.value) })
+      pending.forEach((entry, metricKey) => { void persist(metricKey, entry.metricId, entry.value) })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  function onManualChange(metricId, raw) {
-    setDrafts((prev) => ({ ...prev, [metricId]: raw }))
+  function onManualChange(metricKey, metricId, raw) {
+    setDrafts((prev) => ({ ...prev, [metricKey]: raw }))
     const trimmed = raw.trim()
     const num = trimmed === '' ? null : Number(trimmed)
     const value = Number.isFinite(num) ? num : null
 
-    const existingTimer = timersRef.current.get(metricId)
+    const existingTimer = timersRef.current.get(metricKey)
     if (existingTimer) clearTimeout(existingTimer)
-    pendingRef.current.set(metricId, { value })
+    pendingRef.current.set(metricKey, { metricId, value })
     const t = setTimeout(() => {
-      timersRef.current.delete(metricId)
-      const entry = pendingRef.current.get(metricId)
-      pendingRef.current.delete(metricId)
-      if (entry) void persist(metricId, entry.value)
+      timersRef.current.delete(metricKey)
+      const entry = pendingRef.current.get(metricKey)
+      pendingRef.current.delete(metricKey)
+      if (entry) void persist(metricKey, entry.metricId, entry.value)
     }, DEBOUNCE_MS)
-    timersRef.current.set(metricId, t)
+    timersRef.current.set(metricKey, t)
   }
 
-  function valuesFor(metricId) {
-    if (!endDate) return { day: null, week: 0, total: 0 }
+  function valuesFor(metricKey) {
+    if (!endDate || !metricKey) return { day: null, week: 0, total: 0 }
     let day = null, week = 0, total = 0
     for (const v of reportMetricValues) {
-      if (v.metric_id !== metricId) continue
+      if (metricValueKey(v, metricKeyById) !== metricKey) continue
       const date = reportDateById[v.report_id]
       if (!date) continue
       const num = Number(v.value)

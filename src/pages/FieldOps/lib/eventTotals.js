@@ -39,7 +39,8 @@ export function shiftTotals(sorted) {
     sorted[0].end_date_time,
   )
   const shift = hoursBetween(startISO, endISO)
-  return { startISO, endISO, ops, delay, shift, balanced: Math.abs(ops + delay - shift) <= 1 / 60 }
+  const imbalanceMinutes = Math.round((shift - (ops + delay)) * 60)
+  return { startISO, endISO, ops, delay, shift, imbalanceMinutes, balanced: Math.abs(imbalanceMinutes) <= 1 }
 }
 
 export function fmtDurationMs(ms) {

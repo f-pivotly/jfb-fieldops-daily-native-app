@@ -1,4 +1,4 @@
-import { createTheme, Table, Tabs } from "@mantine/core";
+import { createTheme, Modal, Table, Tabs } from "@mantine/core";
 
 const brennanNavy = [
   "#EEF1F5",
@@ -60,6 +60,9 @@ export const theme = createTheme({
         thead: { backgroundColor: "#0F2744" },
         th: { color: "#fff", fontWeight: 700 },
       },
+    }),
+    Modal: Modal.extend({
+      defaultProps: { radius: 12 },
     }),
     Tabs: Tabs.extend({
       styles: {

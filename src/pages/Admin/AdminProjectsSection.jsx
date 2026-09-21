@@ -42,6 +42,7 @@ const EMPTY_FORM = {
   is_soil_type: true,
   is_pipe_tracking: true,
   is_spreader_active: false,
+  show_dredge_chart: false,
 };
 
 function toFormValues(row, areaLevels = []) {
@@ -66,6 +67,7 @@ function toFormValues(row, areaLevels = []) {
     is_soil_type: row.is_soil_type ?? true,
     is_pipe_tracking: row.is_pipe_tracking ?? true,
     is_spreader_active: row.is_spreader_active ?? false,
+    show_dredge_chart: row.show_dredge_chart ?? false,
   };
 }
 
@@ -87,6 +89,7 @@ function toPayload(form) {
     is_soil_type: form.is_soil_type,
     is_pipe_tracking: form.is_pipe_tracking,
     is_spreader_active: form.is_spreader_active,
+    show_dredge_chart: form.show_dredge_chart,
   };
 }
 
@@ -307,6 +310,7 @@ export default function AdminProjectsSection({ onConfigure }) {
           <Checkbox label="Soil Type" checked={form.is_soil_type} onChange={(e) => setField("is_soil_type", e.currentTarget.checked)} />
           <Checkbox label="Pipe Tracking" checked={form.is_pipe_tracking} onChange={(e) => setField("is_pipe_tracking", e.currentTarget.checked)} />
           <Checkbox label="Spreader Active" checked={form.is_spreader_active} onChange={(e) => setField("is_spreader_active", e.currentTarget.checked)} />
+          <Checkbox label="Show Dredge Chart" checked={form.show_dredge_chart} onChange={(e) => setField("show_dredge_chart", e.currentTarget.checked)} />
         </Group>
 
         <Group justify="flex-end">

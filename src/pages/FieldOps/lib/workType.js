@@ -25,6 +25,32 @@ export function equipmentWorkType(project, equipment, reportDateISO) {
   return pinned
 }
 
+export function equipmentOnReport(equipment, reportDateISO) {
+  if (equipment?.is_active === false) return false
+  const day = dayOf(reportDateISO)
+  if (!day) return true
+  const mob = dayOf(equipment?.mobilized_on)
+  const demob = dayOf(equipment?.demobilized_on)
+  if (mob && day < mob) return false
+  if (demob && day > demob) return false
+  return true
+}
+
+export function compareEquipmentSortOrder(a, b) {
+  const sa = a?.sort_order
+  const sb = b?.sort_order
+  if (sa == null && sb == null) return 0
+  if (sa == null) return 1
+  if (sb == null) return -1
+  return sa - sb
+}
+
+export function equipmentForReport(equipment, reportDateISO) {
+  return (equipment ?? [])
+    .filter((eq) => equipmentOnReport(eq, reportDateISO))
+    .sort(compareEquipmentSortOrder)
+}
+
 export function activeCategoryLabel(project, equipment, reportDateISO) {
   const wt = equipmentWorkType(project, equipment, reportDateISO).toLowerCase()
   return (wt.includes('cap') || wt.includes('placement')) ? 'ACTIVE PLACEMENT' : 'ACTIVE DREDGING'

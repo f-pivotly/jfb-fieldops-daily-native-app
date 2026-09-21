@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Box, Text, Group, Button, Modal, TextInput, Select } from "@mantine/core";
+import { Box, Text, Group, Button, Modal, TextInput, Select, NumberInput, Switch } from "@mantine/core";
 import { IconAnchor } from "@tabler/icons-react";
 import { useEquipment } from "../../../hooks/useEquipment";
 import { useConfirmDialog } from "../../../hooks/useConfirmDialog";
@@ -7,6 +7,7 @@ import { useDomainData } from "../../../hooks/useDomainData";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import SafeError from "../../../components/SafeError";
 import TabToolbar from "./TabToolbar";
+import { compareEquipmentSortOrder } from "../../FieldOps/lib/workType";
 
 function toDateInputValue(iso) {
   return iso ? String(iso).slice(0, 10) : "";
@@ -19,19 +20,26 @@ export default function EquipmentTab({ project }) {
   const { records: workTypeRecords } = useDomainData({ domain: "jfb_work_types", system: "core" });
   const workTypeData = workTypeRecords.map((r) => ({ value: r.name, label: r.name }));
 
-  const equipment = hasProject ? equipmentRecords : [];
+  const equipment = hasProject ? [...equipmentRecords].sort(compareEquipmentSortOrder) : [];
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editRow, setEditRow] = useState(null);
   const [name, setName] = useState("");
   const [workType, setWorkType] = useState("");
   const [workTypeFrom, setWorkTypeFrom] = useState("");
+  const [sortOrder, setSortOrder] = useState("");
+  const [mobilizedOn, setMobilizedOn] = useState("");
+  const [demobilizedOn, setDemobilizedOn] = useState("");
+  const datesInvalid = !!mobilizedOn && !!demobilizedOn && demobilizedOn < mobilizedOn;
 
   function openAdd() {
     setEditRow(null);
     setName("");
     setWorkType("");
     setWorkTypeFrom("");
+    setSortOrder(equipment.length + 1);
+    setMobilizedOn("");
+    setDemobilizedOn("");
     setModalOpen(true);
   }
 
@@ -40,15 +48,21 @@ export default function EquipmentTab({ project }) {
     setName(row.name ?? "");
     setWorkType(row.work_type ?? "");
     setWorkTypeFrom(toDateInputValue(row.work_type_from));
+    setSortOrder(row.sort_order ?? "");
+    setMobilizedOn(toDateInputValue(row.mobilized_on));
+    setDemobilizedOn(toDateInputValue(row.demobilized_on));
     setModalOpen(true);
   }
 
   async function handleSave() {
-    if (!name.trim()) return;
+    if (!name.trim() || datesInvalid) return;
     const payload = {
       name: name.trim(),
       work_type: workType || null,
       work_type_from: workType ? (workTypeFrom || null) : null,
+      sort_order: sortOrder === "" ? null : Number(sortOrder),
+      mobilized_on: mobilizedOn || null,
+      demobilized_on: demobilizedOn || null,
     };
     if (editRow) {
       await update(editRow.id, payload);
@@ -57,6 +71,10 @@ export default function EquipmentTab({ project }) {
       await create({ ...payload, project_id: project.id });
     }
     setModalOpen(false);
+  }
+
+  async function toggleActive(row) {
+    await update(row.id, { is_active: row.is_active === false });
   }
 
   async function handleRemove(row) {
@@ -88,7 +106,7 @@ export default function EquipmentTab({ project }) {
         )}
         {!loading && !error && equipment.map((row) => (
           <Group key={row.id} justify="space-between" p={8} mb={6} style={{ background: "#f5f6f8", border: "1px solid #ebebeb", borderRadius: 6 }}>
-            <Group gap={8}>
+            <Group gap={8} style={{ opacity: row.is_active === false ? 0.55 : 1 }}>
               <IconAnchor size={14} color="#0F2744" />
               <Text size="xs" fw={600}>{row.name}</Text>
               {row.work_type && (
@@ -97,10 +115,24 @@ export default function EquipmentTab({ project }) {
                   {row.work_type_from ? ` (from ${toDateInputValue(row.work_type_from)})` : ""}
                 </Text>
               )}
+              {(row.mobilized_on || row.demobilized_on) && (
+                <Text size="xs" c="dimmed">
+                  {row.mobilized_on ? `Mobilized ${toDateInputValue(row.mobilized_on)}` : ""}
+                  {row.mobilized_on && row.demobilized_on ? " · " : ""}
+                  {row.demobilized_on ? `Demobilized ${toDateInputValue(row.demobilized_on)}` : ""}
+                </Text>
+              )}
             </Group>
             <Group gap={10} wrap="nowrap">
               <Button size="xs" variant="subtle" onClick={() => openEdit(row)}>Edit</Button>
               <Button size="xs" variant="subtle" color="red" onClick={() => handleRemove(row)}>Delete</Button>
+              <Switch
+                size="md"
+                color="#1B6B3A"
+                checked={row.is_active !== false}
+                onChange={() => toggleActive(row)}
+                title={row.is_active !== false ? "Active — shown in the operator app and the report editor" : "Retired — hidden from new work, history kept"}
+              />
             </Group>
           </Group>
         ))}
@@ -117,6 +149,31 @@ export default function EquipmentTab({ project }) {
           mb={16}
           autoFocus
         />
+        <NumberInput
+          label="Sort Order"
+          hideControls
+          allowDecimal={false}
+          value={sortOrder}
+          onChange={(v) => setSortOrder(v === "" ? "" : v)}
+          mb={16}
+        />
+        <Group grow mb={16} align="flex-start">
+          <TextInput
+            type="date"
+            label="Mobilized On"
+            description="First report date this unit appears on. Blank = no start date."
+            value={mobilizedOn}
+            onChange={(e) => setMobilizedOn(e.currentTarget.value)}
+          />
+          <TextInput
+            type="date"
+            label="Demobilized On"
+            description="Last report date this unit appears on. Blank = still on site."
+            value={demobilizedOn}
+            onChange={(e) => setDemobilizedOn(e.currentTarget.value)}
+            error={datesInvalid ? "Must be on or after Mobilized On." : undefined}
+          />
+        </Group>
         <Select
           label="Work Type"
           description="Pins this unit's discipline regardless of the project's own work type -- leave blank to inherit the project's. Use this for a mixed-phase project running a dredge and a placement unit on the same job."
@@ -139,7 +196,7 @@ export default function EquipmentTab({ project }) {
         )}
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => setModalOpen(false)}>Cancel</Button>
-          <Button size="xs" loading={editRow ? updating : creating} onClick={handleSave} disabled={!name.trim()} style={{ background: "#0F2744", border: "none" }}>
+          <Button size="xs" loading={editRow ? updating : creating} onClick={handleSave} disabled={!name.trim() || datesInvalid} style={{ background: "#0F2744", border: "none" }}>
             Save
           </Button>
         </Group>

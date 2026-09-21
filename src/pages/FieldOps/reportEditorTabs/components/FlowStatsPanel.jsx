@@ -37,7 +37,7 @@ function formatPriorDate(iso) {
   return m && d ? `${Number(m)}/${Number(d)}` : iso
 }
 
-export function FlowStatsPanel({ projectId, equipmentId, reportDateISO }) {
+export function FlowStatsPanel({ projectId, equipmentId, reportDateISO, nohHours = 0 }) {
   const { flowStats, loading, error, create, update } = useHydraulicFlowStats(projectId)
 
   const todaysRow = flowStats.find(
@@ -59,11 +59,21 @@ export function FlowStatsPanel({ projectId, equipmentId, reportDateISO }) {
   const diameter = 'diameter' in edits ? edits.diameter : baseDiameter
   const velocity = 'velocity' in edits ? edits.velocity : baseVelocity
   const flowRate = 'flowRate' in edits ? edits.flowRate : baseFlowRate
-  const dailyTotal = 'dailyTotal' in edits ? edits.dailyTotal : baseDailyTotal
+  // Daily Total Flow is derived, not typed: GPM x NOH x 60, matching the
+  // non-native app. Stored rows that pre-date a rate entry still display.
+  const autoDailyTotal = (() => {
+    const gpm = parseNum(flowRate)
+    if (gpm === null || gpm <= 0 || nohHours <= 0) return null
+    return Math.round(gpm * nohHours * 60)
+  })()
+  const dailyTotal = autoDailyTotal !== null ? String(autoDailyTotal) : baseDailyTotal
   const carriedFrom = !todaysRow && !('diameter' in edits) && priorRow ? dateOnly(priorRow.log_date) : null
 
+  // Project Total is this unit's whole flow history, every date, matching the
+  // non-native app (fetchProjectFlowHistory has no date bound) so a report
+  // opened mid-project shows the same figure its PDF prints.
   const projectTotalGal = flowStats
-    .filter((r) => r.equipment_id === equipmentId && dateOnly(r.log_date) <= reportDateISO)
+    .filter((r) => r.equipment_id === equipmentId)
     .reduce((a, r) => a + (Number(r.daily_total_gal) || 0), 0)
   const dailyTotalGal = parseNum(dailyTotal) ?? 0
   const previousTotalGal = Math.max(0, projectTotalGal - dailyTotalGal)
@@ -101,17 +111,13 @@ export function FlowStatsPanel({ projectId, equipmentId, reportDateISO }) {
     setEdits((prev) => ({ ...prev, ...patch }))
   }
 
-  function handleDailyTotalChange(v) {
-    setEdits((prev) => ({ ...prev, dailyTotal: v }))
-  }
-
   async function handleBlur() {
     if (Object.keys(edits).length === 0) return
     const patch = {
       pipe_dia_inches: parseNum(diameter),
       avg_line_velocity: parseNum(velocity),
       avg_flow_rate: parseNum(flowRate),
-      daily_total_gal: parseNum(dailyTotal),
+      daily_total_gal: autoDailyTotal ?? parseNum(dailyTotal),
     }
     const hasAnyValue = patch.pipe_dia_inches !== null || patch.avg_line_velocity !== null || patch.avg_flow_rate !== null || patch.daily_total_gal !== null
     setEdits({})
@@ -124,6 +130,18 @@ export function FlowStatsPanel({ projectId, equipmentId, reportDateISO }) {
     }
     setSavedAt(new Date())
   }
+
+  // Keep the stored value in step with the derived one, the way the
+  // non-native app re-saves it whenever GPM or NOH changes, so the PDF and the
+  // project roll-up read the same number the panel shows.
+  const storedDailyTotal = todaysRow ? Number(todaysRow.daily_total_gal ?? NaN) : null
+  useEffect(() => {
+    if (autoDailyTotal === null || !todaysRow) return
+    if (storedDailyTotal === autoDailyTotal) return
+    void update(todaysRow.id, { daily_total_gal: autoDailyTotal })
+    // update() reloads the rows, which settles this comparison on the next pass.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoDailyTotal, todaysRow?.id, storedDailyTotal])
 
   return (
     <Box style={{ border: '1px solid #ebebeb', borderRadius: 6, padding: 12 }}>
@@ -149,8 +167,14 @@ export function FlowStatsPanel({ projectId, equipmentId, reportDateISO }) {
               : 'Used to convert between velocity and flow rate.'}
           />
           <NumField label="Avg Line Velocity" unit="ft/s" value={velocity} onChange={handleVelocityChange} onBlurCommit={handleBlur} />
-          <NumField label="Avg Flow Rate" unit="GPM" value={flowRate} onChange={handleFlowRateChange} onBlurCommit={handleBlur} />
-          <NumField label="Daily Total Flow" unit="GAL" value={dailyTotal} onChange={handleDailyTotalChange} onBlurCommit={handleBlur} />
+          <NumField label="Avg Flow Rate" unit="GPM" value={flowRate} onChange={handleFlowRateChange} onBlurCommit={handleBlur}
+            helper={parseNum(diameter) ? 'Edits here auto-calculate Line Velocity.' : undefined} />
+          <DerivedRow
+            label="Daily Total Flow" unit="GAL" value={dailyTotalGal}
+            helper={autoDailyTotal !== null
+              ? `GPM × NOH × 60 = ${formatNum(parseNum(flowRate))} × ${nohHours.toFixed(2)} h × 60`
+              : undefined}
+          />
           <DerivedRow label="Previous Total" unit="GAL" value={previousTotalGal} />
           <DerivedRow label="Project Total" unit="GAL" value={projectTotalGal} />
         </Box>
@@ -277,17 +301,27 @@ function NumField({ label, unit, value, onChange, onBlurCommit, helper }) {
   return (
     <Box mb={8}>
       <Text size="11px" c="dimmed">{label} ({unit})</Text>
-      <TextInput size="xs" ta="right" value={value} onChange={(e) => onChange(e.currentTarget.value)} onBlur={onBlurCommit} />
+      <TextInput
+        size="xs"
+        ta="right"
+        value={value}
+        onChange={(e) => onChange(e.currentTarget.value)}
+        onBlur={onBlurCommit}
+        styles={{ input: { fontWeight: 600, color: '#111827' } }}
+      />
       {helper && <Text size="10px" c="dimmed" fs="italic" mt={2}>{helper}</Text>}
     </Box>
   )
 }
 
-function DerivedRow({ label, unit, value }) {
+function DerivedRow({ label, unit, value, helper }) {
   return (
-    <Group justify="space-between" py={2}>
-      <Text size="11px" c="dimmed">{label} <Text span size="9px" c="dimmed" tt="uppercase">(calculated)</Text></Text>
-      <Text size="11px" c="dimmed" fw={600}>{value.toLocaleString('en-US')} {unit}</Text>
-    </Group>
+    <Box py={2}>
+      <Group justify="space-between" wrap="nowrap">
+        <Text size="11px" c="dimmed">{label} <Text span size="9px" c="dimmed" tt="uppercase">(calculated)</Text></Text>
+        <Text size="11px" fw={700} c="#111827">{value.toLocaleString('en-US')} {unit}</Text>
+      </Group>
+      {helper && <Text size="10px" c="dimmed" fs="italic">{helper}</Text>}
+    </Box>
   )
 }

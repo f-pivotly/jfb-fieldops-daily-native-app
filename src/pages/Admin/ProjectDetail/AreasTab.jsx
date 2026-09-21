@@ -160,7 +160,9 @@ export default function AreasTab({ project }) {
                 </Box>
                 {projectGoal != null && (
                   <Text size="xs" fw={600} c={reconciles ? "#1e7a3d" : "#d32129"}>
-                    {reconciles ? "✓ Reconciles" : "⚠ Differs by more than 100 CY"}
+                    {reconciles
+                      ? "✓ Area goals match project goal"
+                      : `⚠ Area goals don't sum to project goal (${Math.abs(projectGoal - sumCy).toLocaleString()} CY difference)`}
                   </Text>
                 )}
               </Group>

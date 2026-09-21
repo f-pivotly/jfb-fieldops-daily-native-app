@@ -5,10 +5,11 @@ import { executeDataView, executeReport } from '../../data'
 import { useAppConfig } from '../../contexts/appConfigContext'
 import { useProject } from '../../hooks/useProject'
 import { useRealizedExcludedDays } from '../../hooks/useRealizedExcludedDays'
+import { useProjectMaterials } from '../../hooks/useProjectMaterials'
 import { useProductionWeekBreaks } from '../../hooks/useProductionWeekBreaks'
 import ReasonDialog from '../../components/ReasonDialog'
 import ScheduledOffDaysCard from '../../components/ScheduledOffDaysCard'
-import { buildRealizedReport, todayISO, prettyDate, addDaysISO, mondayStartISO } from './lib/realizedToDate'
+import { buildRealizedReport, tonnageMeasure, todayISO, prettyDate, addDaysISO, mondayStartISO } from './lib/realizedToDate'
 import { buildRealizedReportParams } from './lib/realizedPdfData'
 import { downloadAndLogReport } from './lib/reportDownload'
 
@@ -32,6 +33,7 @@ export default function RealizedToDatePage() {
   const {
     breaks, creating: addingBreak, create: createBreak, remove: removeBreak,
   } = useProductionWeekBreaks(projectId)
+  const { materials } = useProjectMaterials(projectId)
 
   const today = todayISO()
   const currentWeekStart = addDaysISO(mondayStartISO(today), -7)
@@ -49,6 +51,7 @@ export default function RealizedToDatePage() {
         setDailyTotals(rows.map((r) => ({
           date: r.report_date,
           cy: Number(r.cy) || 0,
+          tons: Number(r.tons) || 0,
           sf: Number(r.sf) || 0,
           goh: Number(r.goh) || 0,
           noh: Number(r.noh) || 0,
@@ -70,12 +73,24 @@ export default function RealizedToDatePage() {
     return () => { cancelled = true }
   }, [project?.id, currentWeekStart, currentWeekEnd])
 
+  // A project paid by the ton reports in TON, and only over its placement
+  // phase: averaging the earlier dredging CY with placement tons would be
+  // meaningless. Matches the non-native app's Realized To-Date.
+  const measure = useMemo(() => tonnageMeasure(materials), [materials])
+
   const report = useMemo(() => {
     if (!project || !dailyTotals) return null
     const excludedSet = new Set(excludedDays.map((e) => e.exclude_date))
     const reasons = new Map(excludedDays.map((e) => [e.exclude_date, e.reason]))
-    return buildRealizedReport(project, dailyTotals, delayRows, excludedSet, reasons, breaks, today)
-  }, [project, dailyTotals, delayRows, excludedDays, breaks, today])
+    let days = dailyTotals
+    if (measure) {
+      const fromDate = project.placement_start_date ? String(project.placement_start_date).slice(0, 10) : null
+      days = dailyTotals
+        .filter((d) => !fromDate || d.date >= fromDate)
+        .map((d) => ({ ...d, cy: d.tons }))
+    }
+    return buildRealizedReport(project, days, delayRows, excludedSet, reasons, breaks, today, measure ?? undefined)
+  }, [project, dailyTotals, delayRows, excludedDays, breaks, today, measure])
 
   const [excludeTarget, setExcludeTarget] = useState(null)
   const [savingExclude, setSavingExclude] = useState(false)

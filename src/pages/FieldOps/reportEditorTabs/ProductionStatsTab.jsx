@@ -4,6 +4,7 @@ import WarningBanner from './components/WarningBanner'
 import { IconTrash } from '@tabler/icons-react'
 import { useProductionStats } from './hooks/useProductionStats'
 import { useProjectAreas } from '../../../hooks/useProjectAreas'
+import { useAreaLevels } from '../../../hooks/useAreaLevels'
 import { useProjectAttachments } from '../../../hooks/useProjectAttachments'
 import { useProjectLayers } from '../../../hooks/useProjectLayers'
 import { useProjectMaterials } from '../../../hooks/useProjectMaterials'
@@ -98,6 +99,13 @@ export default function ProductionStatsTab({ project, report, equipment = [], se
   const { confirm, modal: confirmModal } = useConfirmDialog()
   const { stats, loading, error, update, remove, create } = useProductionStats(report?.id)
   const { areas, loading: areasLoading } = useProjectAreas(project?.id)
+  const { areaLevels } = useAreaLevels(project?.id)
+  // Only show the area columns this project actually uses -- a one-level
+  // project has no Sub-Area to fill, matching the non-native app's
+  // area_l2_label / area_l3_label gate.
+  const maxAreaDepth = areaLevels.reduce((m, l) => Math.max(m, l.depth ?? 0), 0)
+  const hasSubArea = maxAreaDepth >= 2
+  const hasSubSubArea = maxAreaDepth >= 3
   const { attachments } = useProjectAttachments(project?.id)
   const { labels: passTypeLabels } = usePicklist('pkl-jfb-pass-type')
 
@@ -720,8 +728,8 @@ export default function ProductionStatsTab({ project, report, equipment = [], se
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Area</Table.Th>
-              <Table.Th>Sub-Area</Table.Th>
-              <Table.Th>Sub-Sub-Area</Table.Th>
+              {hasSubArea && <Table.Th>Sub-Area</Table.Th>}
+              {hasSubSubArea && <Table.Th>Sub-Sub-Area</Table.Th>}
               <Table.Th>Pass</Table.Th>
               <Table.Th>TSCA</Table.Th>
               <Table.Th ta="right">GOH</Table.Th>
@@ -736,8 +744,8 @@ export default function ProductionStatsTab({ project, report, equipment = [], se
             {shown.map((c) => (
               <Table.Tr key={c.key} style={isUnassigned(c) ? { background: 'var(--mantine-color-yellow-0)' } : undefined}>
                 <Table.Td>{isUnassigned(c) ? <Text span fs="italic" c="orange.8">Unassigned</Text> : (c.areaLabel ?? '—')}</Table.Td>
-                <Table.Td>{c.subAreaLabel ?? '—'}</Table.Td>
-                <Table.Td>{c.subSubAreaLabel ?? '—'}</Table.Td>
+                {hasSubArea && <Table.Td>{c.subAreaLabel ?? '—'}</Table.Td>}
+                {hasSubSubArea && <Table.Td>{c.subSubAreaLabel ?? '—'}</Table.Td>}
                 <Table.Td c="dimmed">{c.passLabel ?? '—'}</Table.Td>
                 <Table.Td c="dimmed">{tscaLabel(c.tsca)}</Table.Td>
                 <Table.Td ta="right" c="dimmed">{c.timeHours.toFixed(2)}</Table.Td>
@@ -779,7 +787,7 @@ export default function ProductionStatsTab({ project, report, equipment = [], se
           </Table.Tbody>
           <Table.Tfoot>
             <Table.Tr>
-              <Table.Td colSpan={5} fw={700}>Totals</Table.Td>
+              <Table.Td colSpan={3 + (hasSubArea ? 1 : 0) + (hasSubSubArea ? 1 : 0)} fw={700}>Totals</Table.Td>
               <Table.Td ta="right" fw={700}>{comboTotals.goh.toFixed(2)}</Table.Td>
               <Table.Td ta="right" fw={700}>{comboTotals.noh.toFixed(2)}</Table.Td>
               <Table.Td ta="right" fw={700}>{comboTotals.cy.toFixed(1)}</Table.Td>
@@ -799,6 +807,7 @@ export default function ProductionStatsTab({ project, report, equipment = [], se
             projectId={project.id}
             equipmentId={selectedEquipmentId}
             reportDateISO={report.report_date}
+            nohHours={comboTotals.noh}
           />
           <PipeConfigPanel key={report.report_date} projectId={project.id} reportDateISO={report.report_date} />
         </SimpleGrid>

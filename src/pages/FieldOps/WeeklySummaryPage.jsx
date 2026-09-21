@@ -29,6 +29,7 @@ import { downloadAndLogReport } from './lib/reportDownload'
 import { useDebouncedDraft } from '../../hooks/useDebouncedDraft'
 import SaveIndicator from '../../components/SaveIndicator'
 import { fetchWeekCoverage } from '../../lib/dredge/weeklyChart'
+import { projectShowsDredgeChart } from '../../config/dredgeProgress'
 
 const REPORT_SLUG = 'rpt-jfb-weekly-summary'
 
@@ -426,7 +427,7 @@ export default function WeeklySummaryPage() {
               ))}
             </SimpleGrid>
 
-            {dredgeConfigRecords.length > 0 && (
+            {projectShowsDredgeChart(project) && dredgeConfigRecords.length > 0 && (
               <Box p={16} mb={20} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }}>
                 <Text size="sm">
                   <Text span fw={600}>Weekly progress chart: </Text>

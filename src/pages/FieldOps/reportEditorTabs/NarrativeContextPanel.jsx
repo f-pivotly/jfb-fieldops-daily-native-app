@@ -1,8 +1,16 @@
-import { Box, Text, Stack, Group } from '@mantine/core'
+import { useState } from 'react'
+import { Box, Text, Stack, Group, UnstyledButton } from '@mantine/core'
+import { IconChevronDown, IconChevronRight } from '@tabler/icons-react'
 import { useNarrativeContext } from './hooks/useNarrativeContext'
-import { usePicklist } from '../../../hooks/usePicklist'
-import LoadingSpinner from '../../../components/LoadingSpinner'
-import SafeError from '../../../components/SafeError'
+
+const AUTO_GAP_CATEGORY = 'STARTUP/SHUTDOWN'
+const LABEL_COLOR = '#374151'
+const MUTED_COLOR = '#6B7280'
+const AUTO_GAP_COLOR = '#9CA3AF'
+
+function isAutoGap(e) {
+  return e.category === AUTO_GAP_CATEGORY
+}
 
 function fmtHours(h) {
   return Number(h ?? 0).toFixed(2)
@@ -15,7 +23,6 @@ function hhmm(iso) {
 }
 
 export default function NarrativeContextPanel({ project, report, equipment = [] }) {
-  const { labels: passTypeLabels } = usePicklist('pkl-jfb-pass-type')
   const { byEquipment, loading, error } = useNarrativeContext({
     projectId: project?.id,
     reportId: report?.id,
@@ -26,19 +33,19 @@ export default function NarrativeContextPanel({ project, report, equipment = [] 
   return (
     <Box p={16} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8, background: '#fff' }}>
       <Text fw={700} size="sm">Today&apos;s context</Text>
-      <Text size="xs" c="dimmed" mb={12}>Reference while writing narratives. Read-only.</Text>
+      <Text size="11px" c={MUTED_COLOR} mb={16}>Reference while writing narratives. Read-only.</Text>
 
-      {loading && <LoadingSpinner py={16} />}
-      {!loading && <SafeError message={error} />}
+      {error && <Text size="xs" c="#B91C1C">{error}</Text>}
+      {loading && !error && <Text size="xs" c={MUTED_COLOR}>Loading…</Text>}
 
       {!loading && !error && byEquipment.length === 0 && (
-        <Text size="xs" c="dimmed" fs="italic">No equipment configured.</Text>
+        <Text size="xs" c={MUTED_COLOR} fs="italic">No equipment configured.</Text>
       )}
 
       {!loading && !error && byEquipment.length > 0 && (
-        <Stack gap="md">
-          {byEquipment.map((block) => (
-            <EquipmentBlock key={block.equipment.id} block={block} passTypeLabels={passTypeLabels} />
+        <Stack gap={16}>
+          {byEquipment.map((block, index) => (
+            <EquipmentBlock key={block.equipment.id} block={block} first={index === 0} />
           ))}
         </Stack>
       )}
@@ -46,48 +53,55 @@ export default function NarrativeContextPanel({ project, report, equipment = [] 
   )
 }
 
-function EquipmentBlock({ block, passTypeLabels }) {
+function EquipmentBlock({ block, first }) {
   const { equipment, events, operatingHours, delayHours, cy, sf } = block
-
-  function categoryLabel(e) {
-    if (e.is_operational) return passTypeLabels[e.pass_type] ?? e.pass_type ?? 'Operational'
-    return e.delay_label ?? '—'
-  }
+  const [eventsOpen, setEventsOpen] = useState(true)
+  const numberStyle = { fontVariantNumeric: 'tabular-nums' }
 
   return (
-    <Box pt={8} style={{ borderTop: '1px solid var(--mantine-color-gray-1)' }} className="narrative-context-block">
-      <Text size="xs" fw={700}>{equipment.name}</Text>
+    <Box pt={first ? 0 : 12} style={first ? undefined : { borderTop: '1px solid var(--mantine-color-gray-1)' }}>
+      <Text size="xs" fw={600}>{equipment.name}</Text>
 
-      <Box style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 10, rowGap: 2, marginTop: 6 }}>
-        <Text size="10px" c="dimmed">Op hours</Text>
-        <Text size="10px" ta="right" style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtHours(operatingHours)}</Text>
-        <Text size="10px" c="dimmed">Delay hours</Text>
-        <Text size="10px" ta="right" style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtHours(delayHours)}</Text>
-        <Text size="10px" c="dimmed">CY</Text>
-        <Text size="10px" ta="right" style={{ fontVariantNumeric: 'tabular-nums' }}>{cy.toFixed(1)}</Text>
-        <Text size="10px" c="dimmed">SF</Text>
-        <Text size="10px" ta="right" style={{ fontVariantNumeric: 'tabular-nums' }}>{sf.toFixed(0)}</Text>
+      <Box style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 12, rowGap: 4, marginTop: 6 }}>
+        <Text size="11px" c={MUTED_COLOR}>Op hours</Text>
+        <Text size="11px" c={LABEL_COLOR} ta="right" style={numberStyle}>{fmtHours(operatingHours)}</Text>
+        <Text size="11px" c={MUTED_COLOR}>Delay hours</Text>
+        <Text size="11px" c={LABEL_COLOR} ta="right" style={numberStyle}>{fmtHours(delayHours)}</Text>
+        <Text size="11px" c={MUTED_COLOR}>CY</Text>
+        <Text size="11px" c={LABEL_COLOR} ta="right" style={numberStyle}>{cy.toFixed(1)}</Text>
+        <Text size="11px" c={MUTED_COLOR}>SF</Text>
+        <Text size="11px" c={LABEL_COLOR} ta="right" style={numberStyle}>{sf.toFixed(0)}</Text>
       </Box>
 
       {events.length > 0 ? (
         <Box mt={8}>
-          <Text size="10px" c="dimmed" mb={4}>{events.length} event{events.length === 1 ? '' : 's'}</Text>
-          <Stack gap={2} style={{ maxHeight: 190, overflowY: 'auto' }}>
-            {events.map((e) => (
-              <Group key={e.event_id} gap={6} wrap="nowrap">
-                <Text size="10px" c="dimmed" style={{ flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>{hhmm(e.start_date_time)}</Text>
-                <Text size="10px" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {categoryLabel(e)}{e.area_label ? ` · ${e.area_label}` : ''}
-                </Text>
-                <Text size="10px" c="dimmed" ml="auto" style={{ flexShrink: 0, fontVariantNumeric: 'tabular-nums' }}>
-                  {Number(e.duration_hours ?? 0).toFixed(2)}h
-                </Text>
-              </Group>
-            ))}
-          </Stack>
+          <UnstyledButton onClick={() => setEventsOpen((open) => !open)} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            {eventsOpen ? <IconChevronDown size={10} color={MUTED_COLOR} /> : <IconChevronRight size={10} color={MUTED_COLOR} />}
+            <Text size="11px" c={MUTED_COLOR}>{events.length} event{events.length === 1 ? '' : 's'}</Text>
+          </UnstyledButton>
+          {eventsOpen && (
+            <Stack gap={2} mt={4} pr={4} style={{ maxHeight: 192, overflowY: 'auto' }}>
+              {events.map((e) => {
+                const autoGap = isAutoGap(e)
+                const fs = autoGap ? 'italic' : undefined
+                return (
+                  <Group key={e.event_id} gap={6} wrap="nowrap" align="baseline">
+                    <Text size="11px" c={MUTED_COLOR} fs={fs} style={{ flexShrink: 0, ...numberStyle }}>{hhmm(e.start_date_time)}</Text>
+                    <Text size="11px" c={autoGap ? AUTO_GAP_COLOR : LABEL_COLOR} fs={fs} truncate="end">{e.category ?? '—'}</Text>
+                    {e.area_label && (
+                      <Text size="11px" c={MUTED_COLOR} fs={fs} truncate="end">· {e.area_label}</Text>
+                    )}
+                    <Text size="11px" c={MUTED_COLOR} fs={fs} ml="auto" style={{ flexShrink: 0, ...numberStyle }}>
+                      {Number(e.duration_hours ?? 0).toFixed(2)}h
+                    </Text>
+                  </Group>
+                )
+              })}
+            </Stack>
+          )}
         </Box>
       ) : (
-        <Text size="10px" c="dimmed" fs="italic" mt={6}>No events synced.</Text>
+        <Text size="11px" c={AUTO_GAP_COLOR} fs="italic" mt={4}>No events synced.</Text>
       )}
     </Box>
   )

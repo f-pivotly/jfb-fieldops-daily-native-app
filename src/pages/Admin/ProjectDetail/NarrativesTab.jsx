@@ -6,10 +6,14 @@ import { useAppConfig } from "../../../contexts/appConfigContext";
 import { createDomainRecord } from "../../../data";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import SafeError from "../../../components/SafeError";
-import { uniqueSectionKey } from "../../../lib/narrativeSectionKey";
+import { uniqueSectionKey, slugifySectionKey } from "../../../lib/narrativeSectionKey";
 import TabToolbar from "./TabToolbar";
 
-const EMPTY_FORM = { narrative_label: "", date: "", sort_order: 0, is_active: true };
+const EMPTY_FORM = { section_key: "", narrative_label: "", date: "", sort_order: 0, is_active: true };
+
+function sanitizeSectionKey(value) {
+  return String(value ?? "").toLowerCase().replace(/[^a-z0-9_]+/g, "_");
+}
 
 function toDateInputValue(iso) {
   return iso ? String(iso).slice(0, 10) : "";
@@ -32,6 +36,9 @@ export default function NarrativesTab({ project }) {
   const [editRow, setEditRow] = useState(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [seeding, setSeeding] = useState(false);
+
+  const addKey = (form.section_key ?? "").replace(/^_+|_+$/g, "");
+  const addKeyTaken = !!addKey && rows.some((r) => r.section_key === addKey);
 
   async function handleSeedDefaults() {
     if (!hasProject) return;
@@ -70,6 +77,7 @@ export default function NarrativesTab({ project }) {
   function openEdit(row) {
     setEditRow(row);
     setForm({
+      section_key: row.section_key ?? "",
       narrative_label: row.narrative_label ?? "",
       date: toDateInputValue(row.date),
       sort_order: row.sort_order ?? 0,
@@ -77,13 +85,20 @@ export default function NarrativesTab({ project }) {
     });
   }
 
+  function handleSectionKeyBlur() {
+    if (!form.section_key && form.narrative_label.trim()) {
+      setField("section_key", uniqueSectionKey(form.narrative_label, rows.map((r) => r.section_key).filter(Boolean)));
+    } else if (form.section_key) {
+      setField("section_key", slugifySectionKey(form.section_key));
+    }
+  }
+
   async function handleAddSave() {
-    if (!form.narrative_label.trim() || !hasProject) return;
-    const sectionKey = uniqueSectionKey(form.narrative_label, rows.map((r) => r.section_key).filter(Boolean));
+    if (!addKey || addKeyTaken || !form.narrative_label.trim() || !hasProject) return;
     await create({
       project_id: project.id,
       narrative_label: form.narrative_label.trim(),
-      section_key: sectionKey,
+      section_key: addKey,
       date: form.date || null,
       sort_order: form.sort_order,
       is_active: true,
@@ -142,6 +157,7 @@ export default function NarrativesTab({ project }) {
           <Table withTableBorder verticalSpacing="xs" fz="sm">
             <Table.Thead>
               <Table.Tr>
+                <Table.Th>Section Key</Table.Th>
                 <Table.Th>Label</Table.Th>
                 <Table.Th>Date</Table.Th>
                 <Table.Th>Sort Order</Table.Th>
@@ -152,6 +168,7 @@ export default function NarrativesTab({ project }) {
             <Table.Tbody>
               {rows.map((r) => (
                 <Table.Tr key={r.id}>
+                  <Table.Td style={{ fontFamily: "monospace", fontSize: 12 }}>{r.section_key || "—"}</Table.Td>
                   <Table.Td>{r.narrative_label}</Table.Td>
                   <Table.Td>{toDateInputValue(r.date) || "—"}</Table.Td>
                   <Table.Td>{r.sort_order ?? "—"}</Table.Td>
@@ -178,13 +195,26 @@ export default function NarrativesTab({ project }) {
 
       <Modal opened={addOpen} onClose={() => setAddOpen(false)} title={<Text fw={700} size="sm">Add Narrative Section</Text>} size="sm">
         <TextInput
+          label="Section Key"
+          required
+          placeholder="lowercase_with_underscores"
+          description="Stable identifier. Cannot change after creation."
+          inputWrapperOrder={["label", "input", "description", "error"]}
+          value={form.section_key}
+          onChange={(e) => setField("section_key", sanitizeSectionKey(e.currentTarget.value))}
+          onBlur={handleSectionKeyBlur}
+          error={addKeyTaken ? `A section with key "${addKey}" already exists.` : undefined}
+          styles={{ input: { fontFamily: "monospace" } }}
+          mb={10}
+          autoFocus
+        />
+        <TextInput
           label="Label"
           required
           placeholder="Display name shown to PE"
           value={form.narrative_label}
           onChange={(e) => setField("narrative_label", e.currentTarget.value)}
           mb={10}
-          autoFocus
         />
         <TextInput
           label="Date"
@@ -206,7 +236,7 @@ export default function NarrativesTab({ project }) {
             size="xs"
             loading={creating}
             onClick={handleAddSave}
-            disabled={!form.narrative_label.trim()}
+            disabled={!addKey || addKeyTaken || !form.narrative_label.trim()}
             style={{ background: "#0F2744", border: "none" }}
           >
             Add Section
@@ -215,6 +245,16 @@ export default function NarrativesTab({ project }) {
       </Modal>
 
       <Modal opened={!!editRow} onClose={() => setEditRow(null)} title={<Text fw={700} size="sm">Edit Narrative Section</Text>} size="sm">
+        <TextInput
+          label="Section Key"
+          description="Immutable after creation."
+          inputWrapperOrder={["label", "input", "description"]}
+          value={form.section_key ?? ""}
+          readOnly
+          disabled
+          styles={{ input: { fontFamily: "monospace" } }}
+          mb={10}
+        />
         <TextInput
           label="Label"
           required

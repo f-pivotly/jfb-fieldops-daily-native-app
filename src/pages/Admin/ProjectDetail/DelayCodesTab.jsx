@@ -316,11 +316,13 @@ export default function DelayCodesTab({ project }) {
           )}
         </Group>
         {masterByWorkType.map(([wt, items]) => (
-          <Box key={wt} mb={14}>
-            <Text size="xs" fw={700} mb={6}>{wt}</Text>
+          <Box key={wt} mb={20}>
+            <Text size="12px" fw={800} c="#0F2744" mb={10} px={10} py={6} style={{ background: "#E8EFF7", borderRadius: 6 }}>
+              {wt} — {items.length} codes
+            </Text>
             {groupByCategory(items).map(([category, catItems]) => (
-              <Box key={category} mb={8}>
-                <Text size="10px" c="dimmed" mb={4} style={{ textTransform: "uppercase" }}>{category}</Text>
+              <Box key={category} mb={10} ml={10}>
+                <Text size="10px" fw={800} c="#5A7088" mb={5} style={{ textTransform: "uppercase", letterSpacing: "0.05em" }}>{category}</Text>
                 <Group gap={6}>
                   {catItems.map((m) => (
                     <Group key={m.id} gap={6} p={6} style={{ background: "#f5f6f8", border: "1px solid #e7ecf5", borderRadius: 6 }}>

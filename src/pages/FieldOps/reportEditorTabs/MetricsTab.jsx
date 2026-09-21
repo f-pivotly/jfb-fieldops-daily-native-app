@@ -122,7 +122,7 @@ export default function MetricsTab({ project, report, equipment = [] }) {
     reload: reloadValues,
   } = useReportMetricValues()
   const manual = useManualMetricValues({
-    project, report, reports, reportMetricValues,
+    project, report, reports, metrics, reportMetricValues,
     create: createValue, update: updateValue, reload: reloadValues,
   })
 
@@ -141,14 +141,31 @@ export default function MetricsTab({ project, report, equipment = [] }) {
     try {
       const keptIds = new Set(rows.filter((r) => r.metricId).map((r) => r.metricId))
       const removedIds = metrics.map((m) => m.id).filter((id) => !keptIds.has(id))
+      const savedRows = rows.filter((r) => r.label.trim())
+      const usedKeys = new Set(savedRows.map((r) => r.metricKey).filter(Boolean))
+      const keyByRow = new Map()
+      for (const r of savedRows) {
+        if (r.metricKey) {
+          keyByRow.set(r.key, r.metricKey)
+          continue
+        }
+        const base = slugify(r.label)
+        let candidate = base
+        let n = 2
+        while (usedKeys.has(candidate)) {
+          candidate = `${base}_${n}`
+          n++
+        }
+        usedKeys.add(candidate)
+        keyByRow.set(r.key, candidate)
+      }
 
       await Promise.all([
-        ...rows
-          .filter((r) => r.label.trim())
+        ...savedRows
           .map((r, i) => {
             const data = {
               project_id: project.id,
-              metric_key: r.metricKey || slugify(r.label),
+              metric_key: keyByRow.get(r.key),
               label: r.label,
               source: r.source === 'Manual' ? 'manual' : r.autoKind,
               equipment_id: r.equipmentId || null,
@@ -252,7 +269,7 @@ function MetricValueCell({ r, field, auto, manual, setRows }) {
   if (r.source === 'Auto') {
     return <AutoValueText auto={auto} field={field} unit={r.unit} />
   }
-  if (!r.metricId) {
+  if (!r.metricId || !r.metricKey) {
     if (field === 'week') return <Text size="sm">{r.week}</Text>
     if (field === 'total') return <Text size="sm">{Number(r.total).toLocaleString()}</Text>
     return (
@@ -266,15 +283,15 @@ function MetricValueCell({ r, field, auto, manual, setRows }) {
       />
     )
   }
-  const persisted = manual.valuesFor(r.metricId)
+  const persisted = manual.valuesFor(r.metricKey)
   if (field === 'day') {
-    const draftValue = r.metricId in manual.drafts ? manual.drafts[r.metricId] : (persisted.day ?? '')
+    const draftValue = r.metricKey in manual.drafts ? manual.drafts[r.metricKey] : (persisted.day ?? '')
     return (
       <TextInput
         size="xs"
         value={draftValue}
-        onChange={(e) => manual.onManualChange(r.metricId, e.currentTarget.value)}
-        onBlur={() => manual.flush(r.metricId)}
+        onChange={(e) => manual.onManualChange(r.metricKey, r.metricId, e.currentTarget.value)}
+        onBlur={() => manual.flush(r.metricKey)}
       />
     )
   }

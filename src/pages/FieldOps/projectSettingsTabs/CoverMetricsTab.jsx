@@ -28,7 +28,23 @@ function slugify(label) {
   return result || 'metric'
 }
 
-const emptyDraft = () => ({ label: '', source: 'manual', equipment_id: null, unit: '', sort_order: 10 })
+function sanitizeMetricKey(value) {
+  return String(value ?? '').toLowerCase().replace(/[^a-z0-9_]+/g, '_')
+}
+
+function uniqueMetricKey(label, existingKeys) {
+  const used = new Set(existingKeys)
+  const base = slugify(label)
+  let key = base
+  let n = 2
+  while (used.has(key)) {
+    key = `${base}_${n}`
+    n++
+  }
+  return key
+}
+
+const emptyDraft = () => ({ metric_key: '', label: '', source: 'manual', equipment_id: null, unit: '', sort_order: 10 })
 
 export default function CoverMetricsTab({ project }) {
   const hasProject = !!project?.id
@@ -58,6 +74,17 @@ export default function CoverMetricsTab({ project }) {
   const [formError, setFormError] = useState(null)
 
   const sorted = [...metrics].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+  const addKey = (addForm.metric_key ?? '').replace(/^_+|_+$/g, '')
+  const addKeyTaken = !!addKey && metrics.some((m) => m.metric_key === addKey)
+
+  function handleMetricKeyBlur() {
+    if (!addForm.metric_key && addForm.label.trim()) {
+      const key = uniqueMetricKey(addForm.label, metrics.map((m) => m.metric_key).filter(Boolean))
+      setAddForm((f) => ({ ...f, metric_key: key }))
+    } else if (addForm.metric_key) {
+      setAddForm((f) => ({ ...f, metric_key: slugify(f.metric_key) }))
+    }
+  }
 
   function openAdd() {
     const nextSort = sorted.length === 0 ? 10 : Math.max(...sorted.map((r) => r.sort_order ?? 0)) + 10
@@ -68,6 +95,14 @@ export default function CoverMetricsTab({ project }) {
 
   async function saveAdd() {
     const label = addForm.label.trim()
+    if (!addKey) {
+      setFormError('Metric key is required.')
+      return
+    }
+    if (addKeyTaken) {
+      setFormError(`A metric with key "${addKey}" already exists.`)
+      return
+    }
     if (!label) {
       setFormError('Label is required.')
       return
@@ -76,7 +111,7 @@ export default function CoverMetricsTab({ project }) {
     try {
       await create({
         project_id: project.id,
-        metric_key: slugify(label),
+        metric_key: addKey,
         label,
         source: addForm.source,
         equipment_id: addForm.source === 'manual' ? null : addForm.equipment_id || null,
@@ -93,6 +128,7 @@ export default function CoverMetricsTab({ project }) {
   function openEdit(row) {
     setEditRow({
       id: row.id,
+      metric_key: row.metric_key || '',
       label: row.label || '',
       source: row.source || 'manual',
       equipment_id: row.equipment_id || null,
@@ -210,6 +246,7 @@ export default function CoverMetricsTab({ project }) {
         <Table withTableBorder verticalSpacing="xs" fz="sm">
           <Table.Thead>
             <Table.Tr>
+              <Table.Th>Metric Key</Table.Th>
               <Table.Th>Metric</Table.Th>
               <Table.Th>Source</Table.Th>
               <Table.Th>Unit</Table.Th>
@@ -221,6 +258,7 @@ export default function CoverMetricsTab({ project }) {
           <Table.Tbody>
             {sorted.map((row) => (
               <Table.Tr key={row.id}>
+                <Table.Td style={{ fontFamily: 'monospace', fontSize: 12 }}>{row.metric_key || '—'}</Table.Td>
                 <Table.Td>{row.label}</Table.Td>
                 <Table.Td c="dimmed">{sourceLabel(row.source)}</Table.Td>
                 <Table.Td c="dimmed">{row.unit ?? '—'}</Table.Td>
@@ -251,8 +289,23 @@ export default function CoverMetricsTab({ project }) {
       <Modal opened={addOpen} onClose={() => setAddOpen(false)} title={<Text fw={700} size="sm">Add Metric</Text>} size="sm">
         <SafeError message={formError} mb={8} />
         <TextInput
+          label="Metric Key"
+          required
+          placeholder="lowercase_with_underscores"
+          description="Stable identifier. Cannot change after creation."
+          inputWrapperOrder={['label', 'input', 'description', 'error']}
+          value={addForm.metric_key}
+          onChange={(e) => { const v = sanitizeMetricKey(e.currentTarget.value); setAddForm((f) => ({ ...f, metric_key: v })) }}
+          onBlur={handleMetricKeyBlur}
+          error={addKeyTaken ? `A metric with key "${addKey}" already exists.` : undefined}
+          styles={{ input: { fontFamily: 'monospace' } }}
+          mb={10}
+          autoFocus
+        />
+        <TextInput
           label="Label"
           required
+          placeholder="Display name on the cover page"
           value={addForm.label}
           onChange={(e) => { const v = e.currentTarget.value; setAddForm((f) => ({ ...f, label: v })) }}
           mb={10}
@@ -288,7 +341,7 @@ export default function CoverMetricsTab({ project }) {
         </Group>
         <Group justify="flex-end" mt={10}>
           <Button variant="default" size="xs" onClick={() => setAddOpen(false)}>Cancel</Button>
-          <Button size="xs" loading={creating} onClick={saveAdd} disabled={!addForm.label.trim()} style={{ background: '#0F2744', border: 'none' }}>
+          <Button size="xs" loading={creating} onClick={saveAdd} disabled={!addKey || addKeyTaken || !addForm.label.trim()} style={{ background: '#0F2744', border: 'none' }}>
             Save
           </Button>
         </Group>
@@ -298,6 +351,16 @@ export default function CoverMetricsTab({ project }) {
         {editRow && (
           <>
             <SafeError message={formError} mb={8} />
+            <TextInput
+              label="Metric Key"
+              description="Immutable after creation."
+              inputWrapperOrder={['label', 'input', 'description']}
+              value={editRow.metric_key}
+              readOnly
+              disabled
+              styles={{ input: { fontFamily: 'monospace' } }}
+              mb={10}
+            />
             <TextInput
               label="Label"
               required

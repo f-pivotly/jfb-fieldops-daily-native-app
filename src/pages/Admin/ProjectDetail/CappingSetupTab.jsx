@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Box, Text, Group, Button, Table, Tabs, Modal, TextInput, Select, NumberInput, Switch } from "@mantine/core";
+import { Box, Text, Group, Button, Modal, TextInput, Select, NumberInput, Switch, Stack, UnstyledButton } from "@mantine/core";
 import { IconPlus } from "@tabler/icons-react";
 import { useCrudModal } from "../../../hooks/useCrudModal";
 import { useDomainData } from "../../../hooks/useDomainData";
 import { useProjectAreas } from "../../../hooks/useProjectAreas";
+import { useAreaLevels } from "../../../hooks/useAreaLevels";
 import { useProjectLayers } from "../../../hooks/useProjectLayers";
 import { useProjectMaterials } from "../../../hooks/useProjectMaterials";
 import { useProjectComponents } from "../../../hooks/useProjectComponents";
@@ -15,6 +16,23 @@ import SafeError from "../../../components/SafeError";
 
 const UOM_OPTIONS = ["", "Tons", "CY", "Qty"];
 
+const NAVY = "#0F2744";
+const BORDER = "#D1DCE8";
+const MUTED = "#5A7088";
+
+const CAP_TABS = [
+  { value: "layers", label: "Layers" },
+  { value: "materials", label: "Materials" },
+  { value: "components", label: "Components" },
+  { value: "mappings", label: "Mappings & Goals" },
+];
+
+const MAPPING_TABS = [
+  { value: "area-layer", label: "Areas → Layers" },
+  { value: "layer-material", label: "Layers → Materials" },
+  { value: "material-component", label: "Materials → Components" },
+];
+
 function areaPath(areaId, areas) {
   const byId = Object.fromEntries(areas.map((a) => [a.id, a]));
   const parts = [];
@@ -25,6 +43,16 @@ function areaPath(areaId, areas) {
   }
   return parts.join(" → ");
 }
+
+const bySortOrder = (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0);
+
+// Bid tonnage for a placement project paid by the ton. Summed across the
+// project's active materials, these give the Realized To-Date report its goal
+// and blended bid rate, and switch that report from CY to TON.
+const MATERIAL_TONNAGE_FIELDS = [
+  { column: "tons_goal", label: "Tons Goal", description: "Contract tons of this material. Leave blank on projects not paid by the ton." },
+  { column: "tons_per_hour_goal", label: "Bid Rate (tons/GOH)", description: "Bid placement rate for this material." },
+];
 
 export default function CappingSetupTab({ project }) {
   const hasProject = !!project?.id;
@@ -40,6 +68,7 @@ export default function CappingSetupTab({ project }) {
     useDomainData({ domain: "jfb_component_types", system: "core" });
 
   const { areas, loading: areasLoading, error: areasError } = useProjectAreas(project?.id);
+  const { areaLevels, loading: areaLevelsLoading, error: areaLevelsError } = useAreaLevels(project?.id);
 
   const {
     layers, loading: layersLoading, error: layersError,
@@ -77,12 +106,20 @@ export default function CappingSetupTab({ project }) {
     create: createMaterialComponent, update: updateMaterialComponent, remove: removeMaterialComponent,
   } = useProjectMaterialComponents(project?.id);
 
-  const loading = layerTypesLoading || materialTypesLoading || componentTypesLoading || areasLoading ||
+  const loading = layerTypesLoading || materialTypesLoading || componentTypesLoading || areasLoading || areaLevelsLoading ||
     layersLoading || materialsLoading || componentsLoading ||
     areaLayersLoading || layerMaterialsLoading || materialComponentsLoading;
-  const error = layerTypesError || materialTypesError || componentTypesError || areasError ||
+  const error = layerTypesError || materialTypesError || componentTypesError || areasError || areaLevelsError ||
     layersError || materialsError || componentsError ||
     areaLayersError || layerMaterialsError || materialComponentsError;
+
+  const sortedLayers = layers.slice().sort(bySortOrder);
+  const sortedMaterials = materials.slice().sort(bySortOrder);
+  const sortedComponents = components.slice().sort(bySortOrder);
+  const depthByLevelId = Object.fromEntries(areaLevels.map((l) => [l.id, l.depth]));
+  const sortedAreas = areas
+    .slice()
+    .sort((a, b) => (depthByLevelId[a.area_level_id] ?? 0) - (depthByLevelId[b.area_level_id] ?? 0) || bySortOrder(a, b));
 
   async function deleteLayerCascade(id) {
     await Promise.all([
@@ -109,8 +146,6 @@ export default function CappingSetupTab({ project }) {
 
   return (
     <Box>
-      <Text fw={700} size="sm" mb={12}>Capping Setup</Text>
-
       {loading && <LoadingSpinner py={16} />}
       {!loading && <SafeError message={error} />}
       {!loading && !error && !hasProject && (
@@ -118,107 +153,226 @@ export default function CappingSetupTab({ project }) {
       )}
 
       {!loading && !error && hasProject && (
-        <Tabs value={tab} onChange={setTab}>
-          <Tabs.List mb={12}>
-            <Tabs.Tab value="layers">Layers</Tabs.Tab>
-            <Tabs.Tab value="materials">Materials</Tabs.Tab>
-            <Tabs.Tab value="components">Components</Tabs.Tab>
-            <Tabs.Tab value="mappings">Mappings &amp; Goals</Tabs.Tab>
-          </Tabs.List>
+        <>
+          <PillTabs tabs={CAP_TABS} value={tab} onChange={setTab} />
 
-          <Tabs.Panel value="layers">
-            <NamedTypeTable
-              rows={layers}
+          {tab === "layers" && (
+            <NamedTypeList
+              rows={sortedLayers}
               typeRef={layerTypeRef}
               nameField="layer_name"
               typeField="layer_type_id"
               reportNameField="layer_report_name"
               entityLabel="Layer"
+              title="Layers"
+              subtitle="The cap layers / lifts placed on this project (e.g. Lift 1–6, Armor)."
+              icon="🧱"
+              emptyText="No layers yet. Add the cap lifts/layers for this project."
               saving={creatingLayer || updatingLayer}
               onCreate={(payload) => createLayer({ project_id: project.id, ...payload })}
               onUpdate={updateLayer}
               onDelete={deleteLayerCascade}
             />
-          </Tabs.Panel>
-          <Tabs.Panel value="materials">
-            <NamedTypeTable
-              rows={materials}
+          )}
+          {tab === "materials" && (
+            <NamedTypeList
+              rows={sortedMaterials}
               typeRef={materialTypeRef}
               nameField="material_name"
               typeField="material_type_id"
               reportNameField="material_report_name"
               entityLabel="Material"
+              title="Materials"
+              subtitle="The materials placed (e.g. Sand, Gravel, Armor Rock, Amended Sand)."
+              icon="⛏️"
+              emptyText="No materials yet."
+              extraFields={MATERIAL_TONNAGE_FIELDS}
               saving={creatingMaterial || updatingMaterial}
               onCreate={(payload) => createMaterial({ project_id: project.id, ...payload })}
               onUpdate={updateMaterial}
               onDelete={deleteMaterialCascade}
             />
-          </Tabs.Panel>
-          <Tabs.Panel value="components">
-            <ComponentsTable
-              rows={components}
+          )}
+          {tab === "components" && (
+            <ComponentsList
+              rows={sortedComponents}
               typeRef={componentTypeRef}
               saving={creatingComponent || updatingComponent}
               onCreate={(payload) => createComponent({ project_id: project.id, ...payload })}
               onUpdate={updateComponent}
               onDelete={deleteComponentCascade}
             />
-          </Tabs.Panel>
-          <Tabs.Panel value="mappings">
-            <Tabs value={mappingsTab} onChange={setMappingsTab}>
-              <Tabs.List mb={12}>
-                <Tabs.Tab value="area-layer">Areas → Layers</Tabs.Tab>
-                <Tabs.Tab value="layer-material">Layers → Materials</Tabs.Tab>
-                <Tabs.Tab value="material-component">Materials → Components</Tabs.Tab>
-              </Tabs.List>
-              <Tabs.Panel value="area-layer">
+          )}
+          {tab === "mappings" && (
+            <Box>
+              <SectionHeader
+                title="Mappings & Goals"
+                subtitle="Connect Areas → Layers (with goals + thickness), Layers → Materials, and Materials → Components. These drive the filtered dropdowns in the daily report."
+              />
+              <PillTabs tabs={MAPPING_TABS} value={mappingsTab} onChange={setMappingsTab} mt={4} />
+              {mappingsTab === "area-layer" && (
                 <AreaLayerMappings
-                  areas={areas}
-                  layers={layers}
+                  areas={sortedAreas}
+                  layers={sortedLayers}
                   map={areaLayers}
                   saving={creatingAreaLayer || updatingAreaLayer}
                   onCreate={(payload) => createAreaLayer({ project_id: project.id, ...payload })}
                   onUpdate={updateAreaLayer}
                   onDelete={removeAreaLayer}
                 />
-              </Tabs.Panel>
-              <Tabs.Panel value="layer-material">
+              )}
+              {mappingsTab === "layer-material" && (
                 <LayerMaterialMappings
-                  layers={layers}
-                  materials={materials}
+                  layers={sortedLayers}
+                  materials={sortedMaterials}
                   map={layerMaterials}
                   saving={creatingLayerMaterial || updatingLayerMaterial}
                   onCreate={(payload) => createLayerMaterial({ project_id: project.id, ...payload })}
                   onUpdate={updateLayerMaterial}
                   onDelete={removeLayerMaterial}
                 />
-              </Tabs.Panel>
-              <Tabs.Panel value="material-component">
+              )}
+              {mappingsTab === "material-component" && (
                 <MaterialComponentMappings
-                  materials={materials}
-                  components={components}
+                  materials={sortedMaterials}
+                  components={sortedComponents}
                   map={materialComponents}
                   saving={creatingMaterialComponent || updatingMaterialComponent}
                   onCreate={(payload) => createMaterialComponent({ project_id: project.id, ...payload })}
                   onUpdate={updateMaterialComponent}
                   onDelete={removeMaterialComponent}
                 />
-              </Tabs.Panel>
-            </Tabs>
-          </Tabs.Panel>
-        </Tabs>
+              )}
+            </Box>
+          )}
+        </>
       )}
     </Box>
   );
 }
 
-function NamedTypeTable({ rows, typeRef, nameField, typeField, reportNameField, entityLabel, saving, onCreate, onUpdate, onDelete }) {
+function PillTabs({ tabs, value, onChange, mt = 0 }) {
+  return (
+    <Group gap={6} mt={mt} mb={16}>
+      {tabs.map((t) => {
+        const active = t.value === value;
+        return (
+          <UnstyledButton
+            key={t.value}
+            onClick={() => onChange(t.value)}
+            style={{
+              padding: "7px 14px",
+              background: active ? NAVY : "#fff",
+              border: `1px solid ${active ? NAVY : BORDER}`,
+              borderRadius: 7,
+              fontSize: 12,
+              fontWeight: active ? 700 : 600,
+              color: active ? "#fff" : MUTED,
+            }}
+          >
+            {t.label}
+          </UnstyledButton>
+        );
+      })}
+    </Group>
+  );
+}
+
+function SectionHeader({ title, subtitle, action }) {
+  return (
+    <Group justify="space-between" align="center" wrap="nowrap" mb={16}>
+      <Box>
+        <Text size="14px" fw={700} c={NAVY}>{title}</Text>
+        <Text size="12px" c={MUTED} mt={2}>{subtitle}</Text>
+      </Box>
+      {action}
+    </Group>
+  );
+}
+
+function AddButton({ label, onClick }) {
+  return (
+    <Button size="xs" leftSection={<IconPlus size={12} />} onClick={onClick} style={{ background: NAVY, border: "none", flexShrink: 0 }}>
+      {label}
+    </Button>
+  );
+}
+
+function EmptyState({ icon, text }) {
+  return (
+    <Box ta="center" py={40} px={20}>
+      <Text size="32px" mb={10}>{icon}</Text>
+      <Text size="13px" c={MUTED}>{text}</Text>
+    </Box>
+  );
+}
+
+function Chip({ children }) {
+  return (
+    <Text span size="10px" style={{ background: "#DBEAFE", color: "#1E40AF", padding: "2px 7px", borderRadius: 10, whiteSpace: "nowrap" }}>
+      {children}
+    </Text>
+  );
+}
+
+function ListItem({ icon, name, chip, note, active, onToggle, onEdit, onDelete }) {
+  return (
+    <Group gap={8} wrap="nowrap" px={10} py={7} style={{ border: `1px solid ${BORDER}`, background: "#F8FAFC", borderRadius: 6 }}>
+      <Text span size="12px">{icon}</Text>
+      <Text span size="12px" fw={700}>{name}</Text>
+      {chip && <Chip>{chip}</Chip>}
+      {note && <Text span size="10px" c={MUTED}>{note}</Text>}
+      <Box style={{ flex: 1 }} />
+      <Button size="xs" variant="default" onClick={onEdit}>Edit</Button>
+      <Button size="xs" variant="default" onClick={onDelete}>Delete</Button>
+      <Switch size="md" color="#1B6B3A" checked={!!active} onChange={onToggle} />
+    </Group>
+  );
+}
+
+function MapGroup({ icon, title, extra, addLabel, onAdd, children }) {
+  return (
+    <Box mb={10} style={{ border: `1px solid ${BORDER}`, borderRadius: 8, overflow: "hidden" }}>
+      <Group gap={8} wrap="nowrap" px={12} py={9} style={{ background: "#F0F4F8", borderBottom: `1px solid ${BORDER}` }}>
+        <Text size="12px" fw={700} c={NAVY} style={{ flex: 1 }}>{icon} {title}</Text>
+        {extra}
+        <AddButton label={addLabel} onClick={onAdd} />
+      </Group>
+      {children}
+    </Box>
+  );
+}
+
+function MapRow({ icon, name, chip, note, isLast, onEdit, onRemove }) {
+  return (
+    <Group gap={8} wrap="nowrap" py={7} pr={12} pl={24} style={{ borderBottom: isLast ? "none" : "1px solid #EBF0F7" }}>
+      <Text size="12px" fw={600} style={{ flex: 1 }}>{icon} {name}</Text>
+      {chip && <Chip>{chip}</Chip>}
+      {note && <Text span size="10px" c={MUTED}>{note}</Text>}
+      <Button size="xs" variant="default" onClick={onEdit}>Edit</Button>
+      <Button size="xs" variant="default" onClick={onRemove}>Remove</Button>
+    </Group>
+  );
+}
+
+function MapEmptyRow({ text }) {
+  return (
+    <Box py={7} pr={12} pl={24}>
+      <Text size="12px" c={MUTED}>{text}</Text>
+    </Box>
+  );
+}
+
+function NamedTypeList({ rows, typeRef, nameField, typeField, reportNameField, entityLabel, title, subtitle, icon, emptyText, extraFields = [], saving, onCreate, onUpdate, onDelete }) {
   const { modalOpen, setModalOpen, editRow, form, setFormField, openAdd, openEdit, save, remove, confirmModal } = useCrudModal({
-    emptyForm: () => ({ name: "", type: typeRef[0]?.id ?? "", reportName: "", sortOrder: rows.length + 1 }),
-    toForm: (row) => ({ name: row[nameField], type: row[typeField], reportName: row[reportNameField] ?? "", sortOrder: row.sort_order }),
+    emptyForm: () => ({ name: "", type: typeRef[0]?.id ?? "", reportName: "", sortOrder: rows.length + 1,
+                        ...Object.fromEntries(extraFields.map((f) => [f.column, ""])) }),
+    toForm: (row) => ({ name: row[nameField], type: row[typeField], reportName: row[reportNameField] ?? "", sortOrder: row.sort_order,
+                        ...Object.fromEntries(extraFields.map((f) => [f.column, row[f.column] ?? ""])) }),
     toPayload: (f, { editRow: er }) => {
       if (!f.name.trim()) return null;
       const payload = { [nameField]: f.name.trim(), [typeField]: f.type || null, [reportNameField]: f.reportName.trim() || null, sort_order: Number(f.sortOrder) || 0 };
+      for (const extra of extraFields) payload[extra.column] = f[extra.column] === "" ? null : Number(f[extra.column]);
       return er ? payload : { ...payload, active: true };
     },
     onCreate,
@@ -227,51 +381,57 @@ function NamedTypeTable({ rows, typeRef, nameField, typeField, reportNameField, 
     confirmMessage: (row) => `Delete "${row[nameField]}"? Any mappings that use it will also be removed.`,
   });
 
-  async function toggleActive(row) {
-    await onUpdate(row.id, { active: !row.active });
-  }
-
-  const typeName = (id) => typeRef.find((t) => t.id === id)?.name ?? "—";
+  const typeName = (id) => typeRef.find((t) => t.id === id)?.name ?? null;
 
   return (
     <Box>
-      <Group justify="flex-end" mb={10}>
-        <Button size="xs" leftSection={<IconPlus size={12} />} onClick={() => openAdd()} style={{ background: "#0F2744", border: "none" }}>Add {entityLabel}</Button>
-      </Group>
-      <Table withTableBorder verticalSpacing="xs" fz="sm">
-        <Table.Thead>
-          <Table.Tr><Table.Th>Name</Table.Th><Table.Th>Type</Table.Th><Table.Th ta="right">Sort</Table.Th><Table.Th>Report Name</Table.Th><Table.Th style={{ width: 150 }} /><Table.Th style={{ width: 50 }} /></Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {rows.length === 0 && (
-            <Table.Tr><Table.Td colSpan={6}><Text size="xs" c="dimmed" ta="center" py={12}>No {entityLabel.toLowerCase()}s yet</Text></Table.Td></Table.Tr>
-          )}
+      <SectionHeader title={title} subtitle={subtitle} action={<AddButton label={`Add ${entityLabel}`} onClick={() => openAdd()} />} />
+
+      {rows.length === 0 ? (
+        <EmptyState icon={icon} text={emptyText} />
+      ) : (
+        <Stack gap={8}>
           {rows.map((r) => (
-            <Table.Tr key={r.id}>
-              <Table.Td>{r[nameField]}</Table.Td>
-              <Table.Td>{typeName(r[typeField])}</Table.Td>
-              <Table.Td ta="right">{r.sort_order}</Table.Td>
-              <Table.Td>{r[reportNameField] ?? "—"}</Table.Td>
-              <Table.Td>
-                <Group gap={8} wrap="nowrap">
-                  <Button size="xs" variant="subtle" onClick={() => openEdit(r)}>Edit</Button>
-                  <Button size="xs" variant="subtle" color="red" onClick={() => remove(r)}>Delete</Button>
-                </Group>
-              </Table.Td>
-              <Table.Td><Switch size="xs" checked={!!r.active} onChange={() => toggleActive(r)} /></Table.Td>
-            </Table.Tr>
+            <ListItem
+              key={r.id}
+              icon={icon}
+              name={r[nameField]}
+              chip={r[typeField] ? typeName(r[typeField]) : null}
+              note={[
+                r[reportNameField] ? `“${r[reportNameField]}”` : null,
+                ...extraFields.map((f) => (r[f.column] != null ? `${f.label} ${Number(r[f.column]).toLocaleString()}` : null)),
+              ].filter(Boolean).join(" · ") || null}
+              active={r.active}
+              onToggle={() => onUpdate(r.id, { active: !r.active })}
+              onEdit={() => openEdit(r)}
+              onDelete={() => remove(r)}
+            />
           ))}
-        </Table.Tbody>
-      </Table>
+        </Stack>
+      )}
 
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit" : "Add"} {entityLabel}</Text>} size="sm">
         <TextInput label={`${entityLabel} Name`} required value={form.name} onChange={(e) => setFormField("name", e.currentTarget.value)} mb={10} autoFocus />
         <Select label={`${entityLabel} Type`} data={typeRef.map((t) => ({ value: t.id, label: t.name }))} value={form.type} onChange={(v) => setFormField("type", v)} mb={10} />
         <NumberInput label="Sort Order" hideControls value={form.sortOrder} onChange={(v) => setFormField("sortOrder", v)} mb={10} />
-        <TextInput label="Report Name (optional)" placeholder="Defaults to name above" value={form.reportName} onChange={(e) => setFormField("reportName", e.currentTarget.value)} mb={16} />
+        <TextInput label="Report Name (optional)" placeholder="Defaults to name above" value={form.reportName} onChange={(e) => setFormField("reportName", e.currentTarget.value)} mb={extraFields.length ? 10 : 16} />
+        {extraFields.length > 0 && (
+          <Group grow mb={16} align="flex-start">
+            {extraFields.map((f) => (
+              <NumberInput
+                key={f.column}
+                label={f.label}
+                description={f.description}
+                hideControls
+                value={form[f.column]}
+                onChange={(v) => setFormField(f.column, v)}
+              />
+            ))}
+          </Group>
+        )}
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => setModalOpen(false)}>Cancel</Button>
-          <Button size="xs" loading={saving} onClick={save} disabled={!form.name.trim()} style={{ background: "#0F2744", border: "none" }}>Save</Button>
+          <Button size="xs" loading={saving} onClick={save} disabled={!form.name.trim()} style={{ background: NAVY, border: "none" }}>Save</Button>
         </Group>
       </Modal>
 
@@ -280,7 +440,7 @@ function NamedTypeTable({ rows, typeRef, nameField, typeField, reportNameField, 
   );
 }
 
-function ComponentsTable({ rows, typeRef, saving, onCreate, onUpdate, onDelete }) {
+function ComponentsList({ rows, typeRef, saving, onCreate, onUpdate, onDelete }) {
   const { modalOpen, setModalOpen, editRow, form, setFormField, openAdd, openEdit, save, remove, confirmModal } = useCrudModal({
     emptyForm: () => ({ name: "", type: typeRef[0]?.id ?? "", reportName: "", reportUom: "", invUom: "", sortOrder: rows.length + 1 }),
     toForm: (row) => ({
@@ -309,43 +469,35 @@ function ComponentsTable({ rows, typeRef, saving, onCreate, onUpdate, onDelete }
     confirmMessage: (row) => `Delete "${row.component_name}"? Any mappings that use it will also be removed.`,
   });
 
-  async function toggleActive(row) {
-    await onUpdate(row.id, { active: !row.active });
-  }
-
-  const typeName = (id) => typeRef.find((t) => t.id === id)?.name ?? "—";
+  const typeName = (id) => typeRef.find((t) => t.id === id)?.name ?? null;
 
   return (
     <Box>
-      <Text size="xs" c="dimmed" mb={10}>Only needed when a material is a blend (e.g. amended sand).</Text>
-      <Group justify="flex-end" mb={10}>
-        <Button size="xs" leftSection={<IconPlus size={12} />} onClick={() => openAdd()} style={{ background: "#0F2744", border: "none" }}>Add Component</Button>
-      </Group>
-      <Table withTableBorder verticalSpacing="xs" fz="sm">
-        <Table.Thead>
-          <Table.Tr><Table.Th>Name</Table.Th><Table.Th>Type</Table.Th><Table.Th>Report UOM</Table.Th><Table.Th>Inventory UOM</Table.Th><Table.Th style={{ width: 150 }} /><Table.Th style={{ width: 50 }} /></Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {rows.length === 0 && (
-            <Table.Tr><Table.Td colSpan={6}><Text size="xs" c="dimmed" ta="center" py={12}>No components yet</Text></Table.Td></Table.Tr>
-          )}
+      <SectionHeader
+        title="Components"
+        subtitle="Sub-materials tracked for inventory (e.g. Sand, Amendment). Used when a material is a blend."
+        action={<AddButton label="Add Component" onClick={() => openAdd()} />}
+      />
+
+      {rows.length === 0 ? (
+        <EmptyState icon="🧪" text="No components yet. Only needed when a material is a blend (e.g. amended sand)." />
+      ) : (
+        <Stack gap={8}>
           {rows.map((r) => (
-            <Table.Tr key={r.id}>
-              <Table.Td>{r.component_name}</Table.Td>
-              <Table.Td>{typeName(r.component_type_id)}</Table.Td>
-              <Table.Td>{r.component_report_uom || "—"}</Table.Td>
-              <Table.Td>{r.component_inventory_uom || "—"}</Table.Td>
-              <Table.Td>
-                <Group gap={8} wrap="nowrap">
-                  <Button size="xs" variant="subtle" onClick={() => openEdit(r)}>Edit</Button>
-                  <Button size="xs" variant="subtle" color="red" onClick={() => remove(r)}>Delete</Button>
-                </Group>
-              </Table.Td>
-              <Table.Td><Switch size="xs" checked={!!r.active} onChange={() => toggleActive(r)} /></Table.Td>
-            </Table.Tr>
+            <ListItem
+              key={r.id}
+              icon="🧪"
+              name={r.component_name}
+              chip={r.component_type_id ? typeName(r.component_type_id) : null}
+              note={r.component_report_uom || null}
+              active={r.active}
+              onToggle={() => onUpdate(r.id, { active: !r.active })}
+              onEdit={() => openEdit(r)}
+              onDelete={() => remove(r)}
+            />
           ))}
-        </Table.Tbody>
-      </Table>
+        </Stack>
+      )}
 
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit" : "Add"} Component</Text>} size="sm">
         <TextInput label="Component Name" required value={form.name} onChange={(e) => setFormField("name", e.currentTarget.value)} mb={10} autoFocus />
@@ -358,7 +510,7 @@ function ComponentsTable({ rows, typeRef, saving, onCreate, onUpdate, onDelete }
         <TextInput label="Report Name (optional)" value={form.reportName} onChange={(e) => setFormField("reportName", e.currentTarget.value)} mb={16} />
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => setModalOpen(false)}>Cancel</Button>
-          <Button size="xs" loading={saving} onClick={save} disabled={!form.name.trim()} style={{ background: "#0F2744", border: "none" }}>Save</Button>
+          <Button size="xs" loading={saving} onClick={save} disabled={!form.name.trim()} style={{ background: NAVY, border: "none" }}>Save</Button>
         </Group>
       </Modal>
 
@@ -402,49 +554,49 @@ function AreaLayerMappings({ areas, layers, map, saving, onCreate, onUpdate, onD
     confirmMessage: () => "Remove this layer from the area?",
   });
 
-  const areaIdsWithMappings = [...new Set(map.map((m) => m.area_id))];
   const layerById = Object.fromEntries(layers.map((l) => [l.id, l]));
 
   const availableLayers = (id, excludeRowId) => layers.filter((l) => !map.some((m) => m.area_id === id && m.layer_id === l.id && m.id !== excludeRowId));
 
+  if (areas.length === 0) return <EmptyState icon="📍" text="No areas yet — add areas on the Areas tab first." />;
+  if (layers.length === 0) return <EmptyState icon="🧱" text="No layers yet — add layers first." />;
+
   return (
     <Box>
-      {areaIdsWithMappings.length === 0 && <Text size="xs" c="dimmed" ta="center" py={16}>No area/layer mappings yet</Text>}
-      {areaIdsWithMappings.map((id) => {
-        const rows = map.filter((m) => m.area_id === id);
+      {areas.map((area) => {
+        const rows = map.filter((m) => m.area_id === area.id);
         return (
-          <Box key={id} mb={14}>
-            <Group justify="space-between" mb={6}>
-              <Text size="xs" fw={700}>{areaPath(id, areas)}</Text>
-              <Button size="xs" variant="subtle" leftSection={<IconPlus size={11} />} onClick={() => openAdd(id)}>Add Layer</Button>
-            </Group>
-            {rows.map((m) => {
-              const goal = [m.cy_goal ? `${m.cy_goal.toLocaleString()} CY` : null, m.tons_goal ? `${m.tons_goal.toLocaleString()} Tons` : null, m.sf_goal ? `${m.sf_goal.toLocaleString()} SF` : null].filter(Boolean).join(" · ");
-              const thickness = [m.target_thickness ? `Tgt ${m.target_thickness}"` : null, m.min_design_thickness ? `Min ${m.min_design_thickness}"` : null, m.overplacement_tolerance ? `Over ${m.overplacement_tolerance}"` : null].filter(Boolean).join(" · ");
+          <MapGroup key={area.id} icon="📍" title={areaPath(area.id, areas)} addLabel="Add Layer" onAdd={() => openAdd(area.id)}>
+            {rows.length === 0 && <MapEmptyRow text="No layers mapped to this area yet." />}
+            {rows.map((m, i) => {
+              const goal = [
+                m.cy_goal ? `${Number(m.cy_goal).toLocaleString()} CY` : null,
+                m.tons_goal ? `${Number(m.tons_goal).toLocaleString()} Tons` : null,
+                m.sf_goal ? `${Number(m.sf_goal).toLocaleString()} SF` : null,
+              ].filter(Boolean).join(" · ");
+              const thickness = [
+                m.target_thickness ? `Tgt ${m.target_thickness}"` : null,
+                m.min_design_thickness ? `Min ${m.min_design_thickness}"` : null,
+                m.overplacement_tolerance ? `Over ${m.overplacement_tolerance}"` : null,
+              ].filter(Boolean).join(" · ");
               return (
-                <Group key={m.id} justify="space-between" p={8} mb={4} style={{ background: "#f5f6f8", border: "1px solid #ebebeb", borderRadius: 6 }}>
-                  <Text size="xs" fw={600}>{layerById[m.layer_id]?.layer_name ?? "—"}</Text>
-                  <Group gap={8} wrap="nowrap">
-                    {goal && <Text size="10px" style={{ background: "#eef2f8", padding: "2px 6px", borderRadius: 3 }}>{goal}</Text>}
-                    {thickness && <Text size="10px" c="dimmed">{thickness}</Text>}
-                    <Button size="xs" variant="subtle" onClick={() => openEdit(m)}>Edit</Button>
-                    <Button size="xs" variant="subtle" color="red" onClick={() => remove(m)}>Remove</Button>
-                  </Group>
-                </Group>
+                <MapRow
+                  key={m.id}
+                  icon="🧱"
+                  name={layerById[m.layer_id]?.layer_name ?? "?"}
+                  chip={goal || null}
+                  note={thickness || null}
+                  isLast={i === rows.length - 1}
+                  onEdit={() => openEdit(m)}
+                  onRemove={() => remove(m)}
+                />
               );
             })}
-          </Box>
+          </MapGroup>
         );
       })}
-      <Box mt={10}>
-        {areas.filter((a) => !areaIdsWithMappings.includes(a.id)).map((a) => (
-          <Button key={a.id} size="xs" variant="subtle" leftSection={<IconPlus size={11} />} onClick={() => openAdd(a.id)} mr={8} mb={6}>
-            Map {a.name}
-          </Button>
-        ))}
-      </Box>
 
-      <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit" : "Add"} Layer Mapping</Text>} size="sm">
+      <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit Area Layer" : "Add Layer to Area"}</Text>} size="sm">
         <Select label="Layer" required data={availableLayers(areaId, editRow?.id).map((l) => ({ value: l.id, label: l.layer_name }))} value={form.layerId} onChange={(v) => setFormField("layerId", v ?? "")} mb={10} />
         <Group grow mb={10}>
           <NumberInput label='Min Thickness (in)' hideControls value={form.minThickness} onChange={(v) => setFormField("minThickness", v)} />
@@ -458,7 +610,7 @@ function AreaLayerMappings({ areas, layers, map, saving, onCreate, onUpdate, onD
         </Group>
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => setModalOpen(false)}>Cancel</Button>
-          <Button size="xs" loading={saving} onClick={save} disabled={!form.layerId} style={{ background: "#0F2744", border: "none" }}>Save</Button>
+          <Button size="xs" loading={saving} onClick={save} disabled={!form.layerId} style={{ background: NAVY, border: "none" }}>Save</Button>
         </Group>
       </Modal>
 
@@ -496,38 +648,39 @@ function LayerMaterialMappings({ layers, materials, map, saving, onCreate, onUpd
 
   const availableMaterials = (id, excludeRowId) => materials.filter((m) => !map.some((x) => x.layer_id === id && x.material_id === m.id && x.id !== excludeRowId));
 
+  if (layers.length === 0) return <EmptyState icon="🧱" text="No layers yet." />;
+  if (materials.length === 0) return <EmptyState icon="⛏️" text="No materials yet." />;
+
   return (
     <Box>
       {layers.map((layer) => {
         const rows = map.filter((m) => m.layer_id === layer.id);
         return (
-          <Box key={layer.id} mb={14}>
-            <Group justify="space-between" mb={6}>
-              <Text size="xs" fw={700}>{layer.layer_name}</Text>
-              <Button size="xs" variant="subtle" leftSection={<IconPlus size={11} />} onClick={() => openAdd(layer.id)}>Add Material</Button>
-            </Group>
-            {rows.length === 0 && <Text size="10px" c="dimmed">No materials mapped</Text>}
-            {rows.map((m) => (
-              <Group key={m.id} justify="space-between" p={8} mb={4} style={{ background: "#f5f6f8", border: "1px solid #ebebeb", borderRadius: 6 }}>
-                <Text size="xs" fw={600}>{materialById[m.material_id]?.material_name ?? "—"}{m.layer_material_report_name ? ` (${m.layer_material_report_name})` : ""}</Text>
-                <Group gap={8} wrap="nowrap">
-                  {m.loading_rate != null && <Text size="10px" c="dimmed">{m.loading_rate} tons/hr</Text>}
-                  <Button size="xs" variant="subtle" onClick={() => openEdit(m)}>Edit</Button>
-                  <Button size="xs" variant="subtle" color="red" onClick={() => remove(m)}>Remove</Button>
-                </Group>
-              </Group>
+          <MapGroup key={layer.id} icon="🧱" title={layer.layer_name} addLabel="Add Material" onAdd={() => openAdd(layer.id)}>
+            {rows.length === 0 && <MapEmptyRow text="No materials mapped to this layer yet." />}
+            {rows.map((m, i) => (
+              <MapRow
+                key={m.id}
+                icon="⛏️"
+                name={materialById[m.material_id]?.material_name ?? "?"}
+                chip={m.loading_rate ? `${m.loading_rate} t/hr` : null}
+                note={m.layer_material_report_name ? `“${m.layer_material_report_name}”` : null}
+                isLast={i === rows.length - 1}
+                onEdit={() => openEdit(m)}
+                onRemove={() => remove(m)}
+              />
             ))}
-          </Box>
+          </MapGroup>
         );
       })}
 
-      <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit" : "Add"} Material Mapping</Text>} size="sm">
+      <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit Layer Material" : "Add Material to Layer"}</Text>} size="sm">
         <Select label="Material" required data={availableMaterials(layerId, editRow?.id).map((m) => ({ value: m.id, label: m.material_name }))} value={form.materialId} onChange={(v) => setFormField("materialId", v ?? "")} mb={10} />
         <NumberInput label="Loading Rate (tons/hr, optional)" hideControls value={form.loadingRate} onChange={(v) => setFormField("loadingRate", v)} mb={10} />
         <TextInput label="Report Name Override (optional)" value={form.reportName} onChange={(e) => setFormField("reportName", e.currentTarget.value)} mb={16} />
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => setModalOpen(false)}>Cancel</Button>
-          <Button size="xs" loading={saving} onClick={save} disabled={!form.materialId} style={{ background: "#0F2744", border: "none" }}>Save</Button>
+          <Button size="xs" loading={saving} onClick={save} disabled={!form.materialId} style={{ background: NAVY, border: "none" }}>Save</Button>
         </Group>
       </Modal>
 
@@ -563,41 +716,45 @@ function MaterialComponentMappings({ materials, components, map, saving, onCreat
 
   const availableComponents = (id, excludeRowId) => components.filter((c) => !map.some((x) => x.material_id === id && x.component_id === c.id && x.id !== excludeRowId));
 
+  if (materials.length === 0) return <EmptyState icon="⛏️" text="No materials yet." />;
+  if (components.length === 0) return <EmptyState icon="🧪" text="No components yet. Add components first (only needed for blended materials)." />;
+
   return (
     <Box>
       {materials.map((material) => {
         const rows = map.filter((m) => m.material_id === material.id);
-        const sumPct = rows.reduce((sum, r) => sum + (r.component_percent_of_material || 0), 0);
+        const sumPct = rows.reduce((sum, r) => sum + (Number(r.component_percent_of_material) || 0), 0);
         return (
-          <Box key={material.id} mb={14}>
-            <Group justify="space-between" mb={6}>
-              <Group gap={8}>
-                <Text size="xs" fw={700}>{material.material_name}</Text>
-                {rows.length > 0 && <Text size="10px" c={sumPct === 100 ? "#1e7a3d" : "dimmed"}>Σ {sumPct}%</Text>}
-              </Group>
-              <Button size="xs" variant="subtle" leftSection={<IconPlus size={11} />} onClick={() => openAdd(material.id)}>Add Component</Button>
-            </Group>
-            {rows.length === 0 && <Text size="10px" c="dimmed">No components — this material is placed as-is.</Text>}
-            {rows.map((m) => (
-              <Group key={m.id} justify="space-between" p={8} mb={4} style={{ background: "#f5f6f8", border: "1px solid #ebebeb", borderRadius: 6 }}>
-                <Text size="xs" fw={600}>{componentById[m.component_id]?.component_name ?? "—"}</Text>
-                <Group gap={8} wrap="nowrap">
-                  {m.component_percent_of_material != null && <Text size="10px" c="dimmed">{m.component_percent_of_material}%</Text>}
-                  <Button size="xs" variant="subtle" onClick={() => openEdit(m)}>Edit</Button>
-                  <Button size="xs" variant="subtle" color="red" onClick={() => remove(m)}>Remove</Button>
-                </Group>
-              </Group>
+          <MapGroup
+            key={material.id}
+            icon="⛏️"
+            title={material.material_name}
+            extra={rows.length > 0 && <Text span size="10px" c={Math.abs(sumPct - 100) < 0.01 ? "#1B6B3A" : MUTED}>Σ {sumPct}%</Text>}
+            addLabel="Add Component"
+            onAdd={() => openAdd(material.id)}
+          >
+            {rows.length === 0 && <MapEmptyRow text="No components — this material is placed as-is." />}
+            {rows.map((m, i) => (
+              <MapRow
+                key={m.id}
+                icon="🧪"
+                name={componentById[m.component_id]?.component_name ?? "?"}
+                chip={m.component_percent_of_material != null ? `${m.component_percent_of_material}%` : null}
+                isLast={i === rows.length - 1}
+                onEdit={() => openEdit(m)}
+                onRemove={() => remove(m)}
+              />
             ))}
-          </Box>
+          </MapGroup>
         );
       })}
 
-      <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit" : "Add"} Component Mapping</Text>} size="sm">
+      <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit Material Component" : "Add Component to Material"}</Text>} size="sm">
         <Select label="Component" required data={availableComponents(materialId, editRow?.id).map((c) => ({ value: c.id, label: c.component_name }))} value={form.componentId} onChange={(v) => setFormField("componentId", v ?? "")} mb={10} />
         <NumberInput label="% of Material (optional)" hideControls min={0} max={100} value={form.percent} onChange={(v) => setFormField("percent", v)} mb={16} />
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => setModalOpen(false)}>Cancel</Button>
-          <Button size="xs" loading={saving} onClick={save} disabled={!form.componentId} style={{ background: "#0F2744", border: "none" }}>Save</Button>
+          <Button size="xs" loading={saving} onClick={save} disabled={!form.componentId} style={{ background: NAVY, border: "none" }}>Save</Button>
         </Group>
       </Modal>
 

@@ -1,3 +1,4 @@
+import { isOperationalCategory } from './operationalCategory'
 const UNASSIGNED_KEY = '__unassigned'
 
 export function comboKey(c) {
@@ -40,7 +41,7 @@ export function buildCombosFromActivities(activities, { passKeyOf }) {
     }
     const hours = durationHours(a.start_date_time, a.end_date_time)
     row.timeHours += hours
-    row.contributing.push({ id: a.id, delay_code_id: a.delay_code_id ?? null, durationHours: hours })
+    row.contributing.push({ id: a.id, category: a.category ?? null, delay_code_id: a.delay_code_id ?? null, durationHours: hours })
   }
 
   return [...combos.values()].sort((x, y) => {
@@ -50,8 +51,13 @@ export function buildCombosFromActivities(activities, { passKeyOf }) {
   })
 }
 
+// NOH counts only productive categories, the same split the non-native app
+// applies (isOperationalCategory) -- a STARTUP/SHUTDOWN event carries no delay
+// code but is not productive time, so keying on delay_code_id over-counted it.
 export function comboNOH(combo) {
-  return combo.contributing.filter((e) => !e.delay_code_id).reduce((sum, e) => sum + e.durationHours, 0)
+  return combo.contributing
+    .filter((e) => isOperationalCategory(e.category))
+    .reduce((sum, e) => sum + e.durationHours, 0)
 }
 
 export function isUnassigned(combo) {

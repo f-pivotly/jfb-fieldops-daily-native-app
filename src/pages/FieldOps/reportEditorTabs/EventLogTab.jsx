@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Box, Text, Table, Group, Button, Modal, TextInput, Textarea, Select, Switch, Badge } from '@mantine/core'
-import { IconPlus, IconPencil, IconTrash, IconAlertTriangle } from '@tabler/icons-react'
+import { Box, Text, Table, Group, Button, Modal, TextInput, Textarea, Select, Switch, Badge, SimpleGrid } from '@mantine/core'
+import { IconPlus, IconPencil, IconTrash, IconAlertTriangle, IconCheck, IconFlag } from '@tabler/icons-react'
 import { useEvents } from './hooks/useEvents'
 import { useFieldOpsAction } from '../../../contexts/fieldOpsAccessContext'
 import { useOperators } from '../../../hooks/useOperators'
@@ -119,6 +119,15 @@ function payloadFromForm(f) {
     layer_id: f.layerId || null,
     notes: f.notes?.trim() ? f.notes.trim() : null,
   }
+}
+
+function ShiftStat({ label, value }) {
+  return (
+    <Box>
+      <Text size="10px" c="#9CA3AF" style={{ textTransform: 'uppercase', letterSpacing: '0.025em' }}>{label}</Text>
+      <Text size="sm" fw={600} c="#111827" mt={2}>{value}</Text>
+    </Box>
+  )
 }
 
 export default function EventLogTab({ project, report, equipment = [], selectedEquipmentId }) {
@@ -423,28 +432,41 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
   return (
     <Box>
       {totals && (
-        <Group
-          gap={16}
-          p={10}
+        <Box
+          p={16}
           mb={10}
-          wrap="wrap"
-          style={{ background: 'var(--mantine-color-gray-0)', border: '1px solid var(--mantine-color-gray-3)', borderRadius: 6 }}
+          style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 6 }}
         >
-          <Text size="xs" c="dimmed">Shift <strong>{hhmm(totals.startISO)}–{hhmm(totals.endISO)}</strong></Text>
-          <Text size="xs" c="dimmed">Operational <strong>{totals.ops.toFixed(2)} h</strong></Text>
-          <Text size="xs" c="dimmed">Delay <strong>{totals.delay.toFixed(2)} h</strong></Text>
-          <Text size="xs" c="dimmed">Shift total <strong>{totals.shift.toFixed(2)} h</strong></Text>
-          {!totals.balanced && (
-            <Badge size="xs" color="orange" variant="light">
-              Doesn&apos;t reconcile — check for gaps or overlaps
-            </Badge>
-          )}
-          {unattributedCount > 0 && (
-            <Badge size="xs" color="orange">
-              {unattributedCount} placeholder{unattributedCount === 1 ? '' : 's'} need review before submitting
-            </Badge>
-          )}
-        </Group>
+          <SimpleGrid cols={{ base: 2, md: 5 }} spacing={16}>
+            <ShiftStat label="Shift start" value={hhmm(totals.startISO)} />
+            <ShiftStat label="Shift end" value={hhmm(totals.endISO)} />
+            <ShiftStat label="Operational" value={`${totals.ops.toFixed(2)} h`} />
+            <ShiftStat label="Delay" value={`${totals.delay.toFixed(2)} h`} />
+            <ShiftStat label="Shift" value={`${totals.shift.toFixed(2)} h`} />
+          </SimpleGrid>
+
+          <Box mt={12} pt={12} style={{ borderTop: '1px solid #F3F4F6' }}>
+            {totals.balanced ? (
+              <Group gap={6} wrap="nowrap">
+                <IconCheck size={14} color="#047857" />
+                <Text size="xs" c="#047857">Operational + Delay = Shift</Text>
+              </Group>
+            ) : (
+              <Group gap={6} wrap="nowrap">
+                <IconFlag size={14} color="#B91C1C" />
+                <Text size="xs" c="#B91C1C">
+                  Shift duration {totals.imbalanceMinutes > 0 ? 'exceeds' : 'is less than'} Operational + Delay by{' '}
+                  {Math.abs(totals.imbalanceMinutes)} min — review the log.
+                </Text>
+              </Group>
+            )}
+            {unattributedCount > 0 && (
+              <Badge size="xs" color="orange" mt={8}>
+                {unattributedCount} placeholder{unattributedCount === 1 ? '' : 's'} need review before submitting
+              </Badge>
+            )}
+          </Box>
+        </Box>
       )}
 
       <Group justify="space-between" mb={8}>

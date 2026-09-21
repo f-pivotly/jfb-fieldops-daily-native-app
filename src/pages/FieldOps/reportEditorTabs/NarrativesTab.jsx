@@ -1,4 +1,5 @@
-import { Box, Text, Textarea, Stack, Group, Button, Modal, TextInput, Switch, Grid } from '@mantine/core'
+import { Box, Text, Textarea, Stack, Group, Button, Modal, TextInput, Switch } from '@mantine/core'
+import { useMediaQuery } from '@mantine/hooks'
 import { useState } from 'react'
 import { IconSettings, IconTrash, IconRefresh } from '@tabler/icons-react'
 import { useDomainData } from '../../../hooks/useDomainData'
@@ -14,6 +15,7 @@ import { uniqueSectionKey } from '../../../lib/narrativeSectionKey'
 const DEBOUNCE_MS = 1500
 
 export default function NarrativesTab({ project, report, equipment = [] }) {
+  const isWide = useMediaQuery('(min-width: 1024px)')
   const hasProject = !!project?.id
   const hasReport = !!report?.id
 
@@ -71,12 +73,12 @@ export default function NarrativesTab({ project, report, equipment = [] }) {
 
   return (
     <Box>
-      <Grid gutter="lg">
-        <Grid.Col span={{ base: 12, md: 4 }}>
+      <Box style={{ display: 'grid', gridTemplateColumns: isWide ? '280px minmax(0, 1fr)' : 'minmax(0, 1fr)', gap: 16, alignItems: 'start' }}>
+        <Box style={isWide ? { position: 'sticky', top: 16, maxHeight: 'calc(100vh - 2rem)', overflowY: 'auto' } : undefined}>
           <NarrativeContextPanel project={project} report={report} equipment={equipment} />
-        </Grid.Col>
+        </Box>
 
-        <Grid.Col span={{ base: 12, md: 8 }}>
+        <Box style={{ minWidth: 0 }}>
           <Group justify="flex-end" gap={8} mb={12}>
             <Button
               size="xs"
@@ -125,8 +127,8 @@ export default function NarrativesTab({ project, report, equipment = [] }) {
               )
             })}
           </Stack>
-        </Grid.Col>
-      </Grid>
+        </Box>
+      </Box>
 
       <SectionsManagerDialog
         opened={managerOpen}

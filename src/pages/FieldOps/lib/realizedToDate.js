@@ -99,6 +99,32 @@ export function rate(cy, goh) {
   return goh > 0 ? cy / goh : 0
 }
 
+/**
+ * Tonnage measure for a placement project paid by the ton, or null for CY.
+ * Mirrors the non-native app's fetchTonnageMeasure: sum the active materials'
+ * tons_goal for the goal, and blend their tons_per_hour_goal into one bid rate
+ * (total tons / total bid hours). A material with a goal but no rate still
+ * counts toward the goal, not the rate.
+ */
+export function tonnageMeasure(materials) {
+  let goal = 0
+  let hours = 0
+  let usable = 0
+  for (const m of materials ?? []) {
+    if (m.active === false) continue
+    const tons = Number(m.tons_goal ?? 0)
+    const rate = Number(m.tons_per_hour_goal ?? 0)
+    if (!(tons > 0)) continue
+    goal += tons
+    if (rate > 0) {
+      hours += tons / rate
+      usable += 1
+    }
+  }
+  if (goal <= 0 || usable === 0 || hours <= 0) return null
+  return { unit: 'TON', goal, bidRate: goal / hours }
+}
+
 export function buildRealizedReport(project, days, delayRows, excluded, reasons, breaks, today, measure) {
   const sorted = [...days].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
   const start = project.start_date ? project.start_date.slice(0, 10) : '2000-01-01'
