@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Box, ScrollArea, Grid, Text, Badge, Checkbox, Group, Stack, Button, Tabs } from '@mantine/core'
+import { Box, Grid, Text, Badge, Checkbox, Group, Stack, Button, Tabs } from '@mantine/core'
 import { REPORT_STATUS_LABEL, REPORT_STATUS_COLOR } from '../../config/reportStatus'
 import { shouldShowDredgeProgress } from '../../config/dredgeProgress'
 import { shouldShowPlacementProgress } from '../../config/placementProgress'
@@ -241,150 +241,148 @@ export default function ReportEditorPage() {
   }
 
   return (
-    <ScrollArea flex={1} style={{ minHeight: 0 }}>
-      <Box p={24} maw={1200} mx="auto">
-        <Link to={`/projects/${projectId}/reports`} style={{ fontSize: 12 }}>← Report list</Link>
+    <>
+      <Link to={`/projects/${projectId}/reports`} style={{ fontSize: 12 }}>← Report list</Link>
 
-        <Grid mt={10} gutter="lg">
-          <Grid.Col span={{ base: 12, lg: 3 }}>
-            <Stack gap="md" p={16} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }}>
-              <Box>
-                <Text fw={700} size="lg">{prettyDate(date)}</Text>
-                <Text size="xs" c="dimmed">{dayOfWeek(date, true)}</Text>
-                {project && <Text size="xs" c="dimmed" mt={2}>{project.name} · #{project.project_code}</Text>}
-              </Box>
+      <Grid mt={10} gutter="lg">
+        <Grid.Col span={{ base: 12, lg: 3 }}>
+          <Stack gap="md" p={16} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }}>
+            <Box>
+              <Text fw={700} size="lg">{prettyDate(date)}</Text>
+              <Text size="xs" c="dimmed">{dayOfWeek(date, true)}</Text>
+              {project && <Text size="xs" c="dimmed" mt={2}>{project.name} · #{project.project_code}</Text>}
+            </Box>
 
-              <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Text size="xs" tt="uppercase" c="dimmed">Status</Text>
-                <Badge size="sm" color={REPORT_STATUS_COLOR[status]}>{REPORT_STATUS_LABEL[status]}</Badge>
-              </Box>
+            <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text size="xs" tt="uppercase" c="dimmed">Status</Text>
+              <Badge size="sm" color={REPORT_STATUS_COLOR[status]}>{REPORT_STATUS_LABEL[status]}</Badge>
+            </Box>
 
-              {canSubmitForReview && (
-                <Button
-                  size="xs"
-                  loading={reportSaving}
-                  onClick={handleSubmitForReview}
-                  disabled={!checklistDone}
-                  title={!checklistDone ? 'All 6 checklist items must be complete before sending to PM.' : undefined}
-                  style={{ background: '#0F2744', border: 'none' }}
-                >
-                  Submit for review
-                </Button>
-              )}
-
-              {canRelease && (
-                <Button
-                  size="xs"
-                  loading={releasing}
-                  onClick={handleRelease}
-                  style={{ background: '#0F2744', border: 'none' }}
-                >
-                  Release
-                </Button>
-              )}
-
-              <Checkbox
+            {canSubmitForReview && (
+              <Button
                 size="xs"
-                label="Mobilization day (no production)"
-                description="Skips event log / production stats / metrics checks, and omits per-equipment production sheets from the PDF."
-                checked={mobDay}
-                onChange={(e) => handleToggleNoProduction(e.currentTarget.checked)}
-              />
+                loading={reportSaving}
+                onClick={handleSubmitForReview}
+                disabled={!checklistDone}
+                title={!checklistDone ? 'All 6 checklist items must be complete before sending to PM.' : undefined}
+                style={{ background: '#0F2744', border: 'none' }}
+              >
+                Submit for review
+              </Button>
+            )}
 
-              <Box>
-                <Text size="xs" fw={700} tt="uppercase" c="dimmed" mb={6}>Completion</Text>
-                <Stack gap={6}>
-                  {Object.entries(CHECKLIST_LABELS).map(([key, label]) => {
-                    const isNa = naItems.has(key)
-                    if (isNa) {
-                      return (
-                        <Group key={key} gap={6} wrap="nowrap">
-                          <Badge size="xs" color="gray" variant="light" title="N/A — Mobilization day (no production)">N/A</Badge>
-                          <Text size="xs" c="dimmed" fs="italic">{label}</Text>
-                        </Group>
-                      )
-                    }
+            {canRelease && (
+              <Button
+                size="xs"
+                loading={releasing}
+                onClick={handleRelease}
+                style={{ background: '#0F2744', border: 'none' }}
+              >
+                Release
+              </Button>
+            )}
+
+            <Checkbox
+              size="xs"
+              label="Mobilization day (no production)"
+              description="Skips event log / production stats / metrics checks, and omits per-equipment production sheets from the PDF."
+              checked={mobDay}
+              onChange={(e) => handleToggleNoProduction(e.currentTarget.checked)}
+            />
+
+            <Box>
+              <Text size="xs" fw={700} tt="uppercase" c="dimmed" mb={6}>Completion</Text>
+              <Stack gap={6}>
+                {Object.entries(CHECKLIST_LABELS).map(([key, label]) => {
+                  const isNa = naItems.has(key)
+                  if (isNa) {
                     return (
-                      <Checkbox key={key} size="xs" readOnly label={label} checked={!!checklist?.[key]} />
+                      <Group key={key} gap={6} wrap="nowrap">
+                        <Badge size="xs" color="gray" variant="light" title="N/A — Mobilization day (no production)">N/A</Badge>
+                        <Text size="xs" c="dimmed" fs="italic">{label}</Text>
+                      </Group>
                     )
-                  })}
-                </Stack>
-              </Box>
+                  }
+                  return (
+                    <Checkbox key={key} size="xs" readOnly label={label} checked={!!checklist?.[key]} />
+                  )
+                })}
+              </Stack>
+            </Box>
 
-              <Box>
-                <Text size="xs" fw={700} tt="uppercase" c="dimmed" mb={6}>Equipment</Text>
-                <Stack gap={4}>
-                  {equipment.map((eq) => (
-                    <Button
-                      key={eq.id}
-                      size="xs"
-                      variant={effectiveEquipmentId === eq.id ? 'filled' : 'default'}
-                      justify="flex-start"
-                      onClick={() => setSelectedEquipment(eq.id)}
-                    >
-                      {eq.name}
-                    </Button>
-                  ))}
-                </Stack>
-              </Box>
-
-              <PMReviewPanel project={project} report={report} equipment={equipment} onApprove={handleApprove} onSendBack={handleSendBack} saving={reportSaving} />
-
-              {canDownloadPdf && (
-                <Stack gap={6}>
-                  <Button size="xs" loading={downloadingPdf} onClick={() => handleDownloadPdf()}>
-                    Download PDF
+            <Box>
+              <Text size="xs" fw={700} tt="uppercase" c="dimmed" mb={6}>Equipment</Text>
+              <Stack gap={4}>
+                {equipment.map((eq) => (
+                  <Button
+                    key={eq.id}
+                    size="xs"
+                    variant={effectiveEquipmentId === eq.id ? 'filled' : 'default'}
+                    justify="flex-start"
+                    onClick={() => setSelectedEquipment(eq.id)}
+                  >
+                    {eq.name}
                   </Button>
-                  {pdfIssues && pdfIssues.length > 0 && (
-                    <Box p={8} style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 6 }}>
-                      <Text size="xs" fw={700} c="#92400E" mb={4}>PDF blocked — fix these first:</Text>
-                      <Stack gap={2}>
-                        {pdfIssues.map((issue) => (
-                          <Text key={issue.key} size="xs" c="#92400E">• {issue.message}</Text>
-                        ))}
-                      </Stack>
-                      {canSkipPdfValidation && (
-                        <Text
-                          size="xs"
-                          fw={600}
-                          c="#92400E"
-                          mt={4}
-                          style={{ cursor: 'pointer', textDecoration: 'underline', display: 'inline-block' }}
-                          onClick={() => handleDownloadPdf({ skipValidation: true })}
-                          title="This override requires the skip_pdf_validation grant."
-                        >
-                          Generate anyway (override)
-                        </Text>
-                      )}
-                    </Box>
-                  )}
-                </Stack>
-              )}
-
-              {canUnlock && (
-                <Button size="xs" variant="default" loading={reportSaving} onClick={handleUnlock}>
-                  Unlock for Edit
-                </Button>
-              )}
-            </Stack>
-          </Grid.Col>
-
-          <Grid.Col span={{ base: 12, lg: 9 }}>
-            <Tabs value={activeTab} onChange={setTab} keepMounted={false}>
-              <Tabs.List mb={12}>
-                {contentTabs.map((t) => (
-                  <Tabs.Tab key={t.key} value={t.key}>{t.label}</Tabs.Tab>
                 ))}
-              </Tabs.List>
+              </Stack>
+            </Box>
+
+            <PMReviewPanel project={project} report={report} equipment={equipment} onApprove={handleApprove} onSendBack={handleSendBack} saving={reportSaving} />
+
+            {canDownloadPdf && (
+              <Stack gap={6}>
+                <Button size="xs" loading={downloadingPdf} onClick={() => handleDownloadPdf()}>
+                  Download PDF
+                </Button>
+                {pdfIssues && pdfIssues.length > 0 && (
+                  <Box p={8} style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 6 }}>
+                    <Text size="xs" fw={700} c="#92400E" mb={4}>PDF blocked — fix these first:</Text>
+                    <Stack gap={2}>
+                      {pdfIssues.map((issue) => (
+                        <Text key={issue.key} size="xs" c="#92400E">• {issue.message}</Text>
+                      ))}
+                    </Stack>
+                    {canSkipPdfValidation && (
+                      <Text
+                        size="xs"
+                        fw={600}
+                        c="#92400E"
+                        mt={4}
+                        style={{ cursor: 'pointer', textDecoration: 'underline', display: 'inline-block' }}
+                        onClick={() => handleDownloadPdf({ skipValidation: true })}
+                        title="This override requires the skip_pdf_validation grant."
+                      >
+                        Generate anyway (override)
+                      </Text>
+                    )}
+                  </Box>
+                )}
+              </Stack>
+            )}
+
+            {canUnlock && (
+              <Button size="xs" variant="default" loading={reportSaving} onClick={handleUnlock}>
+                Unlock for Edit
+              </Button>
+            )}
+          </Stack>
+        </Grid.Col>
+
+        <Grid.Col span={{ base: 12, lg: 9 }}>
+          <Tabs value={activeTab} onChange={setTab} keepMounted={false}>
+            <Tabs.List mb={12}>
               {contentTabs.map((t) => (
-                <Tabs.Panel key={t.key} value={t.key}>
-                  <t.Comp project={project} report={report} reports={reports} equipment={equipment} selectedEquipmentId={effectiveEquipmentId} />
-                </Tabs.Panel>
+                <Tabs.Tab key={t.key} value={t.key}>{t.label}</Tabs.Tab>
               ))}
-            </Tabs>
-          </Grid.Col>
-        </Grid>
-      </Box>
-    </ScrollArea>
+            </Tabs.List>
+            {contentTabs.map((t) => (
+              <Tabs.Panel key={t.key} value={t.key}>
+                <t.Comp project={project} report={report} reports={reports} equipment={equipment} selectedEquipmentId={effectiveEquipmentId} />
+              </Tabs.Panel>
+            ))}
+          </Tabs>
+        </Grid.Col>
+      </Grid>
+    </>
   )
 }

@@ -14,7 +14,7 @@ export default function AppHeader() {
         borderBottom: '1px solid rgba(255,255,255,0.15)',
         display: 'flex',
         alignItems: 'center',
-        padding: '8px 14px',
+        padding: '8px 24px',
         flexShrink: 0,
         zIndex: 200,
       }}

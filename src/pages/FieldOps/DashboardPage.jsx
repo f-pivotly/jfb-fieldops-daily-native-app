@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Box, SimpleGrid, Text, Group, ScrollArea } from '@mantine/core'
+import { Box, SimpleGrid, Text, Group } from '@mantine/core'
 import { useHover } from '@mantine/hooks'
 import { useVisibleProjects } from '../../hooks/project/useVisibleProjects'
 import { useAppConfig } from '../../contexts/appConfigContext'
@@ -77,39 +77,37 @@ export default function DashboardPage() {
   const ready = !loading && !pageError && data !== null
 
   return (
-    <ScrollArea flex={1} style={{ minHeight: 0 }}>
-      <Box maw={1280} mx="auto" px={16} py={32}>
-        <Group justify="space-between" align="baseline" mb={24}>
-          <Text size="24px" fw={600} c="#111827">Project Dashboard</Text>
-          <Text size="sm" c="#6B7280">Today is {prettyDate(today)}</Text>
-        </Group>
+    <>
+      <Group justify="space-between" align="baseline" mb={24}>
+        <Text size="24px" fw={600} c="#111827">Project Dashboard</Text>
+        <Text size="sm" c="#6B7280">Today is {prettyDate(today)}</Text>
+      </Group>
 
-        <SafeError message={pageError} />
+      <SafeError message={pageError} />
 
-        {!pageError && (loading || data === null) && <LoadingSpinner py={24} />}
+      {!pageError && (loading || data === null) && <LoadingSpinner py={24} />}
 
-        {ready && activeProjects.length === 0 && (
-          <Box ta="center" px={24} py={40} style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 6 }}>
-            <Text fw={500} c="#374151">No projects assigned.</Text>
-            <Text size="sm" c="#6B7280" mt={4}>Contact your administrator to be assigned to a project.</Text>
-          </Box>
-        )}
+      {ready && activeProjects.length === 0 && (
+        <Box ta="center" px={24} py={40} style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 6 }}>
+          <Text fw={500} c="#374151">No projects assigned.</Text>
+          <Text size="sm" c="#6B7280" mt={4}>Contact your administrator to be assigned to a project.</Text>
+        </Box>
+      )}
 
-        {ready && activeProjects.length > 0 && (
-          <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing={16}>
-            {activeProjects.map((project) => (
-              <ProjectCard
-                key={project.id}
-                project={project}
-                status={data.todayStatus[project.id] ?? 'no_report'}
-                equipmentCount={data.equipmentCounts[project.id] ?? 0}
-                lastReportDate={data.lastReportDates[project.id] ?? null}
-              />
-            ))}
-          </SimpleGrid>
-        )}
-      </Box>
-    </ScrollArea>
+      {ready && activeProjects.length > 0 && (
+        <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing={16}>
+          {activeProjects.map((project) => (
+            <ProjectCard
+              key={project.id}
+              project={project}
+              status={data.todayStatus[project.id] ?? 'no_report'}
+              equipmentCount={data.equipmentCounts[project.id] ?? 0}
+              lastReportDate={data.lastReportDates[project.id] ?? null}
+            />
+          ))}
+        </SimpleGrid>
+      )}
+    </>
   )
 }
 

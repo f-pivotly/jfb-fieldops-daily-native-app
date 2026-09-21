@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Routes, Route } from "react-router-dom";
 import { Box, Loader } from "@mantine/core";
 import AppHeader from "./components/AppHeader";
+import PageShell from "./components/PageShell";
 import LaunchPage from "./pages/LaunchPage";
 import AdminApp from "./pages/Admin/AdminApp";
 import DashboardPage from "./pages/FieldOps/DashboardPage";
@@ -87,6 +88,7 @@ export default function App() {
           }}
         >
           <AppHeader />
+          <PageShell>
           <Routes>
             <Route path="/" element={<DashboardPage />} />
             <Route
@@ -135,6 +137,7 @@ export default function App() {
             <Route path="/forbidden" element={<Forbidden />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
+          </PageShell>
         </Box>
       </FieldOpsAccessProvider>
     );

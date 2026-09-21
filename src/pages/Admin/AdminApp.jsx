@@ -15,6 +15,7 @@ import AdminUsersSection from "./AdminUsersSection";
 import AdminTeamSection from "./AdminTeamSection";
 import ProjectDetailShell from "./ProjectDetail/ProjectDetailShell";
 import { AdminAccessProvider } from "../../contexts/AdminAccessProvider";
+import PageShell from "../../components/PageShell";
 
 const NAV_SECTIONS = [
   {
@@ -154,9 +155,7 @@ export default function AdminApp({ onExit }) {
         </Box>
       </Box>
 
-      <ScrollArea flex={1} style={{ minHeight: 0 }}>
-        <Box p={24}>{mainContent}</Box>
-      </ScrollArea>
+      <PageShell>{mainContent}</PageShell>
     </Box>
     </AdminAccessProvider>
   );

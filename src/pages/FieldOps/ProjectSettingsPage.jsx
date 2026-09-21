@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Box, ScrollArea, Text, Group, Tabs, TextInput, Button } from '@mantine/core'
+import { Box, Text, Group, Tabs, TextInput, Button } from '@mantine/core'
 import { useProject } from '../../hooks/project/useProject'
 import { useEquipment } from '../../hooks/project/useEquipment'
 import { useRealizedExcludedDays } from '../../hooks/project/useRealizedExcludedDays'
@@ -28,72 +28,70 @@ export default function ProjectSettingsPage() {
   const isSpreader = project?.is_spreader_active === true
 
   return (
-    <ScrollArea flex={1} style={{ minHeight: 0 }}>
-      <Box p={24} maw={1000} mx="auto">
-        <Link to={`/projects/${projectId}/reports`} style={{ fontSize: 12 }}>← Project Dashboard</Link>
+    <>
+      <Link to={`/projects/${projectId}/reports`} style={{ fontSize: 12 }}>← Project Dashboard</Link>
 
-        <Text fw={700} size="lg" mt={10}>Project Settings · {project?.name ?? ''}</Text>
-        <Text size="xs" c="dimmed" mb={16}>Project #{project?.project_code}</Text>
+      <Text fw={700} size="lg" mt={10}>Project Settings · {project?.name ?? ''}</Text>
+      <Text size="xs" c="dimmed" mb={16}>Project #{project?.project_code}</Text>
 
-        <Box mb={16}>
-          <ProductionPlanCard project={project} onSave={updateProject} />
-        </Box>
-
-        <Box mb={16}>
-          <ScheduledOffDaysCard
-            projectId={projectId}
-            excludedDays={excludedDays}
-            today={todayISO()}
-            onCreate={createExcluded}
-            onRemove={removeExcluded}
-          />
-        </Box>
-
-        <Box mb={16}>
-          <CappingSettingsCard project={project} onSave={updateProject} />
-        </Box>
-
-        <Tabs defaultValue="narratives">
-          <Tabs.List mb={12}>
-            <Tabs.Tab value="narratives">Narratives</Tabs.Tab>
-            <Tabs.Tab value="metrics">Cover Metrics</Tabs.Tab>
-            <Tabs.Tab value="siteEquipment">Site Equipment</Tabs.Tab>
-            <Tabs.Tab value="attachments">Attachments</Tabs.Tab>
-            {isDredging && <Tabs.Tab value="dredgeChart">Dredge Chart</Tabs.Tab>}
-            {isPlacement && <Tabs.Tab value="placementChart">Placement Chart</Tabs.Tab>}
-            {isSpreader && <Tabs.Tab value="spreaderChart">Spreader Chart</Tabs.Tab>}
-          </Tabs.List>
-
-          <Tabs.Panel value="narratives">
-            <NarrativesTab project={project} />
-          </Tabs.Panel>
-          <Tabs.Panel value="metrics">
-            <CoverMetricsTab project={project} />
-          </Tabs.Panel>
-          <Tabs.Panel value="siteEquipment">
-            <SiteEquipmentTab project={project} />
-          </Tabs.Panel>
-          <Tabs.Panel value="attachments">
-            <AttachmentsTab project={project} />
-          </Tabs.Panel>
-          {isDredging && (
-            <Tabs.Panel value="dredgeChart">
-              <DredgeChartTab project={project} />
-            </Tabs.Panel>
-          )}
-          {isPlacement && (
-            <Tabs.Panel value="placementChart">
-              <PlacementChartTab project={project} />
-            </Tabs.Panel>
-          )}
-          {isSpreader && (
-            <Tabs.Panel value="spreaderChart">
-              <SpreaderChartTab project={project} />
-            </Tabs.Panel>
-          )}
-        </Tabs>
+      <Box mb={16}>
+        <ProductionPlanCard project={project} onSave={updateProject} />
       </Box>
-    </ScrollArea>
+
+      <Box mb={16}>
+        <ScheduledOffDaysCard
+          projectId={projectId}
+          excludedDays={excludedDays}
+          today={todayISO()}
+          onCreate={createExcluded}
+          onRemove={removeExcluded}
+        />
+      </Box>
+
+      <Box mb={16}>
+        <CappingSettingsCard project={project} onSave={updateProject} />
+      </Box>
+
+      <Tabs defaultValue="narratives">
+        <Tabs.List mb={12}>
+          <Tabs.Tab value="narratives">Narratives</Tabs.Tab>
+          <Tabs.Tab value="metrics">Cover Metrics</Tabs.Tab>
+          <Tabs.Tab value="siteEquipment">Site Equipment</Tabs.Tab>
+          <Tabs.Tab value="attachments">Attachments</Tabs.Tab>
+          {isDredging && <Tabs.Tab value="dredgeChart">Dredge Chart</Tabs.Tab>}
+          {isPlacement && <Tabs.Tab value="placementChart">Placement Chart</Tabs.Tab>}
+          {isSpreader && <Tabs.Tab value="spreaderChart">Spreader Chart</Tabs.Tab>}
+        </Tabs.List>
+
+        <Tabs.Panel value="narratives">
+          <NarrativesTab project={project} />
+        </Tabs.Panel>
+        <Tabs.Panel value="metrics">
+          <CoverMetricsTab project={project} />
+        </Tabs.Panel>
+        <Tabs.Panel value="siteEquipment">
+          <SiteEquipmentTab project={project} />
+        </Tabs.Panel>
+        <Tabs.Panel value="attachments">
+          <AttachmentsTab project={project} />
+        </Tabs.Panel>
+        {isDredging && (
+          <Tabs.Panel value="dredgeChart">
+            <DredgeChartTab project={project} />
+          </Tabs.Panel>
+        )}
+        {isPlacement && (
+          <Tabs.Panel value="placementChart">
+            <PlacementChartTab project={project} />
+          </Tabs.Panel>
+        )}
+        {isSpreader && (
+          <Tabs.Panel value="spreaderChart">
+            <SpreaderChartTab project={project} />
+          </Tabs.Panel>
+        )}
+      </Tabs>
+    </>
   )
 }
 

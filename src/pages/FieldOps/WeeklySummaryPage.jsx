@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Box, ScrollArea, Text, Group, Button, Stack, Textarea, SimpleGrid, Switch, Modal } from '@mantine/core'
+import { Box, Text, Group, Button, Stack, Textarea, SimpleGrid, Switch, Modal } from '@mantine/core'
 import {
   executeDataView, deleteAttachment, readWrittenRecordId, executeReport,
 } from '../../data'
@@ -317,160 +317,158 @@ export default function WeeklySummaryPage() {
     : null
 
   return (
-    <ScrollArea flex={1} style={{ minHeight: 0 }}>
-      <Box p={24} maw={900} mx="auto">
-        <Group justify="space-between" mb={4}>
-          <Text fw={700} size="lg">Weekly Summary</Text>
-          <Group gap="md">
-            {report && report.releasedCount > 0 && (
-              <Button size="xs" variant="outline" loading={downloadingPdf} onClick={handleDownloadPdf}>
-                {downloadingPdf ? 'Generating…' : 'Download PDF'}
-              </Button>
-            )}
-            <Link to={`/projects/${projectId}/reports`} style={{ fontSize: 13 }}>← Reports</Link>
-          </Group>
+    <>
+      <Group justify="space-between" mb={4}>
+        <Text fw={700} size="lg">Weekly Summary</Text>
+        <Group gap="md">
+          {report && report.releasedCount > 0 && (
+            <Button size="xs" variant="outline" loading={downloadingPdf} onClick={handleDownloadPdf}>
+              {downloadingPdf ? 'Generating…' : 'Download PDF'}
+            </Button>
+          )}
+          <Link to={`/projects/${projectId}/reports`} style={{ fontSize: 13 }}>← Reports</Link>
         </Group>
-        <Text size="sm" c="dimmed" mb={16}>
-          Client-facing roll-up of the week's daily narratives, production, and delays.
-        </Text>
+      </Group>
+      <Text size="sm" c="dimmed" mb={16}>
+        Client-facing roll-up of the week's daily narratives, production, and delays.
+      </Text>
 
-        {loading && <LoadingSpinner py={16} />}
-        {!loading && <SafeError message={error} />}
+      {loading && <LoadingSpinner py={16} />}
+      {!loading && <SafeError message={error} />}
 
-        {!loading && !error && (
-          <>
-            <Group justify="space-between" p={12} mb={20} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }}>
-              <Text
-                size="sm"
-                onClick={() => setWeekStart((w) => previousWeekStart(w))}
-                style={{ cursor: 'pointer' }}
-              >
-                ← Previous week
-              </Text>
-              <Box ta="center">
-                <Text size="sm" fw={500}>{weekStart} – {weekEnd}</Text>
-                <Text size="10px" c="dimmed">{report.releasedCount} released reports this week</Text>
-              </Box>
-              <Text
-                size="sm"
-                c={isDefaultWeek ? 'dimmed' : undefined}
-                onClick={isDefaultWeek ? undefined : () => setWeekStart((w) => nextWeekStart(w))}
-                style={{ cursor: isDefaultWeek ? 'not-allowed' : 'pointer' }}
-                title={isDefaultWeek ? "Can't view the still-in-progress current week" : undefined}
-              >
-                Next week →
-              </Text>
-            </Group>
-
-            {report.releasedCount === 0 ? (
-              <Box p={24} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8, textAlign: 'center' }}>
-                <Text size="sm" c="dimmed">
-                  No released reports for this week. Use the week navigation above to find a week with released
-                  dailies. (Drafts and reports still in PM Review don't appear here.)
-                </Text>
-              </Box>
-            ) : (
-            <>
-            <Group justify="space-between" p={12} mb={20} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }}>
-              <Box>
-                <Text size="sm" fw={500}>AI first-draft summary</Text>
-                <Text size="10px" c="dimmed">
-                  {aiOn ? 'Sections seeded with a draft summary.' : 'Off — sections seeded with daily entries to summarize by hand.'}
-                </Text>
-              </Box>
-              <Switch checked={aiOn} onChange={(e) => setAiOn(e.currentTarget.checked)} />
-            </Group>
-
-            <Text fw={600} mb={4}>Narrative summary</Text>
-            <Text size="10px" c="dimmed" mb={10}>Each section shows the week's daily entries as reference.</Text>
-            <Stack gap="md" mb={20}>
-              {report.sections.length === 0 && (
-                <Text size="xs" c="dimmed">No narrative sections configured for this project yet.</Text>
-              )}
-              {report.sections.map((s) => {
-                const summaryRow = summaries.find((row) => row.week_start === weekStart && row.section_key === s.sectionKey)
-                return (
-                  <Box key={s.key} p={16} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }}>
-                    <Text size="sm" fw={600} mb={6}>{s.label}</Text>
-                    <Stack gap={2} mb={8}>
-                      {s.entries.length === 0 && (
-                        <Text size="xs" c="dimmed">No released daily entries for this section this week.</Text>
-                      )}
-                      {s.entries.map((e) => (
-                        <Text key={e.date} size="xs" c="dimmed">{e.date} — {e.text}</Text>
-                      ))}
-                    </Stack>
-                    <WeeklySummaryTextarea
-                      summaryRow={summaryRow}
-                      onSave={(text) => handleSaveSummary(summaryRow, s.sectionKey, text)}
-                    />
-                  </Box>
-                )
-              })}
-            </Stack>
-
-            <Text fw={600} mb={4}>Photos</Text>
-            <Text size="10px" c="dimmed" mb={10}>Two photos for the weekly PDF. JPEG / PNG / HEIC · 10 MB max.</Text>
-            <SimpleGrid cols={{ base: 1, sm: 2 }} mb={20}>
-              {PHOTO_SLOTS.map((n) => (
-                <PhotoSlot
-                  key={n}
-                  slotNumber={n}
-                  photo={photoFor(n)}
-                  uploading={photoUploading[n]}
-                  error={photoSlotErrors[n]}
-                  onUpload={(file, label) => handlePhotoUpload(n, file, label)}
-                  onLabelChange={(label) => handlePhotoLabelChange(n, label)}
-                  onRemove={() => setRemovingSlot(n)}
-                  canEdit
-                />
-              ))}
-            </SimpleGrid>
-
-            {projectShowsDredgeChart(project) && dredgeConfigRecords.length > 0 && (
-              <Box p={16} mb={20} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }}>
-                <Text size="sm">
-                  <Text span fw={600}>Weekly progress chart: </Text>
-                  {progressDredgeCount === null ? (
-                    <Text span c="dimmed">checking…</Text>
-                  ) : progressDredgeCount > 0 ? (
-                    <Text span c="teal">
-                      {progressDredgeCount} dredge{progressDredgeCount === 1 ? '' : 's'} with coverage — a chart page will be added to the PDF.
-                    </Text>
-                  ) : (
-                    <Text span c="dimmed">
-                      no saved dredge progress for this week's dates yet — no chart page will be added. (Charts come from daily progress saved in the Dredge Progress tab.)
-                    </Text>
-                  )}
-                </Text>
-              </Box>
-            )}
-
-            <SimpleGrid cols={{ base: 1, sm: 2 }} mb={20}>
-              <ProductionCard report={report} />
-              <DelayCard report={report} />
-            </SimpleGrid>
-            </>
-            )}
-
-            <SafeError message={pdfError} />
-
-            <Modal
-              opened={removingSlot != null}
-              onClose={() => setRemovingSlot(null)}
-              title={<Text fw={700} size="sm">{`Remove photo ${removingSlot ?? ''}?`}</Text>}
+      {!loading && !error && (
+        <>
+          <Group justify="space-between" p={12} mb={20} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }}>
+            <Text
               size="sm"
+              onClick={() => setWeekStart((w) => previousWeekStart(w))}
+              style={{ cursor: 'pointer' }}
             >
-              <Text size="sm" mb={16}>The file will be deleted from storage.</Text>
-              <Group justify="flex-end">
-                <Button variant="default" size="xs" onClick={() => setRemovingSlot(null)}>Cancel</Button>
-                <Button size="xs" color="red" onClick={confirmPhotoRemove}>Remove</Button>
-              </Group>
-            </Modal>
+              ← Previous week
+            </Text>
+            <Box ta="center">
+              <Text size="sm" fw={500}>{weekStart} – {weekEnd}</Text>
+              <Text size="10px" c="dimmed">{report.releasedCount} released reports this week</Text>
+            </Box>
+            <Text
+              size="sm"
+              c={isDefaultWeek ? 'dimmed' : undefined}
+              onClick={isDefaultWeek ? undefined : () => setWeekStart((w) => nextWeekStart(w))}
+              style={{ cursor: isDefaultWeek ? 'not-allowed' : 'pointer' }}
+              title={isDefaultWeek ? "Can't view the still-in-progress current week" : undefined}
+            >
+              Next week →
+            </Text>
+          </Group>
+
+          {report.releasedCount === 0 ? (
+            <Box p={24} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8, textAlign: 'center' }}>
+              <Text size="sm" c="dimmed">
+                No released reports for this week. Use the week navigation above to find a week with released
+                dailies. (Drafts and reports still in PM Review don't appear here.)
+              </Text>
+            </Box>
+          ) : (
+          <>
+          <Group justify="space-between" p={12} mb={20} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }}>
+            <Box>
+              <Text size="sm" fw={500}>AI first-draft summary</Text>
+              <Text size="10px" c="dimmed">
+                {aiOn ? 'Sections seeded with a draft summary.' : 'Off — sections seeded with daily entries to summarize by hand.'}
+              </Text>
+            </Box>
+            <Switch checked={aiOn} onChange={(e) => setAiOn(e.currentTarget.checked)} />
+          </Group>
+
+          <Text fw={600} mb={4}>Narrative summary</Text>
+          <Text size="10px" c="dimmed" mb={10}>Each section shows the week's daily entries as reference.</Text>
+          <Stack gap="md" mb={20}>
+            {report.sections.length === 0 && (
+              <Text size="xs" c="dimmed">No narrative sections configured for this project yet.</Text>
+            )}
+            {report.sections.map((s) => {
+              const summaryRow = summaries.find((row) => row.week_start === weekStart && row.section_key === s.sectionKey)
+              return (
+                <Box key={s.key} p={16} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }}>
+                  <Text size="sm" fw={600} mb={6}>{s.label}</Text>
+                  <Stack gap={2} mb={8}>
+                    {s.entries.length === 0 && (
+                      <Text size="xs" c="dimmed">No released daily entries for this section this week.</Text>
+                    )}
+                    {s.entries.map((e) => (
+                      <Text key={e.date} size="xs" c="dimmed">{e.date} — {e.text}</Text>
+                    ))}
+                  </Stack>
+                  <WeeklySummaryTextarea
+                    summaryRow={summaryRow}
+                    onSave={(text) => handleSaveSummary(summaryRow, s.sectionKey, text)}
+                  />
+                </Box>
+              )
+            })}
+          </Stack>
+
+          <Text fw={600} mb={4}>Photos</Text>
+          <Text size="10px" c="dimmed" mb={10}>Two photos for the weekly PDF. JPEG / PNG / HEIC · 10 MB max.</Text>
+          <SimpleGrid cols={{ base: 1, sm: 2 }} mb={20}>
+            {PHOTO_SLOTS.map((n) => (
+              <PhotoSlot
+                key={n}
+                slotNumber={n}
+                photo={photoFor(n)}
+                uploading={photoUploading[n]}
+                error={photoSlotErrors[n]}
+                onUpload={(file, label) => handlePhotoUpload(n, file, label)}
+                onLabelChange={(label) => handlePhotoLabelChange(n, label)}
+                onRemove={() => setRemovingSlot(n)}
+                canEdit
+              />
+            ))}
+          </SimpleGrid>
+
+          {projectShowsDredgeChart(project) && dredgeConfigRecords.length > 0 && (
+            <Box p={16} mb={20} style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }}>
+              <Text size="sm">
+                <Text span fw={600}>Weekly progress chart: </Text>
+                {progressDredgeCount === null ? (
+                  <Text span c="dimmed">checking…</Text>
+                ) : progressDredgeCount > 0 ? (
+                  <Text span c="teal">
+                    {progressDredgeCount} dredge{progressDredgeCount === 1 ? '' : 's'} with coverage — a chart page will be added to the PDF.
+                  </Text>
+                ) : (
+                  <Text span c="dimmed">
+                    no saved dredge progress for this week's dates yet — no chart page will be added. (Charts come from daily progress saved in the Dredge Progress tab.)
+                  </Text>
+                )}
+              </Text>
+            </Box>
+          )}
+
+          <SimpleGrid cols={{ base: 1, sm: 2 }} mb={20}>
+            <ProductionCard report={report} />
+            <DelayCard report={report} />
+          </SimpleGrid>
           </>
-        )}
-      </Box>
-    </ScrollArea>
+          )}
+
+          <SafeError message={pdfError} />
+
+          <Modal
+            opened={removingSlot != null}
+            onClose={() => setRemovingSlot(null)}
+            title={<Text fw={700} size="sm">{`Remove photo ${removingSlot ?? ''}?`}</Text>}
+            size="sm"
+          >
+            <Text size="sm" mb={16}>The file will be deleted from storage.</Text>
+            <Group justify="flex-end">
+              <Button variant="default" size="xs" onClick={() => setRemovingSlot(null)}>Cancel</Button>
+              <Button size="xs" color="red" onClick={confirmPhotoRemove}>Remove</Button>
+            </Group>
+          </Modal>
+        </>
+      )}
+    </>
   )
 }
 

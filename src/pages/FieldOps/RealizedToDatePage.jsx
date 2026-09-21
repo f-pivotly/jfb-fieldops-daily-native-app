@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Box, ScrollArea, Grid, Text, Table, Group, Button, Stack, TextInput, UnstyledButton } from '@mantine/core'
+import { Box, Grid, Text, Table, Group, Button, Stack, TextInput, UnstyledButton } from '@mantine/core'
 import { executeDataView, executeReport } from '../../data'
 import { useAppConfig } from '../../contexts/appConfigContext'
 import { useProject } from '../../hooks/project/useProject'
@@ -149,91 +149,89 @@ export default function RealizedToDatePage() {
   const loading = projectLoading || (!!project?.id && dailyTotals === null)
 
   return (
-    <ScrollArea flex={1} style={{ minHeight: 0 }}>
-      <Box p={24} maw={1200} mx="auto">
-        <Group justify="space-between" mb={4}>
-          <Text fw={700} size="lg">Realized To-Date</Text>
-          <Group gap="md">
-            {report && report.weeks.length > 0 && (
-              <Button size="xs" variant="outline" loading={pdfBusy} onClick={handleDownloadPdf}>
-                {pdfBusy ? 'Generating…' : 'Download PDF'}
-              </Button>
-            )}
-            <Link to={`/projects/${projectId}/reports`} style={{ fontSize: 13 }}>← Reports</Link>
-          </Group>
+    <>
+      <Group justify="space-between" mb={4}>
+        <Text fw={700} size="lg">Realized To-Date</Text>
+        <Group gap="md">
+          {report && report.weeks.length > 0 && (
+            <Button size="xs" variant="outline" loading={pdfBusy} onClick={handleDownloadPdf}>
+              {pdfBusy ? 'Generating…' : 'Download PDF'}
+            </Button>
+          )}
+          <Link to={`/projects/${projectId}/reports`} style={{ fontSize: 13 }}>← Reports</Link>
         </Group>
-        <Text size="sm" c="dimmed" mb={20}>
-          Cumulative production vs goal and completion forecast. Internal report — not client-facing.
-        </Text>
+      </Group>
+      <Text size="sm" c="dimmed" mb={20}>
+        Cumulative production vs goal and completion forecast. Internal report — not client-facing.
+      </Text>
 
-        {(dailyTotalsError || actionError) && (
-          <Box mb={16} p={12} style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6 }}>
-            <Text size="sm" c="#b91c1c">{dailyTotalsError || actionError}</Text>
-          </Box>
-        )}
-        {loading && <Text size="sm" c="dimmed">Loading…</Text>}
+      {(dailyTotalsError || actionError) && (
+        <Box mb={16} p={12} style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6 }}>
+          <Text size="sm" c="#b91c1c">{dailyTotalsError || actionError}</Text>
+        </Box>
+      )}
+      {loading && <Text size="sm" c="dimmed">Loading…</Text>}
 
-        {!loading && report && project && (
-          <>
-            {!report.summary.planEnabled && (
-              <Box mb={16} p={12} style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6 }}>
-                <Text size="sm" c="#92400e">
-                  Forecast disabled — set <Text span fw={700} fs="normal">Expected GOH/day</Text> and{' '}
-                  <Text span fw={700} fs="normal">Production days/week</Text> on the{' '}
-                  <Link to={`/projects/${projectId}/settings`} style={{ textDecoration: 'underline', fontWeight: 600 }}>
-                    Project Settings
-                  </Link>{' '}
-                  page to enable completion projections.
-                </Text>
-              </Box>
-            )}
+      {!loading && report && project && (
+        <>
+          {!report.summary.planEnabled && (
+            <Box mb={16} p={12} style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6 }}>
+              <Text size="sm" c="#92400e">
+                Forecast disabled — set <Text span fw={700} fs="normal">Expected GOH/day</Text> and{' '}
+                <Text span fw={700} fs="normal">Production days/week</Text> on the{' '}
+                <Link to={`/projects/${projectId}/settings`} style={{ textDecoration: 'underline', fontWeight: 600 }}>
+                  Project Settings
+                </Link>{' '}
+                page to enable completion projections.
+              </Text>
+            </Box>
+          )}
 
-            <Grid gutter="lg">
-              <Grid.Col span={{ base: 12, lg: 4 }}>
-                <Stack gap="md">
-                  <SummaryCard report={report} />
-                  <ProjectionsCard report={report} />
-                  <DelaySummaryCard report={report} />
-                </Stack>
-              </Grid.Col>
+          <Grid gutter="lg">
+            <Grid.Col span={{ base: 12, lg: 4 }}>
+              <Stack gap="md">
+                <SummaryCard report={report} />
+                <ProjectionsCard report={report} />
+                <DelaySummaryCard report={report} />
+              </Stack>
+            </Grid.Col>
 
-              <Grid.Col span={{ base: 12, lg: 8 }}>
-                <WeeklyLog report={report} onExclude={(date) => setExcludeTarget(date)} onInclude={includeDay} />
+            <Grid.Col span={{ base: 12, lg: 8 }}>
+              <WeeklyLog report={report} onExclude={(date) => setExcludeTarget(date)} onInclude={includeDay} />
 
-                <Box mt="md">
-                  <ScheduledOffDaysCard
-                    projectId={projectId}
-                    excludedDays={excludedDays}
-                    today={today}
-                    onCreate={createExcluded}
-                    onRemove={removeExcluded}
-                    onError={setActionError}
-                  />
-                </Box>
-
-                <ShutdownManager
-                  breaks={breaks}
-                  adding={addingBreak}
-                  onAdd={async (start, end, reason) => {
-                    try {
-                      await createBreak({ project_id: projectId, shutdown_start: start, shutdown_end: end, reason: reason || null })
-                    } catch (e) {
-                      setActionError(e.message)
-                    }
-                  }}
-                  onRemove={async (id) => {
-                    try {
-                      await removeBreak(id)
-                    } catch (e) {
-                      setActionError(e.message)
-                    }
-                  }}
+              <Box mt="md">
+                <ScheduledOffDaysCard
+                  projectId={projectId}
+                  excludedDays={excludedDays}
+                  today={today}
+                  onCreate={createExcluded}
+                  onRemove={removeExcluded}
+                  onError={setActionError}
                 />
-              </Grid.Col>
-            </Grid>
-          </>
-        )}
-      </Box>
+              </Box>
+
+              <ShutdownManager
+                breaks={breaks}
+                adding={addingBreak}
+                onAdd={async (start, end, reason) => {
+                  try {
+                    await createBreak({ project_id: projectId, shutdown_start: start, shutdown_end: end, reason: reason || null })
+                  } catch (e) {
+                    setActionError(e.message)
+                  }
+                }}
+                onRemove={async (id) => {
+                  try {
+                    await removeBreak(id)
+                  } catch (e) {
+                    setActionError(e.message)
+                  }
+                }}
+              />
+            </Grid.Col>
+          </Grid>
+        </>
+      )}
 
       <ReasonDialog
         opened={excludeTarget !== null}
@@ -246,7 +244,7 @@ export default function RealizedToDatePage() {
         onConfirm={confirmExclude}
         submitting={savingExclude}
       />
-    </ScrollArea>
+    </>
   )
 }
 
