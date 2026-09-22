@@ -1,6 +1,6 @@
 import { downloadAttachment } from '../../data'
 import { decodeRefSurface, gunzipBytes } from './designVolume'
-import { parseDredge, parseCells, parseReferenceLines } from './chart'
+import { parseDredge, parseCells, parseReferenceLines, parseDxfPolylines } from './chart'
 import { parseAlignmentDxf } from './alignment'
 import { readTrack } from './coverage'
 import { parseTrackDxf, looksLikeTrack, trackCoverage, TRACK_DEFAULTS } from './track'
@@ -62,6 +62,18 @@ export async function loadAlignment(path, alignmentRef) {
   const lines = parseAlignmentDxf(await blob.text())
   alignmentRef.current = { path, lines }
   return lines
+}
+
+/** Coverage-boundary DXF: closed polylines fencing the reportable area. Flat --
+ *  no cell numbering, unlike loadCells. A parse failure degrades to [], which
+ *  the chart reads as "no boundary", i.e. the pre-boundary behaviour. */
+export async function loadCoverageBoundary(path, boundaryRef) {
+  if (!path) return []
+  if (boundaryRef.current?.path === path) return boundaryRef.current.rings
+  const blob = await downloadAttachment(path)
+  const rings = parseDxfPolylines(await blob.text())
+  boundaryRef.current = { path, rings }
+  return rings
 }
 
 export async function loadReferenceLines(path, referenceLinesRef) {

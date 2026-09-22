@@ -9,7 +9,6 @@ import { useConfirmDialog } from '../../../hooks/ui/useConfirmDialog'
 import { loadAttachmentImage, loadPublicImage } from '../../../lib/dredge/imageLoaders'
 import { bktGaps, bktTimeSpan, parseBkt } from '../../../lib/placement/bkt'
 import {
-  activitiesByDay,
   attributeBuckets,
   attributeHistory,
   windowsFromActivities,
@@ -17,15 +16,17 @@ import {
 import {
   buildCellFills,
   buildLiftPalette,
+  EXTENTS_SWATCH,
   clippedSqFtForFills,
   liftsFromCoverage,
   materialsFromLifts,
   renderPlacementChart,
   splitPasses,
 } from '../../../lib/placement/chart'
-import { loadPlacementGrid, loadPlacementReferenceLines } from '../../../lib/placement/loaders'
+import { loadDesignExtents, loadPlacementGrid, loadPlacementReferenceLines, loadPlant } from '../../../lib/placement/loaders'
 import { isProductiveActivity } from '../lib/workType'
 import { usePlacementProgressSave } from '../../../hooks/placement/usePlacementProgressSave'
+import { usePlacementActivities } from '../../../hooks/placement/usePlacementActivities'
 
 const PLACEMENT_PROGRESS_DOMAIN = 'jfb_placement_progress'
 
@@ -49,11 +50,14 @@ export default function PlacementProgressTab({ project, report, reports, equipme
     records: progressRecords, loading: progressLoading,
     create: createProgress, update: updateProgress, remove: removeProgress, reload: reloadProgress,
   } = useDomainData({ domain: PLACEMENT_PROGRESS_DOMAIN, system: 'core', projectId })
-  const { records: activities } = useDomainData({ domain: 'jfb_daily_activities', system: 'core', projectId })
 
   const canvasRef = useRef(null)
   const gridRef = useRef(null)
   const refLinesRef = useRef(null)
+  const extentsRef = useRef(null)
+  const plantRef = useRef(null)
+  const viewRef = useRef(null)
+  const pendingBow = useRef(null)
   const [loaded, setLoaded] = useState({ grid: null, assets: null, error: null })
   const { busy, message: notice, error: uploadError, run: runUpload } = useAsyncAction()
   const { confirm, modal: confirmModal } = useConfirmDialog()
@@ -62,6 +66,9 @@ export default function PlacementProgressTab({ project, report, reports, equipme
   const gridFileId = config?.grid_path ?? null
   const aerialFileId = config?.aerial_path ?? null
   const refLinesFileId = config?.reference_lines_path ?? null
+  const extentsFileId = config?.design_extents_path ?? null
+  const plantFileId = config?.plant_path ?? null
+  const chartFraming = config?.chart_framing ?? null
   const configLabel = config?.label ?? null
   const aerialGeoref = config?.aerial_georef ?? null
 
@@ -70,21 +77,28 @@ export default function PlacementProgressTab({ project, report, reports, equipme
     const load = async () => {
       if (!gridFileId) return { grid: null, assets: null, error: null }
       try {
-        const [g, referenceLines, aerialImage, logoImage, northImage] = await Promise.all([
-          loadPlacementGrid(gridFileId, gridRef),
-          loadPlacementReferenceLines(refLinesFileId, refLinesRef),
-          loadAttachmentImage(aerialFileId),
-          loadPublicImage('/dredge/_assets/logo.jpg'),
-          loadPublicImage('/dredge/_assets/north.png'),
-        ])
-        return { grid: g, assets: { referenceLines, aerialImage, logoImage, northImage }, error: null }
+        const [g, referenceLines, designExtents, plant, aerialImage, logoImage, northImage] =
+          await Promise.all([
+            loadPlacementGrid(gridFileId, gridRef),
+            loadPlacementReferenceLines(refLinesFileId, refLinesRef),
+            loadDesignExtents(extentsFileId, extentsRef),
+            loadPlant(plantFileId, plantRef),
+            loadAttachmentImage(aerialFileId),
+            loadPublicImage('/dredge/_assets/logo.jpg'),
+            loadPublicImage('/dredge/_assets/north.png'),
+          ])
+        return {
+          grid: g,
+          assets: { referenceLines, designExtents, plant, aerialImage, logoImage, northImage },
+          error: null,
+        }
       } catch (err) {
         return { grid: null, assets: null, error: err.message }
       }
     }
     load().then((result) => { if (alive) setLoaded(result) })
     return () => { alive = false }
-  }, [gridFileId, aerialFileId, refLinesFileId])
+  }, [gridFileId, aerialFileId, refLinesFileId, extentsFileId, plantFileId])
 
   const reportDateById = useMemo(
     () => new Map((reports ?? []).map((r) => [r.id, r.report_date])),
@@ -109,11 +123,26 @@ export default function PlacementProgressTab({ project, report, reports, equipme
       .sort((a, b) => a.date.localeCompare(b.date))
   }, [progressRecords, equipmentId, reportDate, reportDateById])
 
-  const activitiesByDate = useMemo(() => activitiesByDay(activities, equipmentId), [activities, equipmentId])
+  const activityDates = useMemo(
+    () => (reportDate ? [reportDate, ...priorRows.map((c) => c.date)] : []),
+    [reportDate, priorRows],
+  )
+  const { activitiesByDate, error: activitiesError } = usePlacementActivities(projectId, equipmentId, activityDates)
   const todayWindows = useMemo(
     () => windowsFromActivities(activitiesByDate.get(reportDate) ?? [], layerNameById, isProductiveActivity),
     [activitiesByDate, reportDate, layerNameById],
   )
+
+  const [pose, setPose] = useState(null)
+  const [placing, setPlacing] = useState('off')
+  const [poseError, setPoseError] = useState(null)
+  const poseKey = `${existingRow?.id ?? 'none'}`
+  const [prevPoseKey, setPrevPoseKey] = useState(poseKey)
+  if (poseKey !== prevPoseKey) {
+    setPrevPoseKey(poseKey)
+    setPose(existingRow?.plant_pose ?? null)
+    setPlacing('off')
+  }
 
   const placements = useMemo(() => existingRow?.placements ?? [], [existingRow])
   const coverage = useMemo(
@@ -128,6 +157,12 @@ export default function PlacementProgressTab({ project, report, reports, equipme
     ).map((d) => d.coverage)
   }, [grid, priorRows, activitiesByDate, layerNameById])
 
+  const chartLegend = useMemo(() => {
+    if (!assets?.designExtents?.rings?.length) return palette.legend
+    const base = palette.legend ?? []
+    return [...base, { key: 'extents', label: 'Stability Backfill Extents', color: EXTENTS_SWATCH }]
+  }, [palette, assets])
+
   const lifts = useMemo(() => (coverage ? liftsFromCoverage(coverage, palette.order) : []), [coverage, palette])
   const materials = useMemo(() => materialsFromLifts(lifts), [lifts])
   const passes = useMemo(
@@ -135,7 +170,7 @@ export default function PlacementProgressTab({ project, report, reports, equipme
     [grid, priorDays, coverage, palette],
   )
   const cellFills = useMemo(
-    () => buildCellFills(priorDays, coverage, palette.colorFor),
+    () => buildCellFills(priorDays, coverage, palette.order, palette.layerColors),
     [priorDays, coverage, palette],
   )
   const clippedSqFt = useMemo(
@@ -163,11 +198,13 @@ export default function PlacementProgressTab({ project, report, reports, equipme
     const cv = canvasRef.current
     if (!cv || !grid || !assets || !coverage || !passes || !reportDate) return
     try {
-      renderPlacementChart(cv, {
+      const result = renderPlacementChart(cv, {
         grid,
         cellFills: cellFills.fills,
         passes,
         referenceLines: assets.referenceLines,
+        designExtents: assets.designExtents,
+        framing: chartFraming,
         dateISO: reportDate,
         projectTitle: projectName,
         equipmentLabel: equipmentName,
@@ -176,14 +213,58 @@ export default function PlacementProgressTab({ project, report, reports, equipme
         aerialGeoref,
         logoImage: assets.logoImage,
         northImage: assets.northImage,
-        legendLifts: palette.entries,
+        legend: chartLegend,
+        legendComplete: palette.legendComplete,
+        plant: assets.plant,
+        plantPose: pose,
         materials,
       })
+      viewRef.current = result?.view ?? null
     } catch (err) {
       console.error('Could not draw the placement chart:', err.message)
     }
-  }, [grid, assets, coverage, passes, cellFills, palette, materials,
-    configLabel, aerialGeoref, reportDate, projectName, equipmentName])
+  }, [grid, assets, coverage, passes, cellFills, palette, chartLegend, materials, pose,
+    configLabel, aerialGeoref, chartFraming, reportDate, projectName, equipmentName])
+
+  function clickToWorld(ev) {
+    const cv = canvasRef.current
+    const v = viewRef.current
+    if (!cv || !v?.sc) return null
+    const r = cv.getBoundingClientRect()
+    if (!r.width || !r.height) return null
+    // The canvas is displayed scaled to fit, so go through its intrinsic size.
+    const px = (ev.clientX - r.left) * (cv.width / r.width)
+    const py = (ev.clientY - r.top) * (cv.height / r.height)
+    const wx = v.wL + (px - v.ox) / v.sc
+    const wy = v.wT - (py - v.oy) / v.sc
+    return Number.isFinite(wx) && Number.isFinite(wy) ? [wx, wy] : null
+  }
+
+  async function savePose(next) {
+    if (!existingRow) return
+    setPoseError(null)
+    try {
+      await updateProgress(existingRow.id, { plant_pose: next })
+      setPose(next)
+    } catch (err) {
+      setPoseError(err.message || 'Could not save the machine position.')
+    }
+  }
+
+  function onCanvasClick(ev) {
+    if (placing === 'off') return
+    const w = clickToWorld(ev)
+    if (!w) return
+    if (placing === 'bow') {
+      pendingBow.current = w
+      setPlacing('stern')
+      return
+    }
+    const bow = pendingBow.current
+    pendingBow.current = null
+    setPlacing('off')
+    if (bow) void savePose({ bow, stern: w })
+  }
 
   async function handleFile(file) {
     if (!file) return
@@ -265,6 +346,8 @@ export default function PlacementProgressTab({ project, report, reports, equipme
     <Stack gap="md">
       {confirmModal}
       {assetsError && <Alert color="red" variant="light" title="Chart">{assetsError}</Alert>}
+      {activitiesError && <Alert color="red" variant="light" title="Event log">{activitiesError}</Alert>}
+      {poseError && <Alert color="red" variant="light" title="Machine position">{poseError}</Alert>}
       {uploadError && <Alert color="red" variant="light" title="Bucket file">{uploadError}</Alert>}
       {notice && typeof notice === 'string' && <Alert color="green" variant="light">{notice}</Alert>}
       {saveError && <Alert color="red" variant="light" title="Saving the chart">{saveError}</Alert>}
@@ -378,7 +461,7 @@ export default function PlacementProgressTab({ project, report, reports, equipme
             <Text size="xs" c="dimmed" mt={2}>
               {grid?.grid.boundary ? 'Coverage is clipped to the work boundary.' : 'Cumulative through this report date.'}
               {clippedSqFt > 0 && ` ${num(clippedSqFt)} SF of cell area fell outside and was trimmed.`}
-              {priorDays.length > 0 && ` ${priorDays.length} earlier day(s) shown in their lift colours.`}
+              {priorDays.length > 0 && ` ${priorDays.length} earlier day(s) shown in their material colours.`}
             </Text>
             {passes && coverage && (
               <Text size="xs" mt={4}>
@@ -390,6 +473,25 @@ export default function PlacementProgressTab({ project, report, reports, equipme
             )}
           </Box>
           <Group gap={8}>
+            {assets?.plant && (
+              <Button
+                size="xs"
+                variant={placing === 'off' ? 'default' : 'filled'}
+                color={placing === 'off' ? undefined : 'orange'}
+                disabled={!coverage || !existingRow}
+                onClick={() => {
+                  pendingBow.current = null
+                  setPlacing(placing === 'off' ? 'bow' : 'off')
+                }}
+              >
+                {placing === 'off' ? (pose ? 'Move machine' : 'Place machine') : 'Cancel'}
+              </Button>
+            )}
+            {assets?.plant && pose && placing === 'off' && (
+              <Button size="xs" variant="subtle" color="red" onClick={() => void savePose(null)}>
+                Remove machine
+              </Button>
+            )}
             <Button size="xs" variant="default" disabled={!coverage} onClick={handleDownloadPng}>Download PNG</Button>
             <Button
               size="xs"
@@ -403,13 +505,22 @@ export default function PlacementProgressTab({ project, report, reports, equipme
             {saved && <Text size="10px" tt="uppercase" c="green" fw={600}>Saved ✓</Text>}
           </Group>
         </Group>
+        {placing !== 'off' && (
+          <Text size="xs" px={10} py={6} mb={8} style={{ background: '#FFFBEB', borderRadius: 4, color: '#92400E' }}>
+            {placing === 'bow'
+              ? 'Click the chart where the machine\u2019s WORKING END sits.'
+              : 'Now click where the STERN sits \u2014 that sets which way it faces.'}
+          </Text>
+        )}
         <Box style={{ textAlign: 'center', overflowX: 'auto' }}>
           <canvas
             ref={canvasRef}
+            onClick={onCanvasClick}
             style={{
               maxWidth: '100%', height: 'auto',
               display: coverage ? 'inline-block' : 'none',
               border: '1px solid var(--mantine-color-gray-3)',
+              cursor: placing === 'off' ? 'default' : 'crosshair',
             }}
           />
           {!coverage && <Text size="xs" c="dimmed" py={24}>Upload the day&apos;s .bkt file and the chart appears here.</Text>}

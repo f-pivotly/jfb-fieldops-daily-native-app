@@ -6,7 +6,8 @@ import { useDredgeEquipmentConfig } from '../../../hooks/dredge/useDredgeEquipme
 import { useDomainData } from '../../../hooks/core/useDomainData'
 import { useReports } from '../../../hooks/report/useReports'
 import { useAttachmentUpload } from '../../../hooks/ui/useAttachmentUpload'
-import { useAsyncAction } from '../../../hooks/ui/useAsyncAction'
+import { useAsyncAction, warn } from '../../../hooks/ui/useAsyncAction'
+import { uploadWarning } from '../../../hooks/ui/uploadWarning'
 import { useConfirmDialog } from '../../../hooks/ui/useConfirmDialog'
 import { deleteAttachment, downloadAttachment, readWrittenRecordId } from '../../../data'
 import { dredgeFileName, fileExtension, renameFile } from '../../../lib/dredge/fileNames'
@@ -59,6 +60,7 @@ const FILE_KINDS = {
   colorbar_path: 'colorbar',
   aerial_path: 'aerial',
   cells_path: 'cells',
+  boundary_path: 'boundary',
   reference_lines_path: 'mile-markers',
   alignment_path: 'alignment',
   earthworks_design_path: 'design-grade',
@@ -137,7 +139,7 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
   const [previewGenerated, setPreviewGenerated] = useState(false)
   const previewCanvasRef = useRef(null)
 
-  const { busy: savingAll, message: saveMsg, error: saveError, run: runSaveAll } = useAsyncAction()
+  const { busy: savingAll, message: saveMsg, warning: saveWarning, error: saveError, run: runSaveAll } = useAsyncAction()
   const { busy: refUploading, message: refMsg, error: refError, run: runRefUpload, markSuccess: markRefProgress } = useAsyncAction()
   const { busy: aerialFetching, message: aerialFetchMsg, error: aerialFetchError, run: runAerialFetch, markError: markAerialError } = useAsyncAction()
   const { busy: priorBusy, message: priorMsg, error: priorError, run: runPrior, markError: markPriorError } = useAsyncAction()
@@ -253,8 +255,10 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
       }
 
       const update = (patch) => updateDredgeConfig(configId, patch)
-      await flushFiles({ recordId: configId, domain: DREDGE_CONFIG_DOMAIN, existing: existingConfig, update })
-      await flushTiles({ recordId: configId, domain: DREDGE_CONFIG_DOMAIN, existing: existingConfig, update })
+      const files = await flushFiles({ recordId: configId, domain: DREDGE_CONFIG_DOMAIN, existing: existingConfig, update })
+      const tiles = await flushTiles({ recordId: configId, domain: DREDGE_CONFIG_DOMAIN, existing: existingConfig, update })
+      const failedUploads = [...files.failedUploads, ...tiles.failedUploads]
+      if (failedUploads.length) return warn(uploadWarning(failedUploads))
 
       return 'Saved.'
     })
@@ -366,7 +370,7 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
       : []
     setPreviewGenerated(false)
     await runPreview(async () => {
-      const [bgImage, aerialImage, colorbarImage, northImage, logoImage, isopachTiles, aerialTiles, cells, referenceLines] = await Promise.all([
+      const [bgImage, aerialImage, colorbarImage, northImage, logoImage, isopachTiles, aerialTiles, cells, referenceLines, boundaryRings] = await Promise.all([
         loadAttachmentImage(existingConfig.bg_path),
         loadAttachmentImage(existingConfig.aerial_path),
         loadAttachmentImage(existingConfig.colorbar_path),
@@ -380,6 +384,9 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
         existingConfig.reference_lines_path
           ? downloadAttachment(existingConfig.reference_lines_path).then((blob) => blob.text()).then(parseReferenceLines).catch(() => ({ segments: [], labels: [] }))
           : Promise.resolve({ segments: [], labels: [] }),
+        existingConfig.boundary_path
+          ? downloadAttachment(existingConfig.boundary_path).then((blob) => blob.text()).then(parseDxfPolylines).catch(() => [])
+          : Promise.resolve([]),
       ])
       renderChart(previewCanvasRef.current, {
         todayPts: [],
@@ -394,7 +401,7 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
           aerialImage, aerialGeoref: existingConfig.aerial_georef ?? null,
           colorbarImage, northImage, logoImage,
           isopachTiles, aerialTiles,
-          cells, referenceLines,
+          cells, referenceLines, boundaryRings,
         },
         priorRings,
         autoSecondPass: false,
@@ -662,6 +669,17 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
           />
         </Field>
 
+        <Field
+          label="Coverage boundary DXF"
+          help="Closed polylines fencing the reportable area. When set, TODAY's coverage is clipped to inside them, so a stray track outside the channel is never reported as area. Earlier days are left as they were — they are historical, and a boundary covering one work area would otherwise erase every earlier phase from progress-to-date. Leave empty and nothing is clipped."
+        >
+          <FileControl
+            accept=".dxf,application/dxf"
+            {...fileControlProps('boundary_path')}
+            onChange={(file) => handleUploadImage('boundary_path', file)}
+          />
+        </Field>
+
         <Checkbox
           label="Show cells as a reference overlay only"
           description="No per-foot grid, no clip-to-cells, no per-cell breakdown -- just outlines + numbers. For whole-project overviews where building the real grid over the full extent would be too large to render."
@@ -687,6 +705,7 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
             Save background &amp; labels
           </Button>
           {saveMsg && <Text size="xs" c="green">{saveMsg}</Text>}
+          {saveWarning && <Text size="xs" c="#b45309">{saveWarning}</Text>}
           {saveError && <Text size="xs" c="red">{saveError}</Text>}
         </Group>
       </Section>

@@ -1,11 +1,16 @@
-import { fetchDomainRecords, fetchPicklistValues, downloadAttachment, executeDataView } from '../../../data'
+import { fetchDomainRecords, fetchPicklistValues, downloadAttachment, executeDataView, fetchPublicAsset } from '../../../data'
 import { renderWeeklyProgressCharts } from '../../../lib/dredge/weeklyChart'
 import { buildCombosFromActivities, comboNOH, isUnassigned } from '../../../lib/productionCombos'
 import { equipmentWorkType, isProductiveActivity } from './workType'
 import { prettyDate, blobToDataUri, fmtNum, fmtHrs } from './realizedToDate'
 import { UNATTRIBUTED_CATEGORY, shiftTotals } from './eventTotals'
 import { metricValueKey } from '../../../lib/metricValueKey'
-import { sameCalendarDay, utcDayRange } from '../../../lib/reportDates'
+import { isDirectImageUrl } from '../../../lib/imageSource'
+import { hhmm, utcDayRange } from '../../../lib/reportDates'
+import { airWindowUtc, buildAirDay } from '../../../lib/airQuality/data'
+import { buildAirChartSpecs, renderAirChart } from '../../../lib/airQuality/chart'
+import { reportWindowUtc, buildTurbidityDay } from '../../../lib/waterQuality/data'
+import { renderTurbidityChart } from '../../../lib/waterQuality/chart'
 
 function isCappingEquipment(project, equipment, dateISO) {
   return equipmentWorkType(project, equipment, dateISO).toLowerCase().includes('cap')
@@ -148,13 +153,6 @@ export async function buildNarrativeSectionsParam({ appSlug, projectId, reportId
   }))
 }
 
-function hhmm(iso) {
-  if (!iso) return ''
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return ''
-  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-}
-
 function durationMinutes(startISO, endISO) {
   if (!startISO || !endISO) return null
   const ms = new Date(endISO) - new Date(startISO)
@@ -240,7 +238,7 @@ export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, p
   const [activityRes, areaLabelRows, projectDelayRes, masterDelayRes, passTypeRows, operatorRes] = await Promise.all([
     fetchDomainRecords({
       domain: 'jfb_daily_activities', system: 'core', appSlug,
-      filters: { project_id: projectId, start_date_time: { gte, lt } },
+      filters: { project_id: projectId, report_date: dateISO },
       limit: 1000,
     }),
     executeDataView('dvw-jfb-activity-area-labels-v2', {
@@ -264,7 +262,7 @@ export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, p
   )
   const operatorNameById = new Map((operatorRes?.data ?? []).map((o) => [o.id, o.name]))
 
-  const activities = (activityRes?.data ?? []).filter((a) => sameCalendarDay(a.start_date_time, dateISO, a.timezone))
+  const activities = (activityRes?.data ?? [])
 
   const cappingEquipmentIds = new Set(
     (equipment ?? []).filter((eq) => isCappingEquipment(project, eq, dateISO)).map((eq) => eq.id),
@@ -557,11 +555,10 @@ function shapeCappingSheet({ acts, eqStats, project, labels }) {
 }
 
 export async function buildProductionComboTotalsByEquipmentParam({ appSlug, projectId, project, reportId, dateISO, equipment }) {
-  const { gte, lt } = utcDayRange(dateISO)
   const [activityRes, statsRes, areaRes, passTypeRows, attachmentRes, layerRes, materialRes] = await Promise.all([
     fetchDomainRecords({
       domain: 'jfb_daily_activities', system: 'core', appSlug,
-      filters: { project_id: projectId, start_date_time: { gte, lt } },
+      filters: { project_id: projectId, report_date: dateISO },
       limit: 1000,
     }),
     fetchDomainRecords({ domain: 'jfb_production_stats', system: 'core', appSlug, filters: { report_id: reportId }, limit: 500 }),
@@ -608,7 +605,7 @@ export async function buildProductionComboTotalsByEquipmentParam({ appSlug, proj
       && statsTscaBucket === comboTscaBucket
   }
 
-  const activities = (activityRes?.data ?? []).filter((a) => sameCalendarDay(a.start_date_time, dateISO, a.timezone))
+  const activities = (activityRes?.data ?? [])
   const statsRows = statsRes?.data ?? []
 
   const byEquipment = new Map()
@@ -904,7 +901,34 @@ export async function buildSafetyPageDataParam({ appSlug, projectId, reportId, d
       return true
     })
     .sort((a, b) => (a.category || '').localeCompare(b.category || '') || (a.sort_order ?? 0) - (b.sort_order ?? 0))
-    .map((r) => ({ category: categoryLabels[r.category] ?? r.category, description: r.description || '' }))
+
+  // Grouped for the Safety page: one group per category, and one per COMPANY
+  // within subcontractor -- a sub's kit is theirs, not a single bucket. A
+  // subcontractor row whose company is still blank groups under a plain
+  // "Subcontractor" heading rather than disappearing, so the PM can see it and
+  // fill the field in.
+  const equipmentGroups = []
+  for (const r of equipmentRows) {
+    const isSub = r.category === 'subcontractor'
+    const company = isSub ? (r.company?.trim() || '') : ''
+    const title = isSub
+      ? (company ? `Subcontractor — ${company}` : 'Subcontractor')
+      : (categoryLabels[r.category] ?? r.category)
+    let g = equipmentGroups.find((x) => x.title === title)
+    if (!g) equipmentGroups.push((g = { title, items: [] }))
+    g.items.push(r.description || '')
+  }
+
+  // ONE-PAGE INVARIANT. The Safety page has to end with its signatures on page
+  // one. Kalamazoo's roster alone is already at the density ceiling, so when
+  // subcontractor rows exist AND the section crosses 55 items, every group
+  // renders as one wrapped line rather than a list. With no subcontractor rows
+  // this is always false and the page is unchanged for every other project.
+  const subItemCount = equipmentGroups
+    .filter((g) => g.title.startsWith('Subcontractor'))
+    .reduce((a, g) => a + g.items.length, 0)
+  const equipmentCrowded = subItemCount > 0 && equipmentRows.length > 55
+  for (const g of equipmentGroups) g.inline = equipmentCrowded ? g.items.join('  ·  ') : null
 
   const [preparerSignatureDataUri, sshoSignatureDataUri] = await Promise.all([
     safety?.signature_image_path
@@ -952,7 +976,12 @@ export async function buildSafetyPageDataParam({ appSlug, projectId, reportId, d
     nextDaySummary: naOr(safety?.next_day_summary),
     crewRows,
     crewTotals,
-    equipmentRows,
+    equipmentRows: equipmentRows.map((r) => ({
+      category: categoryLabels[r.category] ?? r.category,
+      description: r.description || '',
+    })),
+    equipmentGroups,
+    equipmentCrowded,
     climate,
     showSsho: !!project?.show_ssho_field,
     preparerName: naOr(safety?.signature_name),
@@ -963,12 +992,11 @@ export async function buildSafetyPageDataParam({ appSlug, projectId, reportId, d
 }
 
 export async function buildCompletionChecklist({ appSlug, projectId, reportId, dateISO }) {
-  const { gte, lt } = utcDayRange(dateISO)
 
   const [activityRes, narrativeSections, photosRes, productionRes, metricsRes, metricValuesRes] = await Promise.all([
     fetchDomainRecords({
       domain: 'jfb_daily_activities', system: 'core', appSlug,
-      filters: { project_id: projectId, start_date_time: { gte, lt } },
+      filters: { project_id: projectId, report_date: dateISO },
       limit: 1000,
     }),
     buildNarrativeSectionsParam({ appSlug, projectId, reportId }),
@@ -978,7 +1006,7 @@ export async function buildCompletionChecklist({ appSlug, projectId, reportId, d
     fetchDomainRecords({ domain: 'jfb_report_metric_value', system: 'core', appSlug, filters: { report_id: reportId }, limit: 200 }),
   ])
 
-  const activities = (activityRes?.data ?? []).filter((a) => sameCalendarDay(a.start_date_time, dateISO, a.timezone))
+  const activities = (activityRes?.data ?? [])
 
   const photos = (photosRes?.data ?? []).filter((p) => p.photo_file_path)
   const acceptedPhotos = photos.filter((p) => p.label?.trim() && !p.pm_comment).length
@@ -1017,12 +1045,11 @@ export async function buildCompletionChecklist({ appSlug, projectId, reportId, d
  * either, so neither does this.
  */
 export async function buildPmReviewChecklist({ appSlug, projectId, reportId, dateISO, equipment }) {
-  const { gte, lt } = utcDayRange(dateISO)
 
   const [activityRes, productionRes, narrativeSections, photosRes] = await Promise.all([
     fetchDomainRecords({
       domain: 'jfb_daily_activities', system: 'core', appSlug,
-      filters: { project_id: projectId, start_date_time: { gte, lt } },
+      filters: { project_id: projectId, report_date: dateISO },
       limit: 1000,
     }),
     fetchDomainRecords({ domain: 'jfb_production_stats', system: 'core', appSlug, filters: { report_id: reportId }, limit: 500 }),
@@ -1030,7 +1057,7 @@ export async function buildPmReviewChecklist({ appSlug, projectId, reportId, dat
     fetchDomainRecords({ domain: 'jfb_report_photos', system: 'core', appSlug, filters: { report_id: reportId }, limit: 50 }),
   ])
 
-  const activities = (activityRes?.data ?? []).filter((a) => sameCalendarDay(a.start_date_time, dateISO, a.timezone))
+  const activities = (activityRes?.data ?? [])
 
   const checks = []
 
@@ -1095,4 +1122,161 @@ export async function buildPmReviewChecklist({ appSlug, projectId, reportId, dat
   checks.push({ key: 'photos', label: 'Both photos uploaded + labeled', status: photoStatus, detail: photoDetail })
 
   return checks
+}
+
+/** Fetch every reading in a UTC window, paging past the API's per-call cap. */
+async function fetchMonitoringReadings({ domain, appSlug, projectId, startUtc, endUtc }) {
+  const PAGE = 1000
+  const out = []
+  for (let offset = 0; ; offset += PAGE) {
+    const res = await fetchDomainRecords({
+      domain,
+      system: 'core',
+      appSlug,
+      filters: { project_id: projectId, reading_at: { gte: startUtc, lt: endUtc } },
+      limit: PAGE,
+      offset,
+    })
+    const batch = Array.isArray(res) ? res : (res?.data ?? [])
+    out.push(...batch)
+    if (batch.length < PAGE) break
+  }
+  return out
+}
+
+/** A monitoring aerial is either a Pivotly attachment id or, on rows carried
+ *  over from the old app, a direct image URL. Take both rather than printing a
+ *  page with a hole in it; the URL form should be migrated to a Pivotly file. */
+async function monitoringImageDataUri(pathOrId) {
+  if (!pathOrId) return null
+  try {
+    if (isDirectImageUrl(pathOrId)) return await blobToDataUri(await fetchPublicAsset(pathOrId))
+    return await blobToDataUri(await downloadAttachment(pathOrId))
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Daily Air Monitoring page. Null when the project has no air_monitoring_config
+ * or the date pulled no readings — the same gate the non-native uses, so a
+ * project without monitoring prints exactly as it does today.
+ */
+export async function buildAirQualityParam({ appSlug, projectId, reportId, dateISO }) {
+  const cfgRes = await fetchDomainRecords({
+    domain: 'jfb_air_monitoring_config', system: 'core', appSlug,
+    filters: { project_id: projectId }, limit: 1,
+  })
+  const config = (Array.isArray(cfgRes) ? cfgRes : (cfgRes?.data ?? []))[0]
+  if (!config) return null
+
+  const { startUtc, endUtc } = airWindowUtc(config, dateISO)
+  const [readings, dailyRes] = await Promise.all([
+    fetchMonitoringReadings({
+      domain: 'jfb_air_quality_readings', appSlug, projectId,
+      startUtc: startUtc.toISOString(), endUtc: endUtc.toISOString(),
+    }),
+    fetchDomainRecords({
+      domain: 'jfb_air_monitoring_daily', system: 'core', appSlug,
+      filters: { report_id: reportId }, limit: 1,
+    }),
+  ])
+  const daily = (Array.isArray(dailyRes) ? dailyRes : (dailyRes?.data ?? []))[0] ?? null
+
+  const day = buildAirDay(config, readings, dateISO)
+  if (day.populatedCount === 0) return null
+
+  let llraChartDataUri = null
+  let mbpChartDataUri = null
+  try {
+    // Portrait aspect — the two charts sit side by side on the bottom half of
+    // the page, matching the Excel-era export.
+    const specs = buildAirChartSpecs(day, config.stations, config.thresholds)
+    llraChartDataUri = renderAirChart(day, specs.llra, { width: 900, height: 1150 }).dataUrl
+    mbpChartDataUri = renderAirChart(day, specs.mbp, { width: 900, height: 1150 }).dataUrl
+  } catch {
+    // Charts are enhancement — the text page still ships.
+  }
+
+  return {
+    equipmentText: config.equipment_text ?? null,
+    calibrationText: config.calibration_text ?? null,
+    notesText: config.notes_text ?? null,
+    activity: daily?.activity ?? null,
+    notes: daily?.notes ?? null,
+    hasNotesBlock: !!(config.notes_text || daily?.notes || daily?.activity),
+    aerialDataUri: await monitoringImageDataUri(config.aerial_path),
+    llraChartDataUri,
+    mbpChartDataUri,
+  }
+}
+
+/**
+ * Daily Water Monitoring page — the fixed-role (compliance) layout both live
+ * projects use. The non-native also carries a TIDAL variant; no project has
+ * tide data, and the native app has no tidal data layer, so it is not ported.
+ */
+export async function buildWaterQualityParam({ appSlug, projectId, reportId, dateISO }) {
+  const cfgRes = await fetchDomainRecords({
+    domain: 'jfb_water_monitoring_config', system: 'core', appSlug,
+    filters: { project_id: projectId }, limit: 1,
+  })
+  const config = (Array.isArray(cfgRes) ? cfgRes : (cfgRes?.data ?? []))[0]
+  if (!config) return null
+
+  const { startUtc, endUtc } = reportWindowUtc(config, dateISO)
+  const [readings, notesRes] = await Promise.all([
+    fetchMonitoringReadings({
+      domain: 'jfb_water_quality_readings', appSlug, projectId,
+      startUtc: startUtc.toISOString(), endUtc: endUtc.toISOString(),
+    }),
+    fetchDomainRecords({
+      domain: 'jfb_water_monitoring_notes', system: 'core', appSlug,
+      filters: { report_id: reportId }, limit: 1,
+    }),
+  ])
+  const notesRow = (Array.isArray(notesRes) ? notesRes : (notesRes?.data ?? []))[0] ?? null
+
+  const day = buildTurbidityDay(config, readings, dateISO)
+  if (day.populatedCount === 0) return null
+
+  let chartDataUri = null
+  try {
+    chartDataUri = renderTurbidityChart(day, config.thresholds, { width: 1100, height: 620 }).dataUrl
+  } catch {
+    // Chart is enhancement — the table still ships.
+  }
+
+  const refNtu = notesRow?.reference_ntu ?? null
+  const ewDelta = config.thresholds?.early_warning_delta_ntu ?? null
+  const compDelta = config.thresholds?.compliance_delta_ntu ?? null
+
+  return {
+    slots: day.slots.map((s) => ({
+      timeLabel: s.timeLabel,
+      background: fmtNtu(s.background),
+      earlyWarning: fmtNtu(s.earlyWarning),
+      compliance: fmtNtu(s.compliance),
+      delta: fmtNtu(s.delta),
+    })),
+    avgDelta: fmtNtu(day.avgDelta),
+    hasAvgDelta: day.avgDelta !== null,
+    locations: (config.locations ?? []).map((l) => ({
+      label: l.label ?? l.role ?? '',
+      coords: l.display_coords ?? '',
+    })),
+    notes: notesRow?.notes ?? null,
+    referenceNtu: fmtNtu(refNtu),
+    earlyWarningDelta: ewDelta,
+    complianceDelta: compDelta,
+    responseActionNtu: fmtNtu(refNtu != null && ewDelta != null ? refNtu + ewDelta : null),
+    notToExceedNtu: fmtNtu(refNtu != null && compDelta != null ? refNtu + compDelta : null),
+    hasLimits: refNtu != null,
+    aerialDataUri: await monitoringImageDataUri(config.aerial_path),
+    chartDataUri,
+  }
+}
+
+function fmtNtu(v) {
+  return v === null || v === undefined ? '—' : Number(v).toFixed(2)
 }

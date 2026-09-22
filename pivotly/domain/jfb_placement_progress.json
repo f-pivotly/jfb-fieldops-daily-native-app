@@ -293,6 +293,27 @@
     },
     {
       "pii": false,
+      "name": "plant_pose",
+      "slug": "plant_pose",
+      "type": "jsonb",
+      "label": "Plant Pose",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "jsonb",
+      "column_name": "plant_pose",
+      "description": "Where the plant (barge/machine) sits on this report's chart, as {\"bow\":[x,y],\"stern\":[x,y]} in the project CRS -- the PE clicks the working end and then the stern. Stored per report so the chart and the PDF redraw it identically. NULL means the machine has not been placed and the plant outline is not drawn.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
       "name": "generated_by_user_id",
       "slug": "generated_by_user_id",
       "type": "uuid",

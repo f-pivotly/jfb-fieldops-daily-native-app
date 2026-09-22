@@ -8,6 +8,7 @@ import {
   loadCells,
   loadAlignment,
   loadReferenceLines,
+  loadCoverageBoundary,
   findLatestPriorSurfaceRow,
   resolveTodayCoverage,
 } from '../../lib/dredge/progressLoaders'
@@ -41,6 +42,7 @@ export function useDredgeChartGenerate({
 
   const cellsRef = useRef(null)
   const referenceLinesRef = useRef(null)
+  const boundaryRef = useRef(null)
   const alignmentRef = useRef(null)
   const priorSurfaceRef = useRef(null)
 
@@ -74,7 +76,7 @@ export function useDredgeChartGenerate({
           } catch { }
         }
       }
-      const [today, bgImage, colorbarImage, aerialImage, northImage, logoImage, isopachTiles, aerialTiles, cells, referenceLines] = await Promise.all([
+      const [today, bgImage, colorbarImage, aerialImage, northImage, logoImage, isopachTiles, aerialTiles, cells, referenceLines, boundaryRings] = await Promise.all([
         resolveTodayCoverage(cfg, files, report.report_date, (i, total) => setProgressMsg(`Reading file ${i}/${total}…`), { closeFt, islandSqFt, alignment }, priorSurface),
         loadAttachmentImage(cfg.bg_path),
         loadAttachmentImage(cfg.colorbar_path),
@@ -89,6 +91,9 @@ export function useDredgeChartGenerate({
         cfg.reference_lines_path
           ? loadReferenceLines(cfg.reference_lines_path, referenceLinesRef).catch(() => ({ segments: [], labels: [] }))
           : Promise.resolve({ segments: [], labels: [] }),
+        cfg.boundary_path
+          ? loadCoverageBoundary(cfg.boundary_path, boundaryRef).catch(() => [])
+          : Promise.resolve([]),
         needsRefSurface
           ? loadRefSurface(cfg.reference_surface_path, refSurfaceRef).catch((err) => {
               setRefSurfaceError(err.message)
@@ -112,7 +117,7 @@ export function useDredgeChartGenerate({
         aerialImage, aerialGeoref: cfg.aerial_georef ?? null,
         colorbarImage, northImage, logoImage,
         isopachTiles, aerialTiles,
-        cells, referenceLines,
+        cells, referenceLines, boundaryRings,
       }
       resetEdits(true)
       setCellsList(cells)

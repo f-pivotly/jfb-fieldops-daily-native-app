@@ -7,7 +7,13 @@ import { useConfirmDialog } from '../../../hooks/ui/useConfirmDialog'
 import LoadingSpinner from '../../../components/LoadingSpinner'
 import SafeError from '../../../components/SafeError'
 
-const emptyDraft = () => ({ category: 'brennan', description: '', mobilized_at: '', demobilized_at: '', sort_order: 10 })
+const emptyDraft = () => ({ category: 'brennan', company: '', description: '', mobilized_at: '', demobilized_at: '', sort_order: 10 })
+
+/** Company belongs to subcontractor rows only — the category already says who
+ *  owns a Brennan or Rental unit. Kept out of the payload elsewhere so switching
+ *  a row's category cannot leave a stale company behind. */
+const companyFor = (category, company) =>
+  (category === 'subcontractor' && company?.trim() ? company.trim() : null)
 
 function isOnSiteForReport(row, reportDate) {
   if (!reportDate) return true
@@ -54,6 +60,7 @@ export default function SiteEquipmentTab({ project, reportDate }) {
       await create({
         project_id: project.id,
         category: addForm.category,
+        company: companyFor(addForm.category, addForm.company),
         description,
         sort_order: addForm.sort_order ?? 0,
         mobilized_at: addForm.mobilized_at || null,
@@ -69,6 +76,7 @@ export default function SiteEquipmentTab({ project, reportDate }) {
     setEditRow({
       id: row.id,
       category: row.category || 'brennan',
+      company: row.company ?? '',
       description: row.description || '',
       mobilized_at: row.mobilized_at || '',
       demobilized_at: row.demobilized_at || '',
@@ -88,6 +96,7 @@ export default function SiteEquipmentTab({ project, reportDate }) {
     try {
       await update(editRow.id, {
         category: editRow.category,
+        company: companyFor(editRow.category, editRow.company),
         description,
         sort_order: editRow.sort_order ?? 0,
         mobilized_at: editRow.mobilized_at || null,
@@ -189,6 +198,15 @@ export default function SiteEquipmentTab({ project, reportDate }) {
           onChange={(v) => setAddForm((f) => ({ ...f, category: v ?? categoryValues[0] ?? 'brennan' }))}
           mb={10}
         />
+        {addForm.category === 'subcontractor' && (
+          <TextInput
+            label="Company"
+            placeholder='e.g. "Millbocker & Sons"'
+            value={addForm.company}
+            onChange={(e) => { const v = e.currentTarget.value; setAddForm((f) => ({ ...f, company: v })) }}
+            mb={10}
+          />
+        )}
         <Group grow mb={10}>
           <TextInput
             label="Mobilized At"
@@ -238,6 +256,15 @@ export default function SiteEquipmentTab({ project, reportDate }) {
               onChange={(v) => setEditRow((r) => ({ ...r, category: v ?? r.category }))}
               mb={10}
             />
+            {editRow.category === 'subcontractor' && (
+              <TextInput
+                label="Company"
+                placeholder='e.g. "Millbocker & Sons"'
+                value={editRow.company}
+                onChange={(e) => { const v = e.currentTarget.value; setEditRow((r) => ({ ...r, company: v })) }}
+                mb={10}
+              />
+            )}
             <Group grow mb={10}>
               <TextInput
                 label="Mobilized At"

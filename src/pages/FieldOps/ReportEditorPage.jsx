@@ -22,6 +22,8 @@ import {
   buildPhotoAssetsParam,
   buildDredgeChartAssetsParam,
   buildSafetyPageDataParam,
+  buildWaterQualityParam,
+  buildAirQualityParam,
   buildProductionComboTotalsByEquipmentParam,
   buildCoverProductionTotalsParam,
   buildFlowAndPipeByEquipmentParam,
@@ -42,6 +44,7 @@ import PlacementProgressTab from './reportEditorTabs/PlacementProgressTab'
 import SpreaderProgressTab from './reportEditorTabs/SpreaderProgressTab'
 import WaterQualityTab from './reportEditorTabs/WaterQualityTab'
 import AirQualityTab from './reportEditorTabs/AirQualityTab'
+import { setReportTimeZone } from '../../lib/reportTz'
 
 const NO_EQUIPMENT_ID = '00000000-0000-0000-0000-000000000000'
 
@@ -76,6 +79,7 @@ export default function ReportEditorPage() {
   const { projectId, date } = useParams()
   const { config } = useAppConfig()
   const { project } = useProject(projectId)
+  setReportTimeZone(project?.report_timezone)
   const { reports, loading: reportsLoading, ensureReport, update: updateReport, updating: reportSaving } = useReports(projectId)
   const report = reports.find((r) => r.report_date === date)
   const status = report?.status ?? 'draft'
@@ -177,7 +181,7 @@ export default function ReportEditorPage() {
         return
       }
 
-      const [dailyActivityData, photoAssets, dredgeChartAssets, safetyPageData, productionStatsByEquipment, productionTotals, flowAndPipe] = await Promise.all([
+      const [dailyActivityData, photoAssets, dredgeChartAssets, safetyPageData, productionStatsByEquipment, productionTotals, flowAndPipe, waterQuality, airQuality] = await Promise.all([
         buildDailyActivityByEquipmentParam({ appSlug: config.appSlug, projectId, project, dateISO: date, equipment }),
         buildPhotoAssetsParam({ appSlug: config.appSlug, reportId }),
         buildDredgeChartAssetsParam({ appSlug: config.appSlug, reportId, project, equipment, dateISO: date }),
@@ -185,6 +189,8 @@ export default function ReportEditorPage() {
         buildProductionComboTotalsByEquipmentParam({ appSlug: config.appSlug, projectId, project, reportId, dateISO: date, equipment }),
         buildCoverProductionTotalsParam({ projectId, project, dateISO: date }),
         buildFlowAndPipeByEquipmentParam({ appSlug: config.appSlug, projectId, dateISO: date }),
+        buildWaterQualityParam({ appSlug: config.appSlug, projectId, reportId, dateISO: date }),
+        buildAirQualityParam({ appSlug: config.appSlug, projectId, reportId, dateISO: date }),
       ])
       const { activitiesByEquipment: dailyActivityByEquipment, delaySummaryByEquipment, opSummaryByEquipment } = dailyActivityData
       const { flowStatsByEquipment, pipeSegments, pipeTotalLength } = flowAndPipe
@@ -217,6 +223,8 @@ export default function ReportEditorPage() {
           pipeTotalLength,
           reportNumberByEquipment,
           coverDensity,
+          waterQuality,
+          airQuality,
           ...dateTable,
         },
       })

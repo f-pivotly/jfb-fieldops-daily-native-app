@@ -1,13 +1,14 @@
 import { useRef, useState } from 'react'
-import { Box, Button, Checkbox, FileButton, Group, Stack, Text, TextInput } from '@mantine/core'
+import { Box, Button, Checkbox, FileButton, Group, Select, Stack, Text, TextInput } from '@mantine/core'
 import { usePlacementConfig } from '../../../hooks/placement/usePlacementConfig'
 import { useProjectLayers } from '../../../hooks/capping/useProjectLayers'
-import { useAsyncAction } from '../../../hooks/ui/useAsyncAction'
+import { useAsyncAction, warn } from '../../../hooks/ui/useAsyncAction'
+import { uploadWarning } from '../../../hooks/ui/uploadWarning'
 import { readWrittenRecordId } from '../../../data'
 import { loadAttachmentImage, loadPublicImage } from '../../../lib/dredge/imageLoaders'
 import { prepareGrid, validatePlacementGrid } from '../../../lib/placement/grid'
 import { buildLiftPalette, renderPlacementChart } from '../../../lib/placement/chart'
-import { loadPlacementGrid, loadPlacementReferenceLines } from '../../../lib/placement/loaders'
+import { loadDesignExtents, loadPlacementGrid, loadPlacementReferenceLines } from '../../../lib/placement/loaders'
 import { useStagedFiles } from '../../../hooks/ui/useStagedFiles'
 
 const PLACEMENT_CONFIG_DOMAIN = 'jfb_placement_config'
@@ -50,13 +51,15 @@ function PlacementChartTabForm({ project, existingConfig, createConfig, updateCo
   const [label, setLabel] = useState(existingConfig?.label ?? '')
   const [active, setActive] = useState(existingConfig ? existingConfig.active !== false : true)
   const [aerialGeoref, setAerialGeoref] = useState(() => georefToFields(existingConfig?.aerial_georef))
+  const [chartFraming, setChartFraming] = useState(existingConfig?.chart_framing ?? 'site')
   const [gridSummary, setGridSummary] = useState(null)
   const [previewGenerated, setPreviewGenerated] = useState(false)
   const previewCanvasRef = useRef(null)
   const previewGridRef = useRef(null)
   const previewLinesRef = useRef(null)
+  const previewExtentsRef = useRef(null)
 
-  const { busy: saving, message: saveMsg, error: saveError, run: runSave } = useAsyncAction()
+  const { busy: saving, message: saveMsg, warning: saveWarning, error: saveError, run: runSave } = useAsyncAction()
   const { busy: gridBusy, error: gridError, run: runGrid } = useAsyncAction()
   const { busy: previewBusy, message: previewMsg, error: previewError, run: runPreview, markError: markPreviewError } = useAsyncAction()
 
@@ -88,6 +91,7 @@ function PlacementChartTabForm({ project, existingConfig, createConfig, updateCo
         project_id: project.id,
         label: label.trim() || null,
         aerial_georef: fieldsToGeoref(aerialGeoref),
+        chart_framing: chartFraming === 'work' ? 'work' : null,
         active,
       }
       let configId = existingConfig?.id ?? null
@@ -97,12 +101,13 @@ function PlacementChartTabForm({ project, existingConfig, createConfig, updateCo
         configId = readWrittenRecordId(await createConfig(recordData))
         if (!configId) throw new Error('Could not resolve the saved config record.')
       }
-      await flushFiles({
+      const { failedUploads } = await flushFiles({
         recordId: configId,
         domain: PLACEMENT_CONFIG_DOMAIN,
         existing: existingConfig,
         update: (patch) => updateConfig(configId, patch),
       })
+      if (failedUploads.length) return warn(uploadWarning(failedUploads))
       return 'Saved.'
     })
   }
@@ -114,9 +119,10 @@ function PlacementChartTabForm({ project, existingConfig, createConfig, updateCo
     }
     setPreviewGenerated(false)
     await runPreview(async () => {
-      const [grid, referenceLines, aerialImage, logoImage, northImage] = await Promise.all([
+      const [grid, referenceLines, designExtents, aerialImage, logoImage, northImage] = await Promise.all([
         loadPlacementGrid(existingConfig.grid_path, previewGridRef),
         loadPlacementReferenceLines(existingConfig.reference_lines_path, previewLinesRef),
+        loadDesignExtents(existingConfig.design_extents_path, previewExtentsRef),
         loadAttachmentImage(existingConfig.aerial_path),
         loadPublicImage('/dredge/_assets/logo.jpg'),
         loadPublicImage('/dredge/_assets/north.png'),
@@ -127,6 +133,8 @@ function PlacementChartTabForm({ project, existingConfig, createConfig, updateCo
         cellFills: new Map(),
         passes: { firstPassCells: 0, secondPassCells: 0, firstPassSqFt: 0, secondPassSqFt: 0, byLift: [] },
         referenceLines,
+        designExtents,
+        framing: existingConfig.chart_framing ?? null,
         dateISO: new Date().toISOString().slice(0, 10),
         projectTitle: `${project.name} (SETUP PREVIEW)`,
         equipmentLabel: 'Setup preview',
@@ -135,7 +143,8 @@ function PlacementChartTabForm({ project, existingConfig, createConfig, updateCo
         aerialGeoref: existingConfig.aerial_georef ?? null,
         logoImage,
         northImage,
-        legendLifts: palette.entries,
+        legend: palette.legend,
+        legendComplete: palette.legendComplete,
         materials: [],
       })
       setPreviewGenerated(true)
@@ -192,14 +201,61 @@ function PlacementChartTabForm({ project, existingConfig, createConfig, updateCo
         </Field>
 
         <Field
-          label="Alignment / stationing overlay DXF (optional)"
-          help="Open line work plus text labels, drawn as a thin reference overlay over the map. Purely visual; not used in any calculation."
+          label="Alignment / stationing overlay (optional)"
+          help="Open line work plus text labels, drawn as a thin reference overlay over the map. Purely visual; not used in any calculation. A DXF is read directly; a pre-extracted JSON of {segments, labels} may also carry an `emphasis` array for structures such as a sheet pile wall, which draw heavier and in a warm red so they do not read as just another boundary."
         >
           <FileControl
-            accept=".dxf,application/dxf"
+            accept=".dxf,application/dxf,.json,application/json"
             uploaded={!!existingConfig?.reference_lines_path}
             staged={!!stagedFiles.reference_lines_path}
             onChange={(file) => file && stageFile('reference_lines_path', file)}
+          />
+        </Field>
+
+        <Field
+          label="Design extents (optional, JSON rings)"
+          help="The design region the work is being placed into, drawn as a pale filled area with a dashed outline UNDER the coverage, so the day's progress reads against what the design calls for. Also adds a Stability Backfill Extents swatch to the legend."
+        >
+          <FileControl
+            accept=".json,application/json"
+            uploaded={!!existingConfig?.design_extents_path}
+            staged={!!stagedFiles.design_extents_path}
+            onChange={(file) => file && stageFile('design_extents_path', file)}
+          />
+          {existingConfig?.design_extents_original_name && !stagedFiles.design_extents_path && (
+            <Text size="10px" c="dimmed" mt={2}>Uploaded: {existingConfig.design_extents_original_name}</Text>
+          )}
+        </Field>
+
+        <Field
+          label="Plant outline (optional, JSON)"
+          help="Barge / machine footprint drawn on the chart for scale and orientation."
+        >
+          <FileControl
+            accept=".json,application/json"
+            uploaded={!!existingConfig?.plant_path}
+            staged={!!stagedFiles.plant_path}
+            onChange={(file) => file && stageFile('plant_path', file)}
+          />
+          {existingConfig?.plant_original_name && !stagedFiles.plant_path && (
+            <Text size="10px" c="dimmed" mt={2}>Uploaded: {existingConfig.plant_original_name}</Text>
+          )}
+        </Field>
+
+        <Field
+          label="Chart framing"
+          help="Site shows the whole grid (or the aerial when georeferenced). Work crops to the design region plus the day's coverage, so the frame follows the job as later layers spread past the design extents."
+        >
+          <Select
+            size="xs"
+            value={chartFraming === 'work' ? 'work' : 'site'}
+            onChange={(v) => setChartFraming(v ?? 'site')}
+            data={[
+              { value: 'site', label: 'Site — the whole work area' },
+              { value: 'work', label: "Work — crop to the design region + today's coverage" },
+            ]}
+            allowDeselect={false}
+            style={{ maxWidth: 420 }}
           />
         </Field>
 
@@ -234,13 +290,14 @@ function PlacementChartTabForm({ project, existingConfig, createConfig, updateCo
             Save placement chart settings
           </Button>
           {saveMsg && <Text size="xs" c="green">{saveMsg}</Text>}
+          {saveWarning && <Text size="xs" c="#b45309">{saveWarning}</Text>}
           {saveError && <Text size="xs" c="red">{saveError}</Text>}
         </Group>
       </Section>
 
       <Section
         title="Lift colours"
-        help="Earlier days on the cumulative chart are coloured by the LIFT placed there, taken from this project's own layer list (Admin -> Capping Setup) in sort order. Reorder or rename layers there and the chart follows."
+        help="Earlier days on the cumulative chart are coloured by the material placed there. Layers whose names match a known stone class collapse onto that class, so several lifts of the same stone share one swatch. Set a layer's chart colour in Admin -> Capping Setup to switch this project to the pass-split scheme instead, where earlier days collapse to one Progress To Date colour."
       >
         {(layers ?? []).length === 0 ? (
           <Text size="xs" c="dimmed">
@@ -250,7 +307,7 @@ function PlacementChartTabForm({ project, existingConfig, createConfig, updateCo
         ) : (
           <Group gap={10} wrap="wrap">
             {buildLiftPalette(layers).entries.map((e) => (
-              <Group key={e.layerId} gap={6} wrap="nowrap">
+              <Group key={e.key} gap={6} wrap="nowrap">
                 <Box w={26} h={16} style={{ background: e.color, border: '1px solid #000' }} />
                 <Text size="xs">{e.label}</Text>
               </Group>

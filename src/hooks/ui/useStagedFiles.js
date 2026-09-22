@@ -23,35 +23,80 @@ export function useStagedFiles() {
     setStagedTiles((s) => ({ ...s, [key]: list }))
   }
 
+  // Each file uploads in its OWN try/catch. One rejected file used to abort the
+  // loop, so every file after it silently never uploaded and the caller could
+  // only say "something failed". A failure now degrades to exactly what happens
+  // when no new file is chosen -- the slot keeps whatever was stored before --
+  // and the caller is told which ones failed so it can say so and keep those
+  // files staged for a retry.
   async function flushFiles({ recordId, domain, existing, update }) {
+    const failedUploads = []
+    const uploaded = []
     for (const [field, staged] of Object.entries(stagedFiles)) {
-      await attachment.upload({
-        recordId,
-        domain,
-        field,
-        file: staged.file,
-        originalName: staged.originalName,
-        previousFileId: existing?.[field] ?? null,
-        metadataPrefix: field.replace(/_path$/, ''),
-        extra: staged.extra,
-        update: (_id, patch) => update(patch),
+      try {
+        await attachment.upload({
+          recordId,
+          domain,
+          field,
+          file: staged.file,
+          originalName: staged.originalName,
+          previousFileId: existing?.[field] ?? null,
+          metadataPrefix: field.replace(/_path$/, ''),
+          extra: staged.extra,
+          update: (_id, patch) => update(patch),
+          quiet: true,
+        })
+        uploaded.push(field)
+      } catch (err) {
+        failedUploads.push({
+          field,
+          fileName: staged.originalName ?? staged.file?.name ?? 'file',
+          message: err.message || 'Upload failed.',
+        })
+      }
+    }
+    // Clear only what landed, so a failed file stays in its slot to retry.
+    if (uploaded.length) {
+      setStagedFiles((s) => {
+        const next = { ...s }
+        for (const f of uploaded) delete next[f]
+        return next
       })
     }
-    if (Object.keys(stagedFiles).length) setStagedFiles({})
+    return { failedUploads }
   }
 
+  // Same rule per TILE: one bad tile must not cost the whole set. The tiles that
+  // did upload are merged in, the rest are reported.
   async function flushTiles({ recordId, domain, existing, update }) {
+    const failedUploads = []
+    const clearedFields = []
     for (const [fieldName, list] of Object.entries(stagedTiles)) {
       if (!list?.length) continue
       const uploadedTiles = []
       for (const t of list) {
-        const res = await uploadAttachment({ coreRecordId: recordId, domain, file: t.file })
-        uploadedTiles.push({ file_id: res.fileId, georef: t.georef, original_name: t.originalName ?? t.file.name })
+        const name = t.originalName ?? t.file?.name ?? 'tile'
+        try {
+          const res = await uploadAttachment({ coreRecordId: recordId, domain, file: t.file })
+          uploadedTiles.push({ file_id: res.fileId, georef: t.georef, original_name: name })
+        } catch (err) {
+          failedUploads.push({ field: fieldName, fileName: name, message: err.message || 'Upload failed.' })
+        }
       }
-      const merged = [...(existing?.[fieldName] ?? []), ...uploadedTiles]
-      await update({ [fieldName]: merged })
+      if (uploadedTiles.length) {
+        const merged = [...(existing?.[fieldName] ?? []), ...uploadedTiles]
+        await update({ [fieldName]: merged })
+      }
+      clearedFields.push(fieldName)
     }
-    if (Object.values(stagedTiles).some((l) => l?.length)) setStagedTiles({})
+    if (clearedFields.length) {
+      setStagedTiles((s) => {
+        const next = { ...s }
+        for (const f of clearedFields) delete next[f]
+        return next
+      })
+    }
+    return { failedUploads }
   }
 
   return { stagedFiles, stagedTiles, stageFile, unstageFile, stageTiles, flushFiles, flushTiles }

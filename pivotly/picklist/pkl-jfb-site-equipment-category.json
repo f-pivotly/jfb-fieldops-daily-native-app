@@ -9,6 +9,10 @@
       {
         "label": "Rental Equipment",
         "value": "rental"
+      },
+      {
+        "label": "Subcontractor Equipment",
+        "value": "subcontractor"
       }
     ]
   }

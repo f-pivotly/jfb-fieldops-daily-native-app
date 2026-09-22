@@ -25,11 +25,13 @@ import {
   buildPhotoAssetsParam,
 } from './lib/weeklySummary'
 import { buildWeeklyChartAssetsParam } from './lib/reportPdfData'
+import { prettyDate } from './lib/realizedToDate'
 import { downloadAndLogReport } from './lib/reportDownload'
 import { useDebouncedDraft } from '../../hooks/ui/useDebouncedDraft'
 import SaveIndicator from '../../components/SaveIndicator'
 import { fetchWeekCoverage } from '../../lib/dredge/weeklyChart'
 import { projectShowsDredgeChart } from '../../config/dredgeProgress'
+import { setReportTimeZone } from '../../lib/reportTz'
 
 const REPORT_SLUG = 'rpt-jfb-weekly-summary'
 
@@ -86,6 +88,7 @@ export default function WeeklySummaryPage() {
   const isDefaultWeek = weekStart === DEFAULT_WEEK_START
 
   const { project, loading: projectLoading, error: projectError } = useProject(projectId)
+  setReportTimeZone(project?.report_timezone)
   const {
     summaries, loading: summariesLoading, error: summariesError,
     create: createSummary, update: updateSummary,
@@ -276,7 +279,9 @@ export default function WeeklySummaryPage() {
             plannedToDateCy: hasPlan ? fmtNum(p.plannedToDateCy) : null,
             toDateVariance: hasPlan ? signedNum(p.toDateVariance) : null,
             toDateVariancePositive: hasPlan ? p.toDateVariance >= 0 : null,
+            anticipatedDailyProduction: hasPlan ? fmtNum(p.anticipatedDailyProduction) : null,
           },
+          generatedDate: prettyDate(new Date().toISOString().slice(0, 10)),
           ...buildWeeklyDelayChartParams(report),
         },
       })

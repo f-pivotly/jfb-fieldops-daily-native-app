@@ -405,6 +405,7 @@ export function renderChart(canvas, input) {
   const toGrid = ([x, y]) => [Math.round((x - G.x0) / G.R), Math.round((y - G.y0) / G.R)]
 
   const rawCells = config.cells ?? []
+  const boundaryRings = config.boundaryRings ?? []
   const refOnly = !!config.cellsReferenceOnly && rawCells.length > 0
   const allCells = refOnly ? [] : rawCells
   const refCells = refOnly ? rawCells : []
@@ -427,6 +428,15 @@ export function renderChart(canvas, input) {
   const cellsUnion = allCells.length ? rasterizePolys(drawnCells.map((c) => c.ring), G) : null
   if (cellsUnion && clipToCells) {
     for (let i = 0; i < todayMask.length; i++) if (!cellsUnion[i]) { todayMask[i] = 0; priorMask[i] = 0 }
+  }
+  // Coverage boundary (Fountain Lake channel-border style). Clips TODAY only --
+  // the "you can only report area within the channel going forward" rule. Prior
+  // coverage is HISTORICAL and stays as it was; a boundary that covers just one
+  // work area would otherwise erase every earlier phase from the
+  // progress-to-date fill. No boundary -> no clipping, as before.
+  if (boundaryRings.length) {
+    const boundaryUnion = rasterizePolys(boundaryRings, G)
+    for (let i = 0; i < todayMask.length; i++) if (!boundaryUnion[i]) todayMask[i] = 0
   }
   if (activeCellLabels.length && drawnCells.length) {
     const sel = new Set(activeCellLabels)

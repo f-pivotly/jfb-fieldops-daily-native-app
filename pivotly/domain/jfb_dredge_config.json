@@ -392,6 +392,27 @@
     },
     {
       "pii": false,
+      "name": "boundary_path",
+      "slug": "boundary_path",
+      "type": "text",
+      "label": "Coverage Boundary DXF Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "boundary_path",
+      "description": "Attachment fileId of a DXF holding closed polylines that fence the REPORTABLE coverage area. When set, TODAY's coverage mask is clipped to inside these rings, so a stray track outside the channel is never reported as area -- the rule Fountain Lake's PE asked for on 2026-09-16 after blue-line coverage overshot the Bancroft B border. Prior coverage is deliberately NOT clipped: it is historical, and a boundary covering one work area would otherwise erase every earlier phase from the progress-to-date fill. NULL leaves the feature off and coverage unclipped, which is the behaviour every project has today. Parsed the same way as cells_path, but flat -- no cell numbering or per-cell breakdown.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
       "name": "reference_surface_path",
       "slug": "reference_surface_path",
       "type": "text",
@@ -931,6 +952,48 @@
       "data_type": "text",
       "column_name": "alignment_storage_path",
       "description": "Physical storage path/key of the uploaded hard-structure alignment DXF file, as returned by the file-storage backend.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "boundary_original_name",
+      "slug": "boundary_original_name",
+      "type": "text",
+      "label": "Coverage Boundary Original Filename",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "boundary_original_name",
+      "description": "Filename the PM picked for the coverage-boundary DXF. The upload endpoint suffixes a random id for uniqueness, so this keeps the name they recognize.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "boundary_storage_path",
+      "slug": "boundary_storage_path",
+      "type": "text",
+      "label": "Coverage Boundary Storage Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "boundary_storage_path",
+      "description": "Server-assigned storage path for the coverage-boundary DXF, read back after upload. Metadata only -- the file is always fetched by the id in boundary_path.",
       "conflict_resolution": {
         "code": "lww"
       },

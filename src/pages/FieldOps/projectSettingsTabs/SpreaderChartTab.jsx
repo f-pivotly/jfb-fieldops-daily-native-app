@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { Box, Button, Checkbox, FileButton, Group, Stack, Text, TextInput } from '@mantine/core'
 import { useSpreaderConfig } from '../../../hooks/spreader/useSpreaderConfig'
-import { useAsyncAction } from '../../../hooks/ui/useAsyncAction'
+import { useAsyncAction, warn } from '../../../hooks/ui/useAsyncAction'
+import { uploadWarning } from '../../../hooks/ui/uploadWarning'
 import { readWrittenRecordId } from '../../../data'
 import { useStagedFiles } from '../../../hooks/ui/useStagedFiles'
 
@@ -80,7 +81,7 @@ function SpreaderChartTabForm({ project, existingConfig, createConfig, updateCon
   const [pickError, setPickError] = useState(null)
 
   const { stagedFiles, stageFile, flushFiles } = useStagedFiles()
-  const { busy, message, error, run } = useAsyncAction()
+  const { busy, message, warning, error, run } = useAsyncAction()
 
   const setNum = (k, v) => setNums((n) => ({ ...n, [k]: v }))
 
@@ -110,12 +111,13 @@ function SpreaderChartTabForm({ project, existingConfig, createConfig, updateCon
       let configId = existingConfig?.id ?? null
       if (configId) await updateConfig(configId, recordData)
       else configId = readWrittenRecordId(await createConfig(recordData))
-      await flushFiles({
+      const { failedUploads } = await flushFiles({
         recordId: configId,
         domain: SPREADER_CONFIG_DOMAIN,
         existing: existingConfig,
         update: (patch) => updateConfig(configId, patch),
       })
+      if (failedUploads.length) return warn(uploadWarning(failedUploads, 'Spreader chart settings saved'))
       return 'Spreader chart settings saved.'
     })
 
@@ -213,6 +215,7 @@ function SpreaderChartTabForm({ project, existingConfig, createConfig, updateCon
           Save spreader chart settings
         </Button>
         {message && <Text size="xs" c="teal">{typeof message === 'string' ? message : 'Saved.'}</Text>}
+        {warning && <Text size="xs" c="#b45309">{warning}</Text>}
         {(error || pickError) && <Text size="xs" c="red">{error || pickError}</Text>}
       </Group>
     </Stack>

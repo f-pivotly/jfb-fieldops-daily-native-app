@@ -9,6 +9,7 @@ import { executeDataView } from '../../data'
 import { todayISO, addDaysISO, prettyDate } from './lib/realizedToDate'
 import { isoCalWeek, projectWeekNumber } from './lib/reportPdfData'
 import { WARNING_BG } from './reportEditorTabs/components/WarningBanner'
+import { setReportTimeZone } from '../../lib/reportTz'
 
 const DAY_LABEL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
@@ -52,6 +53,7 @@ export default function ReportListPage() {
   const { projectId } = useParams()
   const navigate = useNavigate()
   const { project } = useProject(projectId)
+  setReportTimeZone(project?.report_timezone)
   const { reports: reportRecords } = useReports(projectId)
   const canManageSettings = useFieldOpsAction('manage_project_settings')
 

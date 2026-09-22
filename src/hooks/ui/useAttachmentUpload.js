@@ -22,9 +22,13 @@ export function useAttachmentUpload() {
     metadataPrefix,
     maxBytes,
     extra,
+    // Set by callers that handle failures per file (flushFiles). The shared
+    // `error` state would otherwise end up holding whichever upload failed
+    // LAST, which is not the same thing as the list of what failed.
+    quiet,
   }) {
     setUploading(true)
-    setError(null)
+    if (!quiet) setError(null)
     try {
       const id = typeof recordId === 'function' ? await recordId() : recordId
       if (!id) throw new Error('Could not resolve the record to attach this file to.')
@@ -59,7 +63,7 @@ export function useAttachmentUpload() {
 
       return res
     } catch (err) {
-      setError(err.message)
+      if (!quiet) setError(err.message)
       throw err
     } finally {
       setUploading(false)

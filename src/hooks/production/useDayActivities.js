@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
 import { fetchDomainRecords } from '../../data'
 import { useAppConfig } from '../../contexts/appConfigContext'
-import { utcDayRange, sameCalendarDay } from '../../lib/reportDates'
 
 
 export function useDayActivities({ projectId, reportDate, equipmentId }) {
@@ -11,15 +10,14 @@ export function useDayActivities({ projectId, reportDate, equipmentId }) {
   useEffect(() => {
     if (!projectId || !reportDate || !equipmentId) return undefined
     let cancelled = false
-    const { gte, lt } = utcDayRange(reportDate)
     fetchDomainRecords({
       domain: 'jfb_daily_activities', system: 'core', appSlug: config.appSlug,
-      filters: { project_id: projectId, equipment_id: equipmentId, start_date_time: { gte, lt } },
+      filters: { project_id: projectId, equipment_id: equipmentId, report_date: reportDate },
       limit: 500,
     })
       .then((res) => {
         if (cancelled) return
-        setActivities((res?.data ?? []).filter((a) => sameCalendarDay(a.start_date_time, reportDate, a.timezone)))
+        setActivities(res?.data ?? [])
       })
       .catch(() => { if (!cancelled) setActivities([]) })
     return () => { cancelled = true }

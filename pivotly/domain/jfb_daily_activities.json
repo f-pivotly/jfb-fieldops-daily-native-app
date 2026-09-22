@@ -104,6 +104,27 @@
     },
     {
       "pii": false,
+      "name": "report_date",
+      "slug": "report_date",
+      "type": "date",
+      "label": "Report Date",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "date",
+      "column_name": "report_date",
+      "description": "Which daily report this event belongs to, stamped when the event is created rather than derived from start_date_time. A night shift keeps one report date even as it crosses midnight, and trimming an event's start time later never moves it to another day. Matches the non-native app's daily_events.report_date, which the operator app sets from the session start and the daily app sets from the report being edited.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
       "name": "end_date_time",
       "slug": "end_date_time",
       "type": "timestamp with time zone",
@@ -236,6 +257,27 @@
     },
     {
       "pii": false,
+      "name": "area_source",
+      "slug": "area_source",
+      "type": "text",
+      "label": "Area Source",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "area_source",
+      "description": "Where this activity's `area` came from, which is what the Event Log's Area/Pass fill-down reads. 'operator' = the area arrived WITH the activity (picked in the field app, or created carrying one) -- never overwritten, and reaching one STOPS a fill, because it marks a real known state and everything below it belongs to that state. 'pe' = written by the PE's edit dialog, directly or by a fill -- re-fillable, so a later fill from an earlier activity may overwrite it. NULL (no area, or unknown provenance on a legacy row) is treated as operator-grade: the fill stops rather than guessing. A grade, not an identity -- who tagged it is already on operator_id. Invisible in every report; the only thing the PE sees is the resulting \"apply to the N activities below\" count.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
       "name": "notes",
       "slug": "notes",
       "type": "text",
@@ -270,7 +312,7 @@
       "required": false,
       "data_type": "boolean",
       "column_name": "tsca",
-      "description": "The TSCA (≥50 ppm PCB) contamination flag for this activity's area, matching the non-native app's daily_events.tsca. Set by the PE when inserting or editing an event in the field ops report app.",
+      "description": "The TSCA (\u226550 ppm PCB) contamination flag for this activity's area, matching the non-native app's daily_events.tsca. Set by the PE when inserting or editing an event in the field ops report app.",
       "conflict_resolution": {
         "code": "lww"
       },

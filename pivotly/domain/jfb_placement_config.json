@@ -210,7 +210,7 @@
       "required": false,
       "data_type": "text",
       "column_name": "reference_lines_path",
-      "description": "Attachment fileId of the PM's alignment/stationing overlay DXF -- open line work plus text labels, drawn thin over the map. Optional; purely visual.",
+      "description": "Attachment fileId of the PM's alignment/stationing overlay -- open line work plus text labels, drawn thin over the map. A DXF is read directly; a pre-extracted JSON of {segments, labels} may also carry an `emphasis` array for structures such as a sheet pile wall, which draw heavier and in a warm red. Optional; purely visual.",
       "conflict_resolution": {
         "code": "lww"
       },
@@ -231,7 +231,7 @@
       "required": false,
       "data_type": "text",
       "column_name": "reference_lines_original_name",
-      "description": "Filename the PM picked for the alignment overlay DXF. The upload endpoint suffixes a random id for uniqueness, so this keeps the name they recognize.",
+      "description": "Filename the PM picked for the alignment overlay. The upload endpoint suffixes a random id for uniqueness, so this keeps the name they recognize.",
       "conflict_resolution": {
         "code": "lww"
       },
@@ -253,6 +253,153 @@
       "data_type": "text",
       "column_name": "reference_lines_storage_path",
       "description": "Server-assigned storage path for the alignment overlay DXF, read back after upload. Metadata only -- the file is always fetched by the id in reference_lines_path.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "design_extents_path",
+      "slug": "design_extents_path",
+      "type": "text",
+      "label": "Design Extents Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "design_extents_path",
+      "description": "Attachment fileId of the design-region outline (JSON rings). Drawn as a pale filled region under the coverage so the day's work reads against what the design calls for. Optional.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "design_extents_original_name",
+      "slug": "design_extents_original_name",
+      "type": "text",
+      "label": "Design Extents Original Name",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "design_extents_original_name",
+      "description": "Filename the PM picked for the design-extents file. The upload endpoint suffixes a random id for uniqueness, so this keeps the name they recognize.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "design_extents_storage_path",
+      "slug": "design_extents_storage_path",
+      "type": "text",
+      "label": "Design Extents Storage Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "design_extents_storage_path",
+      "description": "Backing storage path for the design-extents file, mirroring the other asset triples.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "plant_path",
+      "slug": "plant_path",
+      "type": "text",
+      "label": "Plant Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "plant_path",
+      "description": "Attachment fileId of the plant outline (barge/machine footprint, JSON). Lets the PE place the machine on the chart for scale and orientation. Optional.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "plant_original_name",
+      "slug": "plant_original_name",
+      "type": "text",
+      "label": "Plant Original Name",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "plant_original_name",
+      "description": "Filename the PM picked for the plant outline file. The upload endpoint suffixes a random id for uniqueness, so this keeps the name they recognize.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "plant_storage_path",
+      "slug": "plant_storage_path",
+      "type": "text",
+      "label": "Plant Storage Path",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "plant_storage_path",
+      "description": "Backing storage path for the plant outline file, mirroring the other asset triples.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "chart_framing",
+      "slug": "chart_framing",
+      "type": "text",
+      "label": "Chart Framing",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "chart_framing",
+      "description": "How the chart frames the map. Only the exact string 'work' opts into cropping to the design region plus the day's coverage; NULL, '', 'site' and anything unrecognised keep the full site view, so a half-written config row cannot quietly re-frame a live project's chart.",
       "conflict_resolution": {
         "code": "lww"
       },

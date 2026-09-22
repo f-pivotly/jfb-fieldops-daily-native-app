@@ -50,6 +50,27 @@
     },
     {
       "pii": false,
+      "name": "company",
+      "slug": "company",
+      "type": "text",
+      "label": "Company",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "company",
+      "description": "Which subcontractor this piece of equipment belongs to. Set only on rows whose category is 'subcontractor' -- null on Brennan and Rental, where the category already says who owns it. The Safety page prints one \"Subcontractor -- <company>\" group per distinct value, for rows on site that date. A subcontractor row with this still blank groups under a plain \"Subcontractor\" heading rather than disappearing, so the PM can see it and fill the field in.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
       "name": "description",
       "slug": "description",
       "type": "text",

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Box, Text, Table, Group, Button, Modal, TextInput, Textarea, Select, Switch, Badge, SimpleGrid } from '@mantine/core'
+import { Box, Text, Table, Group, Button, Checkbox, Modal, TextInput, Textarea, Select, Switch, Badge, SimpleGrid } from '@mantine/core'
 import { IconPlus, IconPencil, IconTrash, IconAlertTriangle, IconCheck, IconFlag } from '@tabler/icons-react'
 import { useEvents } from '../../../hooks/production/useEvents'
 import { useFieldOpsAction } from '../../../contexts/fieldOpsAccessContext'
@@ -13,6 +13,9 @@ import { useProjectLayers } from '../../../hooks/capping/useProjectLayers'
 import { useWorkTypes } from '../../../hooks/project/useWorkTypes'
 import { equipmentWorkType, activeCategoryLabel } from '../lib/workType'
 import { UNATTRIBUTED_CATEGORY, findEventGaps, shiftTotals, fmtDurationMs, isUnattributed } from '../lib/eventTotals'
+import { hhmm24 as hhmm } from '../../../lib/reportDates'
+import { browserTimeZone } from '../../../lib/reportTz'
+import { computeAreaFillTargets } from '../../../lib/eventAreaFill'
 import { WARNING_BG } from './components/WarningBanner'
 
 const SAMPLE = '(sampleData)'
@@ -58,7 +61,7 @@ const EMPTY_FORM = {
   notes: '',
 }
 
-function hhmm(iso) {
+function hhmmLocal(iso) {
   if (!iso) return ''
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''
@@ -83,10 +86,6 @@ function fmtDuration(startISO, endISO) {
   if (h === 0) return `${m} min`
   if (m === 0) return `${h}h`
   return `${h}h ${m}m`
-}
-
-function browserTimeZone() {
-  return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
 }
 
 function buildAreaJson(areaId, subAreaId, subSubAreaId) {
@@ -205,6 +204,9 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
   const [insertOpen, setInsertOpen] = useState(false)
   const [insertKey, setInsertKey] = useState(0)
   const [editRow, setEditRow] = useState(null)
+  const [fillDown, setFillDown] = useState(true)
+  const [fillError, setFillError] = useState(null)
+  const fillTargets = editRow ? computeAreaFillTargets(activeSorted, editRow.id) : []
   const [deleteRow, setDeleteRow] = useState(null)
   const [hoverStrip, setHoverStrip] = useState(null)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -241,7 +243,7 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
 
   function openInsertNext() {
     const last = activeSorted.at(-1)
-    const lastTo = last ? hhmm(last.end_date_time) : '06:00'
+    const lastTo = last ? hhmmLocal(last.end_date_time) : '06:00'
     openInsert({
       ...contextFrom(last),
       operatorId: last?.operator_id ?? operators[0]?.id ?? null,
@@ -259,8 +261,8 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
     openInsert({
       ...contextFrom(row),
       operatorId: row.operator_id ?? operators[0]?.id ?? null,
-      from: hhmm(row.end_date_time),
-      to: hhmm(new Date(endMs).toISOString()),
+      from: hhmmLocal(row.end_date_time),
+      to: hhmmLocal(new Date(endMs).toISOString()),
     })
   }
 
@@ -272,6 +274,7 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
       start_date_time: gap.gapStart,
       end_date_time: gap.gapEnd,
       timezone: browserTimeZone(),
+      report_date: eventDate,
       category: UNATTRIBUTED_CATEGORY,
       operator_id: gap.prev.operator_id ?? null,
     })
@@ -280,23 +283,30 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
   async function handleInsert() {
     if (!form.from || !form.to || !project || !eventDate) return
     const { start, end } = eventTimestamps(eventDate, form.from, form.to)
+    const payload = payloadFromForm(form)
     await create({
       project_id: project.id,
       equipment_id: selectedEquipmentId,
       start_date_time: start,
       end_date_time: end,
       timezone: browserTimeZone(),
+      report_date: eventDate,
       category: resolveCategoryForForm(form),
-      ...payloadFromForm(form),
+      ...payload,
+      // An event created carrying an area is operator-grade, the same rule the
+      // non-native stack gets from its INSERT trigger. Pivotly has no triggers,
+      // so every writer stamps it.
+      area_source: payload.area ? 'operator' : null,
     })
     setInsertOpen(false)
   }
 
   function openEdit(row) {
     setEditRow(row)
+    setFillDown(true)
     setForm({
-      from: hhmm(row.start_date_time),
-      to: hhmm(row.end_date_time),
+      from: hhmmLocal(row.start_date_time),
+      to: hhmmLocal(row.end_date_time),
       operatorId: row.operator_id ?? null,
       delayCodeId: row.delay_code_id ?? '__operational__',
       areaId: row.area?.area_id ?? '',
@@ -313,13 +323,42 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
   async function handleSaveEdit() {
     if (!editRow || !eventDate) return
     const { start, end } = eventTimestamps(eventDate, form.from, form.to)
+    const payload = payloadFromForm(form)
+    // Stamp 'pe' only when the edit actually MOVES the area or pass. Fixing a
+    // time window must not quietly demote an operator's area to re-fillable.
+    const changedArea =
+      JSON.stringify(payload.area ?? null) !== JSON.stringify(editRow.area ?? null)
+      || (payload.pass_type ?? null) !== (editRow.pass_type ?? null)
     await update(editRow.id, {
       start_date_time: start,
       end_date_time: end,
       timezone: browserTimeZone(),
+      report_date: eventDate,
       category: resolveCategoryForForm(form),
-      ...payloadFromForm(form),
+      ...payload,
+      ...(changedArea ? { area_source: 'pe' } : {}),
     })
+    if (fillDown && payload.area && fillTargets.length) {
+      // One record per call -- Pivotly has no bulk update. Failures are
+      // collected rather than thrown so one bad row cannot strand the rest.
+      const failed = []
+      for (const t of fillTargets) {
+        try {
+          await update(t.id, {
+            area: payload.area,
+            pass_type: payload.pass_type ?? null,
+            area_source: 'pe',
+          })
+        } catch (err) {
+          failed.push(`${hhmm(t.start_date_time)} (${err.message})`)
+        }
+      }
+      setFillError(failed.length
+        ? `Filled ${fillTargets.length - failed.length} of ${fillTargets.length}; these did not update: ${failed.join(', ')}.`
+        : null)
+    } else {
+      setFillError(null)
+    }
     setEditRow(null)
   }
 
@@ -431,6 +470,14 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
 
   return (
     <Box>
+      {fillError && (
+        <Box p={10} mb={10} style={{ background: WARNING_BG, borderRadius: 6 }}>
+          <Group gap={6} wrap="nowrap" align="flex-start">
+            <IconAlertTriangle size={14} color="#92400E" style={{ flexShrink: 0, marginTop: 2 }} />
+            <Text size="xs" c="#92400E">{fillError}</Text>
+          </Group>
+        </Box>
+      )}
       {totals && (
         <Box
           p={16}
@@ -612,6 +659,16 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
 
       <Modal opened={!!editRow} onClose={() => setEditRow(null)} title={<Text fw={700} size="sm">Edit Event</Text>} size="sm">
         {FormFields()}
+        {fillTargets.length > 0 && (
+          <Checkbox
+            mt={10}
+            size="xs"
+            checked={fillDown}
+            onChange={(e) => setFillDown(e.currentTarget.checked)}
+            label={`Apply this Area & Pass to the ${fillTargets.length} event${fillTargets.length > 1 ? 's' : ''} below`}
+            description="Stops at the first event whose Area came from the operator — those are never overwritten."
+          />
+        )}
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => setEditRow(null)}>Cancel</Button>
           <Button size="xs" onClick={handleSaveEdit} style={{ background: '#0F2744', border: 'none' }}>Save</Button>

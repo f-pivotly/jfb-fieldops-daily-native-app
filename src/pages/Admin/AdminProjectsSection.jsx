@@ -35,6 +35,7 @@ const EMPTY_FORM = {
   primary_measure: FALLBACK_PRIMARY_MEASURE,
   site_city: "",
   site_state: "",
+  report_timezone: "",
   area_lvl1_label: "Area",
   area_lvl2_label: "",
   area_lvl3_label: "",
@@ -60,6 +61,7 @@ function toFormValues(row, areaLevels = []) {
     primary_measure: row.primary_measure ?? FALLBACK_PRIMARY_MEASURE,
     site_city: row.site_city ?? "",
     site_state: row.site_state ?? "",
+    report_timezone: row.report_timezone ?? "",
     area_lvl1_label: labelAt(1) || "Area",
     area_lvl2_label: labelAt(2),
     area_lvl3_label: labelAt(3),
@@ -85,6 +87,7 @@ function toPayload(form) {
     primary_measure: form.primary_measure,
     site_city: form.site_city.trim() || null,
     site_state: form.site_state.trim().toUpperCase() || null,
+    report_timezone: form.report_timezone.trim() || null,
     is_tsca_zone_tracking: form.is_tsca_zone_tracking,
     is_soil_type: form.is_soil_type,
     is_pipe_tracking: form.is_pipe_tracking,
@@ -291,6 +294,7 @@ export default function AdminProjectsSection({ onConfigure }) {
           <Select label="Primary Measure" data={primaryMeasureData} value={form.primary_measure} onChange={(v) => setField("primary_measure", v ?? FALLBACK_PRIMARY_MEASURE)} />
           <TextInput label="Site City" placeholder="e.g. Crofton" value={form.site_city} onChange={(e) => setField("site_city", e.currentTarget.value)} />
           <TextInput label="Site State" placeholder="e.g. NE" maxLength={2} value={form.site_state} onChange={(e) => setField("site_state", e.currentTarget.value.toUpperCase())} />
+          <TextInput label="Report Timezone" placeholder="e.g. America/Chicago" description="Clock times on reports display in this zone. Blank uses the viewer's own." inputWrapperOrder={["label", "input", "description"]} value={form.report_timezone} onChange={(e) => setField("report_timezone", e.currentTarget.value.trim())} />
         </SimpleGrid>
 
         <Text size="10px" fw={700} c="dimmed" mb={8} style={{ textTransform: "uppercase", letterSpacing: ".5px" }}>

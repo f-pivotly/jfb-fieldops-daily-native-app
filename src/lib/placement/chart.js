@@ -10,11 +10,136 @@ const GRID_EDGE = '#7f8a84'
 const DAILY = '#779C5D'
 const DAILY_EDGE = '#3d5c28'
 const DAILY_2ND = '#3F6B3A'
+const STRUCTURE = '#D4452B'
+const EXTENTS_FILL = 'rgba(190,255,232,0.92)'
+const EXTENTS_EDGE = '#E08A2E'
+export const EXTENTS_SWATCH = '#BEFFE8'
 
-const LIFT_PALETTE = [
-  '#FFFF00', '#00E6A9', '#C500FF', '#FFBEBE', '#9C9C9C', '#FF7F0E',
-  '#4FA3FF', '#FFD27F', '#C4A484', '#E31A1C', '#6A3D9A', '#00CED1',
+const PLANT_FILL = { hull: '#c0392b', mats: '#b88a00', machine: '#4f7f3f' }
+const PLANT_EDGE = '#1a1a1a'
+
+export function plantTransform(plant, pose) {
+  const nat = Math.atan2(plant.stern[1] - plant.bow[1], plant.stern[0] - plant.bow[0])
+  const tgt = Math.atan2(pose.stern[1] - pose.bow[1], pose.stern[0] - pose.bow[0])
+  const rot = tgt - nat
+  const cosR = Math.cos(rot)
+  const sinR = Math.sin(rot)
+  return ([x, y]) => {
+    const dx = x - plant.bow[0]
+    const dy = y - plant.bow[1]
+    return [pose.bow[0] + dx * cosR - dy * sinR, pose.bow[1] + dx * sinR + dy * cosR]
+  }
+}
+
+const ZOOM_MAX_H = 1000
+const ZOOM_MIN_H = 560
+
+export function framingFrom(configured) {
+  return configured === 'work' ? 'work' : 'site'
+}
+
+export function computeWorkFrame(focus, site) {
+  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
+  for (const [x, y] of focus) {
+    if (x < x0) x0 = x
+    if (x > x1) x1 = x
+    if (y < y0) y0 = y
+    if (y > y1) y1 = y
+  }
+  if (!Number.isFinite(x0)) throw new Error('computeWorkFrame needs at least one point.')
+
+  const pad = Math.max(0.08 * Math.max(x1 - x0, y1 - y0), 25)
+  x0 -= pad; x1 += pad; y0 -= pad; y1 += pad
+
+  let w = x1 - x0
+  let h = y1 - y0
+  const mapH = Math.min(ZOOM_MAX_H, Math.max(ZOOM_MIN_H, Math.round((MAPW * h) / w)))
+  const want = MAPW / mapH
+  const cx = (x0 + x1) / 2
+  const cy = (y0 + y1) / 2
+  if (w / h < want) {
+    w = h * want; x0 = cx - w / 2; x1 = cx + w / 2
+  } else {
+    h = w / want; y0 = cy - h / 2; y1 = cy + h / 2
+  }
+
+  if (site) {
+    if (w <= site.wR - site.wL) {
+      if (x0 < site.wL) { x1 += site.wL - x0; x0 = site.wL }
+      else if (x1 > site.wR) { x0 -= x1 - site.wR; x1 = site.wR }
+    }
+    if (h <= site.wT - site.wB) {
+      if (y0 < site.wB) { y1 += site.wB - y0; y0 = site.wB }
+      else if (y1 > site.wT) { y0 -= y1 - site.wT; y1 = site.wT }
+    }
+  }
+  return { wL: x0, wR: x1, wB: y0, wT: y1, mapH }
+}
+
+export const MATERIAL_COLORS = [
+  { match: /ballast/i, color: '#FFFF00', label: 'Ballast Stone' },
+  { match: /class\s*b/i, color: '#00E6A9', label: 'Class B Riprap' },
+  { match: /class\s*e/i, color: '#C500FF', label: 'Class E Riprap' },
+  { match: /class\s*a/i, color: '#FFBEBE', label: 'Class A Riprap' },
+  { match: /barrier/i, color: '#9C9C9C', label: 'Barrier Stone' },
 ]
+
+const LAYER_FALLBACK_COLORS = [
+  '#E8873A', '#F2D65C', '#4FA3D1', '#B07AA1', '#76B7B2', '#9C7A5F',
+]
+
+export const PROGRESS_TO_DATE = '#00A9E6'
+
+export function colorForLayer(layerName, index) {
+  if (!layerName) return null
+  for (const m of MATERIAL_COLORS) if (m.match.test(layerName)) return m.color
+  if (index != null && index >= 0) return LAYER_FALLBACK_COLORS[index % LAYER_FALLBACK_COLORS.length]
+  return null
+}
+
+export function layerPassColorsFrom(layers) {
+  const out = new Map()
+  for (const l of layers ?? []) {
+    const first = l.chart_color?.trim()
+    if (!first) continue
+    out.set(l.id, { first, second: l.chart_color_2nd?.trim() || first })
+  }
+  return out
+}
+
+export function passSplitLegend(layers) {
+  const cols = layerPassColorsFrom(layers)
+  if (cols.size === 0) return []
+  const out = []
+  for (const l of layers ?? []) {
+    const c = cols.get(l.id)
+    if (!c) continue
+    const name = l.layer_report_name || l.layer_name || 'Lift'
+    out.push({ key: `${l.id}-1`, label: `${name} 1st Pass`, color: c.first })
+    out.push({ key: `${l.id}-2`, label: `${name} 2nd Pass`, color: c.second })
+  }
+  out.push({ key: 'progress-to-date', label: 'Progress To Date', color: PROGRESS_TO_DATE })
+  return out
+}
+
+export function legendForLayers(layers) {
+  const split = passSplitLegend(layers)
+  if (split.length > 0) return { entries: split, complete: true }
+  if (!layers || layers.length === 0) return null
+  const allKnown = layers.every((l) => MATERIAL_COLORS.some(
+    (m) => m.match.test(l.layer_report_name || l.layer_name || ''),
+  ))
+  if (allKnown) return null
+  return {
+    entries: layers.map((l, i) => {
+      const name = l.layer_report_name || l.layer_name || 'Lift'
+      return { key: l.id, label: name, color: colorForLayer(name, i) ?? DAILY }
+    }),
+    complete: false,
+  }
+}
+
+export const MATERIAL_LEGEND = MATERIAL_COLORS.map((m) => ({ key: m.label, label: m.label, color: m.color }))
 
 export function buildLiftPalette(layers) {
   const ranked = (layers ?? [])
@@ -23,19 +148,24 @@ export function buildLiftPalette(layers) {
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)
       || String(a.layer_name ?? '').localeCompare(String(b.layer_name ?? '')))
   const order = new Map()
-  const byId = new Map()
-  const entries = ranked.map((l, i) => {
-    const color = LIFT_PALETTE[i % LIFT_PALETTE.length]
-    order.set(l.id, i)
-    byId.set(l.id, color)
-    return { layerId: l.id, label: l.layer_report_name || l.layer_name || 'Lift', color }
-  })
-  return { colorFor: (layerId) => (layerId ? byId.get(layerId) ?? null : null), order, entries }
+  ranked.forEach((l, i) => order.set(l.id, i))
+  const spec = legendForLayers(ranked)
+  const layerColors = layerPassColorsFrom(ranked)
+  const entries = spec?.entries ?? MATERIAL_LEGEND
+  return {
+    order,
+    layerColors,
+    legend: spec?.entries ?? null,
+    legendComplete: spec?.complete ?? false,
+    entries,
+  }
 }
 
 function liftOrdinal(l, layerOrder) {
   const byConfig = l.layerId ? layerOrder?.get(l.layerId) : undefined
-  return byConfig !== undefined ? byConfig : 1000
+  if (byConfig !== undefined) return byConfig
+  const m = MATERIAL_COLORS.findIndex((x) => x.match.test(l.layerName))
+  return 1000 + (m < 0 ? MATERIAL_COLORS.length : m)
 }
 
 export function liftsFromCoverage(coverage, layerOrder) {
@@ -48,7 +178,11 @@ export function liftsFromCoverage(coverage, layerOrder) {
 
 export function materialsFromLifts(lifts) {
   const out = []
-  for (const l of lifts ?? []) if (l.label && !out.includes(l.label)) out.push(l.label)
+  for (const l of lifts ?? []) {
+    const m = MATERIAL_COLORS.find((x) => x.match.test(l.label))
+    const label = m ? m.label : String(l.label ?? '').trim()
+    if (label && !out.includes(label)) out.push(label)
+  }
   return out
 }
 
@@ -98,12 +232,40 @@ export function splitPasses(prior, today, grid, layerOrder) {
   }
 }
 
-export function buildCellFills(prior, today, colorFor) {
+function buildPassSplitFills(prior, today, layerColors) {
+  const fills = new Map()
+  const unrecorded = new Set()
+  for (const day of prior ?? []) {
+    for (const l of day.layers) {
+      for (const [c, r] of l.cells) fills.set(cellKey(c, r), PROGRESS_TO_DATE)
+    }
+  }
+  if (today) {
+    const seenByLift = priorCellsByLift(prior)
+    for (const l of today.layers) {
+      const cols = l.layerId ? layerColors.get(l.layerId) : undefined
+      const before = l.layerId ? seenByLift.get(l.layerId) : undefined
+      for (const [c, r] of l.cells) {
+        const key = cellKey(c, r)
+        if (!cols) {
+          if (!fills.has(key)) unrecorded.add(key)
+          continue
+        }
+        fills.set(key, before?.has(key) ? cols.second : cols.first)
+        unrecorded.delete(key)
+      }
+    }
+  }
+  return { fills, unrecorded: unrecorded.size }
+}
+
+export function buildCellFills(prior, today, layerOrder, layerColors) {
+  if (layerColors && layerColors.size > 0) return buildPassSplitFills(prior, today, layerColors)
   const fills = new Map()
   const unrecordedCells = new Set()
   for (const day of prior ?? []) {
     for (const l of day.layers) {
-      const col = colorFor(l.layerId || null)
+      const col = colorForLayer(l.layerName, l.layerId ? layerOrder?.get(l.layerId) : undefined)
       for (const [c, r] of l.cells) {
         const key = cellKey(c, r)
         if (col) { fills.set(key, col); unrecordedCells.delete(key) }
@@ -181,9 +343,10 @@ export function renderPlacementChart(canvas, input) {
   const { grid, aerialGeoref } = input
   const boundary = grid.grid.boundary
 
-  let wL, wR, wT, wB
+  let site
   if (aerialGeoref) {
-    ({ wL, wR, wT, wB } = aerialGeoref)
+    const { wL: l, wR: r, wT: t, wB: b } = aerialGeoref
+    site = { wL: l, wR: r, wT: t, wB: b, mapH: Math.round((MAPW * (t - b)) / (r - l)) }
   } else {
     let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
     for (const [c, r] of grid.grid.cells) {
@@ -195,18 +358,36 @@ export function renderPlacementChart(canvas, input) {
       }
     }
     const pad = 60
-    wL = x0 - pad; wR = x1 + pad; wB = y0 - pad; wT = y1 + pad
+    site = {
+      wL: x0 - pad, wR: x1 + pad, wB: y0 - pad, wT: y1 + pad,
+      mapH: Math.round((MAPW * (y1 - y0 + pad * 2)) / (x1 - x0 + pad * 2)),
+    }
   }
 
+  const zoomed = framingFrom(input.framing) === 'work'
+  let view = site
+  if (zoomed) {
+    const focus = []
+    for (const ring of input.designExtents?.rings ?? []) focus.push(...ring)
+    for (const key of input.cellFills.keys()) {
+      const [c, r] = key.split(',').map(Number)
+      focus.push(...grid.cellPolygon(c, r))
+    }
+    if (!focus.length) for (const [c, r] of grid.grid.cells) focus.push(...grid.cellPolygon(c, r))
+    view = computeWorkFrame(focus, aerialGeoref ? site : null)
+  }
+  const { wL, wR, wT, wB } = view
+
   const legend = [
-    ...(input.legendLifts ?? []).map((l) => [l.label, l.color]),
-    ['Daily Progress (1st Pass)', DAILY],
-    ['Daily Progress (2nd Pass)', DAILY_2ND],
+    ...(input.legend ?? MATERIAL_LEGEND).map((l) => [l.label, l.color]),
+    ...(input.legendComplete
+      ? []
+      : [['Daily Progress (1st Pass)', DAILY], ['Daily Progress (2nd Pass)', DAILY_2ND]]),
   ]
   const legendRows = Math.max(1, Math.ceil(legend.length / LEGEND_COLS))
   const headerH = Math.max(150, LEGEND_Y + (legendRows - 1) * LEGEND_PITCH + 24)
 
-  const mapH = Math.round((MAPW * (wT - wB)) / (wR - wL))
+  const mapH = view.mapH
   const W = MAPW + SIDE * 2
   const H = headerH + mapH + FOOTERH
   canvas.width = W
@@ -237,6 +418,27 @@ export function renderPlacementChart(canvas, input) {
       (aerialGeoref.wR - aerialGeoref.wL) * sc,
       (aerialGeoref.wT - aerialGeoref.wB) * sc,
     )
+  }
+
+  const extents = input.designExtents
+  if (extents?.rings?.length) {
+    const tracePath = () => {
+      g.beginPath()
+      for (const ring of extents.rings) {
+        ring.forEach(([x, y], i) => (i ? g.lineTo(sx(x), sy(y)) : g.moveTo(sx(x), sy(y))))
+        g.closePath()
+      }
+    }
+    tracePath()
+    g.fillStyle = EXTENTS_FILL
+    g.fill()
+    g.save()
+    g.setLineDash([6, 4])
+    g.strokeStyle = EXTENTS_EDGE
+    g.lineWidth = 2
+    tracePath()
+    g.stroke()
+    g.restore()
   }
 
   const drawCell = (col, row, fill, edge, lw) => {
@@ -274,7 +476,7 @@ export function renderPlacementChart(canvas, input) {
   }
 
   const ref = input.referenceLines
-  if (ref && (ref.segments?.length || ref.labels?.length)) {
+  if (ref && (ref.segments?.length || ref.labels?.length || ref.emphasis?.length)) {
     const touches = (pts) => {
       let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
       for (const [x, y] of pts) {
@@ -297,8 +499,20 @@ export function renderPlacementChart(canvas, input) {
     g.strokeStyle = 'rgba(20,20,20,0.75)'
     g.lineWidth = 1.2
     for (const seg of segs) { path(seg); g.stroke() }
+
+    const emph = (ref.emphasis ?? []).filter((s2) => s2.length > 1 && touches(s2))
+    if (emph.length) {
+      g.strokeStyle = 'rgba(255,255,255,0.85)'
+      g.lineWidth = 5
+      for (const seg of emph) { path(seg); g.stroke() }
+      g.strokeStyle = STRUCTURE
+      g.lineWidth = 2.6
+      for (const seg of emph) { path(seg); g.stroke() }
+    }
+
     g.font = `bold 10px ${FONT}`
     g.textAlign = 'center'
+    g.lineJoin = 'round'
     for (const lb of ref.labels ?? []) {
       if (lb.x < wL || lb.x > wR || lb.y < wB || lb.y > wT) continue
       g.strokeStyle = 'rgba(255,255,255,0.85)'
@@ -307,6 +521,7 @@ export function renderPlacementChart(canvas, input) {
       g.fillStyle = '#1a1a1a'
       g.fillText(lb.v, sx(lb.x), sy(lb.y) + 3)
     }
+    g.lineJoin = 'miter'
     g.textAlign = 'left'
   }
 
@@ -318,7 +533,139 @@ export function renderPlacementChart(canvas, input) {
     g.closePath()
     g.stroke()
   }
+
+  // The plant last, so it sits on top of everything: it is a physical object
+  // floating over the work, not another layer of it.
+  const plant = input.plant
+  const pose = input.plantPose
+  if (plant && pose && plant.parts?.length) {
+    const tf = plantTransform(plant, pose)
+    const trace = (pts, close) => {
+      g.beginPath()
+      pts.forEach((v, i) => {
+        const [x, y] = tf(v)
+        return i ? g.lineTo(sx(x), sy(y)) : g.moveTo(sx(x), sy(y))
+      })
+      if (close) g.closePath()
+    }
+    const span = (pts) => {
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity
+      for (const [x, y] of pts) {
+        if (x < x0) x0 = x
+        if (x > x1) x1 = x
+        if (y < y0) y0 = y
+        if (y > y1) y1 = y
+      }
+      return (x1 - x0) * (y1 - y0)
+    }
+    // Hulls, then the deck, then the machine -- the order they stack in life.
+    // Within a kind, big parts first: the excavator arrives as traced line art
+    // whose detail has to land ON its body, and DXF order is drawing order.
+    for (const kind of ['hull', 'mats', 'machine']) {
+      const set = plant.parts.filter((pt) => pt.kind === kind && pt.closed)
+      set.sort((a, b) => span(b.pts) - span(a.pts))
+      for (const part of set) {
+        g.fillStyle = part.color ?? PLANT_FILL[kind]
+        trace(part.pts, true)
+        g.fill()
+        // Crane mats are individual timbers with gaps between them, which at
+        // 2 px per foot leave the deck showing through as stripes. Stroking
+        // each in its own colour closes the gaps into a deck.
+        if (kind === 'mats') {
+          g.strokeStyle = part.color ?? PLANT_FILL.mats
+          g.lineWidth = 1
+          g.stroke()
+        }
+      }
+    }
+    // Outline the barges, and the machine's BIG parts only. Stroking every one
+    // of the excavator's few hundred traced outlines turns it into a smudge.
+    g.strokeStyle = PLANT_EDGE
+    g.lineWidth = 0.6
+    for (const part of plant.parts) {
+      if (part.kind === 'machine' && Math.sqrt(span(part.pts)) < 3) continue
+      trace(part.pts, part.closed)
+      g.stroke()
+    }
+  }
   g.restore()
+
+  // ── inset locator (top-right) ──────────────────────────────────────────────
+  // Only under work framing. Un-zoomed, the view IS the site extent, so the
+  // inset would be the same picture at 1/5 scale with a box round the whole of
+  // it -- it would locate nothing and cost map area. Cropping the main map is
+  // what makes it earn its place; the reference app's rule is that cropping is
+  // only safe when something else still says where you are.
+  //
+  // Same furniture as the dredge chart's inset (230 px cap, #d22 view box, #222
+  // border) so the two chart families stay one family.
+  if (zoomed) {
+    const IN_MAX = 230
+    const asp = (site.wR - site.wL) / (site.wT - site.wB)
+    let iw = IN_MAX
+    let ih = Math.round(IN_MAX / asp)
+    if (ih > IN_MAX) { ih = IN_MAX; iw = Math.round(IN_MAX * asp) }
+    const ix = ox + MAPW - iw - 12
+    const iy = oy + BAND_H + 12
+    const isc = iw / (site.wR - site.wL)
+    const gx = (x) => ix + (x - site.wL) * isc
+    const gy = (y) => iy + (site.wT - y) * isc
+
+    g.save()
+    g.beginPath()
+    g.rect(ix, iy, iw, ih)
+    g.clip()
+    g.fillStyle = MAP_BG
+    g.fillRect(ix, iy, iw, ih)
+    if (input.aerialImage && aerialGeoref) {
+      g.drawImage(
+        input.aerialImage,
+        gx(aerialGeoref.wL), gy(aerialGeoref.wT),
+        (aerialGeoref.wR - aerialGeoref.wL) * isc,
+        (aerialGeoref.wT - aerialGeoref.wB) * isc,
+      )
+    }
+    if (extents?.rings?.length) {
+      g.beginPath()
+      for (const ring of extents.rings) {
+        ring.forEach(([x, y], i) => (i ? g.lineTo(gx(x), gy(y)) : g.moveTo(gx(x), gy(y))))
+        g.closePath()
+      }
+      g.fillStyle = EXTENTS_FILL
+      g.fill()
+    }
+    // Coverage as plain squares. At this scale a 5.75 ft cell is under a pixel,
+    // so the clipped outlines the main map draws would cost time and show
+    // nothing; neighbouring cells merge into the blob that is the whole point.
+    for (const [key, col] of covered) {
+      const [c, r] = key.split(',').map(Number)
+      g.fillStyle = col
+      g.beginPath()
+      grid.cellPolygon(c, r).forEach(([x, y], i) => (i ? g.lineTo(gx(x), gy(y)) : g.moveTo(gx(x), gy(y))))
+      g.closePath()
+      g.fill()
+    }
+    // Boundaries only -- hairline, no labels. DMU names at 230 px would be two
+    // pixels tall, which is noise standing in for information.
+    if (ref?.segments?.length) {
+      g.strokeStyle = 'rgba(255,255,255,0.8)'
+      g.lineWidth = 0.6
+      for (const seg of ref.segments) {
+        g.beginPath()
+        g.moveTo(gx(seg[0][0]), gy(seg[0][1]))
+        for (const v of seg.slice(1)) g.lineTo(gx(v[0]), gy(v[1]))
+        g.stroke()
+      }
+    }
+    // What the big map is showing.
+    g.strokeStyle = '#d22'
+    g.lineWidth = 1.5
+    g.strokeRect(gx(wL), gy(wT), (wR - wL) * isc, (wT - wB) * isc)
+    g.restore()
+    g.strokeStyle = '#222'
+    g.lineWidth = 1.5
+    g.strokeRect(ix, iy, iw, ih)
+  }
 
   g.fillStyle = BAND
   g.fillRect(ox, oy, MAPW, BAND_H)
@@ -340,7 +687,10 @@ export function renderPlacementChart(canvas, input) {
   const rowH = 15
   const padX = 8
   const boxH = headH + rows.length * rowH + 6
-  const bx = ox + MAPW - boxW - 12
+  // The inset takes the top-right corner when it is drawn (that is where the
+  // PE's chart puts it), so the table moves to the top-left rather than the two
+  // fighting over the same space.
+  const bx = zoomed ? ox + 12 : ox + MAPW - boxW - 12
   const by = oy + BAND_H + 12
   g.fillStyle = 'rgba(255,255,255,0.92)'
   g.fillRect(bx, by, boxW, boxH)
@@ -433,5 +783,8 @@ export function renderPlacementChart(canvas, input) {
   g.lineWidth = 3
   g.strokeRect(1.5, 1.5, W - 3, H - 3)
 
-  return { width: W, height: H }
+  // The view transform, so a caller can turn a canvas click into world feet --
+  // what the plant-placement tool needs. Work framing makes this vary day to
+  // day, so it cannot be recomputed outside the renderer.
+  return { width: W, height: H, view: { ox, oy, mapH, wL, wT, sc } }
 }

@@ -233,6 +233,27 @@
     },
     {
       "pii": false,
+      "name": "report_timezone",
+      "slug": "report_timezone",
+      "type": "text",
+      "label": "Report Timezone",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "report_timezone",
+      "description": "IANA timezone of the job site, e.g. America/Chicago. Event and shift clock times display in this zone rather than the viewer's, and times a PE types are read as wall-clock time in it. Null falls back to the viewer's browser zone, which is the behaviour every project had before.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
       "name": "is_tsca_zone_tracking",
       "slug": "is_tsca_zone_tracking",
       "type": "boolean",

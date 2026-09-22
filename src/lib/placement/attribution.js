@@ -90,15 +90,6 @@ function secsInZone(iso, timeZone) {
   return (get('hour') % 24) * 3600 + get('minute') * 60 + get('second')
 }
 
-function localDayInZone(iso, timeZone) {
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return null
-  return new Intl.DateTimeFormat('en-CA', {
-    ...(timeZone ? { timeZone } : {}),
-    year: 'numeric', month: '2-digit', day: '2-digit',
-  }).format(d)
-}
-
 export function windowsFromActivities(activities, layerNameById, isProductive) {
   const out = []
   for (const a of activities ?? []) {
@@ -114,19 +105,6 @@ export function windowsFromActivities(activities, layerNameById, isProductive) {
     })
   }
   return out.sort((a, b) => a.fromSecs - b.fromSecs)
-}
-
-export function activitiesByDay(activities, equipmentId) {
-  const out = new Map()
-  for (const a of activities ?? []) {
-    if (equipmentId && a.equipment_id !== equipmentId) continue
-    const day = a.start_date_time ? localDayInZone(a.start_date_time, a.timezone) : null
-    if (!day) continue
-    const list = out.get(day)
-    if (list) list.push(a)
-    else out.set(day, [a])
-  }
-  return out
 }
 
 export function attributeHistory(history, grid, activitiesByDate, layerNameById, isProductive) {

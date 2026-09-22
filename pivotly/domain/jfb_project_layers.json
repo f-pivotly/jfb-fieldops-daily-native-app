@@ -137,6 +137,48 @@
         "code": "lww"
       },
       "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "chart_color",
+      "slug": "chart_color",
+      "type": "text",
+      "label": "Chart Color",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "chart_color",
+      "description": "Hex fill for this layer's FIRST-pass coverage on the placement chart. NULL = the built-in material-class palette. Setting it also opts the project into the pass-split scheme, where earlier days collapse to one Progress-To-Date colour.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "chart_color_2nd",
+      "slug": "chart_color_2nd",
+      "type": "text",
+      "label": "Chart Color 2nd",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "chart_color_2nd",
+      "description": "Hex fill for SECOND-pass coverage -- the same layer re-covering ground it already covered on an earlier day. NULL falls back to chart_color.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
     }
   ],
   "archive": true,
