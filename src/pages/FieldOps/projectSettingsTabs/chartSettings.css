@@ -1,0 +1,8 @@
+.chart-settings .mantine-InputWrapper-label,
+.chart-settings .mantine-Checkbox-label,
+.chart-settings .mantine-Switch-label,
+.chart-settings .chart-settings-label {
+  font-size: var(--mantine-font-size-xs);
+  font-weight: 700;
+  color: var(--mantine-color-black);
+}

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Box, Text, Table, Stack, Group, TextInput, Textarea, Image, SimpleGrid, Alert } from '@mantine/core'
+import { Box, Button, Text, Table, Stack, Group, TextInput, Textarea, Image, SimpleGrid, Alert } from '@mantine/core'
 import SafeError from '../../../components/SafeError'
 import { downloadAttachment } from '../../../data'
 import { useAirMonitoringConfig } from '../../../hooks/monitoring/useAirMonitoringConfig'
@@ -10,6 +10,8 @@ import { buildAirDay } from '../../../lib/airQuality/data'
 import { buildAirChartSpecs, renderAirChart } from '../../../lib/airQuality/chart'
 
 import { isDirectImageUrl } from '../../../lib/imageSource'
+
+const SLOT_PAGE = 5
 
 function useAttachmentImageUrl(fileId) {
   const [resolved, setResolved] = useState({ fileId: null, url: null })
@@ -78,6 +80,17 @@ export default function AirQualityTab({ project, report }) {
       return null
     }
   }, [day, config])
+
+  const allSlots = day?.slots ?? []
+  const [shown, setShown] = useState(SLOT_PAGE)
+  const visibleSlots = allSlots.slice(0, shown)
+  const remaining = Math.max(0, allSlots.length - visibleSlots.length)
+  const slotKey = `${report?.id ?? ''}|${allSlots.length}`
+  const [prevSlotKey, setPrevSlotKey] = useState(slotKey)
+  if (slotKey !== prevSlotKey) {
+    setPrevSlotKey(slotKey)
+    setShown(SLOT_PAGE)
+  }
 
   if (configLoading) return <Text size="sm" c="dimmed">Loading air quality data...</Text>
   if (!config) return <Text size="sm" c="dimmed">No air monitoring configured for this project.</Text>
@@ -162,7 +175,7 @@ export default function AirQualityTab({ project, report }) {
       {}
       <Box style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 6, overflow: 'hidden' }}>
         <Box style={{ maxHeight: 480, overflowY: 'auto' }}>
-          <Table withTableBorder={false} verticalSpacing={4} fz="sm" stickyHeader>
+          <Table withTableBorder={false} verticalSpacing={4} fz="xs" stickyHeader>
             <Table.Thead bg="gray.0">
               <Table.Tr>
                 <Table.Th>Time</Table.Th>
@@ -174,7 +187,7 @@ export default function AirQualityTab({ project, report }) {
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {day?.slots.map((s) => (
+              {visibleSlots.map((s) => (
                 <Table.Tr key={s.utcISO}>
                   <Table.Td>{s.timeLabel}</Table.Td>
                   {config.stations.map((st) => (
@@ -187,6 +200,19 @@ export default function AirQualityTab({ project, report }) {
             </Table.Tbody>
           </Table>
         </Box>
+          {remaining > 0 && (
+            <Group justify="center" gap={12} p="xs" style={{ borderTop: '1px solid var(--mantine-color-gray-2)' }}>
+              <Text size="xs" c="dimmed">Showing {visibleSlots.length} of {allSlots.length}</Text>
+              <Button size="xs" variant="default" onClick={() => setShown((n) => n + SLOT_PAGE)}>
+                Load {Math.min(SLOT_PAGE, remaining)} more
+              </Button>
+              {remaining > SLOT_PAGE && (
+                <Button size="xs" variant="subtle" onClick={() => setShown(allSlots.length)}>
+                  Show all {allSlots.length}
+                </Button>
+              )}
+            </Group>
+          )}
         <Text size="xs" c="dimmed" p="xs" style={{ borderTop: '1px solid var(--mantine-color-gray-2)' }}>
           All values mg/m³, 15-minute time-weighted averages. Alert/Action ={' '}
           {config.thresholds?.alert_offset_mgm3 ?? '—'} / {config.thresholds?.action_offset_mgm3 ?? '—'} mg/m³

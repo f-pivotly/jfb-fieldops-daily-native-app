@@ -22,9 +22,6 @@ export function useAttachmentUpload() {
     metadataPrefix,
     maxBytes,
     extra,
-    // Set by callers that handle failures per file (flushFiles). The shared
-    // `error` state would otherwise end up holding whichever upload failed
-    // LAST, which is not the same thing as the list of what failed.
     quiet,
   }) {
     setUploading(true)

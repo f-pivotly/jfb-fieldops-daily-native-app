@@ -534,8 +534,6 @@ export function renderPlacementChart(canvas, input) {
     g.stroke()
   }
 
-  // The plant last, so it sits on top of everything: it is a physical object
-  // floating over the work, not another layer of it.
   const plant = input.plant
   const pose = input.plantPose
   if (plant && pose && plant.parts?.length) {
@@ -558,9 +556,6 @@ export function renderPlacementChart(canvas, input) {
       }
       return (x1 - x0) * (y1 - y0)
     }
-    // Hulls, then the deck, then the machine -- the order they stack in life.
-    // Within a kind, big parts first: the excavator arrives as traced line art
-    // whose detail has to land ON its body, and DXF order is drawing order.
     for (const kind of ['hull', 'mats', 'machine']) {
       const set = plant.parts.filter((pt) => pt.kind === kind && pt.closed)
       set.sort((a, b) => span(b.pts) - span(a.pts))
@@ -568,9 +563,6 @@ export function renderPlacementChart(canvas, input) {
         g.fillStyle = part.color ?? PLANT_FILL[kind]
         trace(part.pts, true)
         g.fill()
-        // Crane mats are individual timbers with gaps between them, which at
-        // 2 px per foot leave the deck showing through as stripes. Stroking
-        // each in its own colour closes the gaps into a deck.
         if (kind === 'mats') {
           g.strokeStyle = part.color ?? PLANT_FILL.mats
           g.lineWidth = 1
@@ -578,8 +570,6 @@ export function renderPlacementChart(canvas, input) {
         }
       }
     }
-    // Outline the barges, and the machine's BIG parts only. Stroking every one
-    // of the excavator's few hundred traced outlines turns it into a smudge.
     g.strokeStyle = PLANT_EDGE
     g.lineWidth = 0.6
     for (const part of plant.parts) {
@@ -590,15 +580,6 @@ export function renderPlacementChart(canvas, input) {
   }
   g.restore()
 
-  // ── inset locator (top-right) ──────────────────────────────────────────────
-  // Only under work framing. Un-zoomed, the view IS the site extent, so the
-  // inset would be the same picture at 1/5 scale with a box round the whole of
-  // it -- it would locate nothing and cost map area. Cropping the main map is
-  // what makes it earn its place; the reference app's rule is that cropping is
-  // only safe when something else still says where you are.
-  //
-  // Same furniture as the dredge chart's inset (230 px cap, #d22 view box, #222
-  // border) so the two chart families stay one family.
   if (zoomed) {
     const IN_MAX = 230
     const asp = (site.wR - site.wL) / (site.wT - site.wB)
@@ -634,9 +615,6 @@ export function renderPlacementChart(canvas, input) {
       g.fillStyle = EXTENTS_FILL
       g.fill()
     }
-    // Coverage as plain squares. At this scale a 5.75 ft cell is under a pixel,
-    // so the clipped outlines the main map draws would cost time and show
-    // nothing; neighbouring cells merge into the blob that is the whole point.
     for (const [key, col] of covered) {
       const [c, r] = key.split(',').map(Number)
       g.fillStyle = col
@@ -645,8 +623,6 @@ export function renderPlacementChart(canvas, input) {
       g.closePath()
       g.fill()
     }
-    // Boundaries only -- hairline, no labels. DMU names at 230 px would be two
-    // pixels tall, which is noise standing in for information.
     if (ref?.segments?.length) {
       g.strokeStyle = 'rgba(255,255,255,0.8)'
       g.lineWidth = 0.6
@@ -657,7 +633,6 @@ export function renderPlacementChart(canvas, input) {
         g.stroke()
       }
     }
-    // What the big map is showing.
     g.strokeStyle = '#d22'
     g.lineWidth = 1.5
     g.strokeRect(gx(wL), gy(wT), (wR - wL) * isc, (wT - wB) * isc)
@@ -687,9 +662,6 @@ export function renderPlacementChart(canvas, input) {
   const rowH = 15
   const padX = 8
   const boxH = headH + rows.length * rowH + 6
-  // The inset takes the top-right corner when it is drawn (that is where the
-  // PE's chart puts it), so the table moves to the top-left rather than the two
-  // fighting over the same space.
   const bx = zoomed ? ox + 12 : ox + MAPW - boxW - 12
   const by = oy + BAND_H + 12
   g.fillStyle = 'rgba(255,255,255,0.92)'
@@ -783,8 +755,5 @@ export function renderPlacementChart(canvas, input) {
   g.lineWidth = 3
   g.strokeRect(1.5, 1.5, W - 3, H - 3)
 
-  // The view transform, so a caller can turn a canvas click into world feet --
-  // what the plant-placement tool needs. Work framing makes this vary day to
-  // day, so it cannot be recomputed outside the renderer.
   return { width: W, height: H, view: { ox, oy, mapH, wL, wT, sc } }
 }

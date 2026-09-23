@@ -793,8 +793,6 @@ export async function buildFlowAndPipeByEquipmentParam({ appSlug, projectId, dat
     const hasTodayValue = !!todaysRow && (todaysRow.avg_line_velocity != null || todaysRow.avg_flow_rate != null || todaysRow.daily_total_gal != null)
     if (!hasTodayValue && !hasHistory) continue
 
-    // Whole history, every date -- same as the non-native app's buildFlowStats,
-    // which sums fetchProjectFlowHistory unbounded.
     const projectTotalGal = rows.reduce((a, r) => a + (Number(r.daily_total_gal) || 0), 0)
     const dailyTotalGal = Number(todaysRow?.daily_total_gal) || 0
 
@@ -902,11 +900,6 @@ export async function buildSafetyPageDataParam({ appSlug, projectId, reportId, d
     })
     .sort((a, b) => (a.category || '').localeCompare(b.category || '') || (a.sort_order ?? 0) - (b.sort_order ?? 0))
 
-  // Grouped for the Safety page: one group per category, and one per COMPANY
-  // within subcontractor -- a sub's kit is theirs, not a single bucket. A
-  // subcontractor row whose company is still blank groups under a plain
-  // "Subcontractor" heading rather than disappearing, so the PM can see it and
-  // fill the field in.
   const equipmentGroups = []
   for (const r of equipmentRows) {
     const isSub = r.category === 'subcontractor'
@@ -919,11 +912,6 @@ export async function buildSafetyPageDataParam({ appSlug, projectId, reportId, d
     g.items.push(r.description || '')
   }
 
-  // ONE-PAGE INVARIANT. The Safety page has to end with its signatures on page
-  // one. Kalamazoo's roster alone is already at the density ceiling, so when
-  // subcontractor rows exist AND the section crosses 55 items, every group
-  // renders as one wrapped line rather than a list. With no subcontractor rows
-  // this is always false and the page is unchanged for every other project.
   const subItemCount = equipmentGroups
     .filter((g) => g.title.startsWith('Subcontractor'))
     .reduce((a, g) => a + g.items.length, 0)
@@ -1035,15 +1023,6 @@ export async function buildCompletionChecklist({ appSlug, projectId, reportId, d
   }
 }
 
-/**
- * The 5 PM-review checks (PMReviewPanel), distinct from the 6-item PE-facing
- * completion checklist above -- same idea, different thresholds, and this
- * one is never na'd out to "always passes" the way the old placeholder was.
- * Mirrors the non-native app's PMReviewPanel.tsx effect exactly, including
- * running as its own independent fetch rather than sharing data with
- * buildCompletionChecklist -- the reference app doesn't share between them
- * either, so neither does this.
- */
 export async function buildPmReviewChecklist({ appSlug, projectId, reportId, dateISO, equipment }) {
 
   const [activityRes, productionRes, narrativeSections, photosRes] = await Promise.all([
@@ -1124,7 +1103,6 @@ export async function buildPmReviewChecklist({ appSlug, projectId, reportId, dat
   return checks
 }
 
-/** Fetch every reading in a UTC window, paging past the API's per-call cap. */
 async function fetchMonitoringReadings({ domain, appSlug, projectId, startUtc, endUtc }) {
   const PAGE = 1000
   const out = []
@@ -1144,9 +1122,6 @@ async function fetchMonitoringReadings({ domain, appSlug, projectId, startUtc, e
   return out
 }
 
-/** A monitoring aerial is either a Pivotly attachment id or, on rows carried
- *  over from the old app, a direct image URL. Take both rather than printing a
- *  page with a hole in it; the URL form should be migrated to a Pivotly file. */
 async function monitoringImageDataUri(pathOrId) {
   if (!pathOrId) return null
   try {
@@ -1157,11 +1132,6 @@ async function monitoringImageDataUri(pathOrId) {
   }
 }
 
-/**
- * Daily Air Monitoring page. Null when the project has no air_monitoring_config
- * or the date pulled no readings — the same gate the non-native uses, so a
- * project without monitoring prints exactly as it does today.
- */
 export async function buildAirQualityParam({ appSlug, projectId, reportId, dateISO }) {
   const cfgRes = await fetchDomainRecords({
     domain: 'jfb_air_monitoring_config', system: 'core', appSlug,
@@ -1186,16 +1156,15 @@ export async function buildAirQualityParam({ appSlug, projectId, reportId, dateI
   const day = buildAirDay(config, readings, dateISO)
   if (day.populatedCount === 0) return null
 
-  let llraChartDataUri = null
-  let mbpChartDataUri = null
+  let llraChartDataUri
+  let mbpChartDataUri
   try {
-    // Portrait aspect — the two charts sit side by side on the bottom half of
-    // the page, matching the Excel-era export.
     const specs = buildAirChartSpecs(day, config.stations, config.thresholds)
     llraChartDataUri = renderAirChart(day, specs.llra, { width: 900, height: 1150 }).dataUrl
     mbpChartDataUri = renderAirChart(day, specs.mbp, { width: 900, height: 1150 }).dataUrl
   } catch {
-    // Charts are enhancement — the text page still ships.
+    llraChartDataUri = null
+    mbpChartDataUri = null
   }
 
   return {
@@ -1211,11 +1180,6 @@ export async function buildAirQualityParam({ appSlug, projectId, reportId, dateI
   }
 }
 
-/**
- * Daily Water Monitoring page — the fixed-role (compliance) layout both live
- * projects use. The non-native also carries a TIDAL variant; no project has
- * tide data, and the native app has no tidal data layer, so it is not ported.
- */
 export async function buildWaterQualityParam({ appSlug, projectId, reportId, dateISO }) {
   const cfgRes = await fetchDomainRecords({
     domain: 'jfb_water_monitoring_config', system: 'core', appSlug,
@@ -1240,11 +1204,11 @@ export async function buildWaterQualityParam({ appSlug, projectId, reportId, dat
   const day = buildTurbidityDay(config, readings, dateISO)
   if (day.populatedCount === 0) return null
 
-  let chartDataUri = null
+  let chartDataUri
   try {
     chartDataUri = renderTurbidityChart(day, config.thresholds, { width: 1100, height: 620 }).dataUrl
   } catch {
-    // Chart is enhancement — the table still ships.
+    chartDataUri = null
   }
 
   const refNtu = notesRow?.reference_ntu ?? null

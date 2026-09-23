@@ -64,9 +64,6 @@ export async function loadAlignment(path, alignmentRef) {
   return lines
 }
 
-/** Coverage-boundary DXF: closed polylines fencing the reportable area. Flat --
- *  no cell numbering, unlike loadCells. A parse failure degrades to [], which
- *  the chart reads as "no boundary", i.e. the pre-boundary behaviour. */
 export async function loadCoverageBoundary(path, boundaryRef) {
   if (!path) return []
   if (boundaryRef.current?.path === path) return boundaryRef.current.rings

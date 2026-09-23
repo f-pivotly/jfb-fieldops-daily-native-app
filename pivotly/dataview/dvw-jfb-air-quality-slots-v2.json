@@ -1,0 +1,55 @@
+{
+  "slug": "dvw-jfb-air-quality-slots-v2",
+  "description": "Pre-buckets jfb_air_quality_readings into the fixed time slots the Air Quality tab and the daily PDF render, so the client never pulls raw readings. Returns one row per (slot, station) with the mean reading in the slot. Replaces a client-side loop that paged raw readings 1,000 at a time and bucketed them in JS -- Torch alone logs ~6,500 readings a day, which was 7 round-trips to produce 49 display rows, and the request count grew with the data. Here the response size is a function of the WINDOW, not the reading volume: same 237 rows whether the table holds six thousand readings or six million. Value is the raw stored unit; the caller still divides by 1000 for mg/m3, matching buildAirDay.",
+  "authoring_mode": "direct_sql",
+  "implementation": "function",
+  "direct_sql": "SELECT to_timestamp(floor(extract(epoch from r.reading_at) / (p_interval_min * 60)) * (p_interval_min * 60)) AS slot_at, r.station_key AS station_key, avg(r.value) AS avg_value, count(*) AS reading_count FROM usdf.jfb_air_quality_readings r WHERE r.project_id = p_project_id AND r.reading_at >= p_start AND r.reading_at < p_end GROUP BY 1, 2 ORDER BY 1, 2",
+  "parameters": [
+    {
+      "name": "p_project_id",
+      "type": "uuid",
+      "required": true,
+      "description": "Project whose air monitoring stations to read."
+    },
+    {
+      "name": "p_start",
+      "type": "timestamptz",
+      "required": true,
+      "description": "Inclusive UTC start of the monitoring window, from airWindowUtc(config, dateISO)."
+    },
+    {
+      "name": "p_end",
+      "type": "timestamptz",
+      "required": true,
+      "description": "Exclusive UTC end of the monitoring window. The caller passes endUtc + 1ms so the final slot is included, matching the old raw-reading filter."
+    },
+    {
+      "name": "p_interval_min",
+      "type": "integer",
+      "required": true,
+      "description": "Slot width in minutes, from jfb_air_monitoring_config.interval_minutes (15 today). Bucketing here rather than in the browser is the whole point of this view."
+    }
+  ],
+  "columns": [
+    {
+      "name": "slot_at",
+      "type": "timestamptz",
+      "description": "Start of the time slot, floored to p_interval_min. Aligns with the slots buildAirDay generates between startUtc and endUtc."
+    },
+    {
+      "name": "station_key",
+      "type": "text",
+      "description": "Station this average belongs to, matching a key in jfb_air_monitoring_config.stations."
+    },
+    {
+      "name": "avg_value",
+      "type": "numeric",
+      "description": "Mean reading across the slot, in the stored unit. The Air tab divides by 1000 to get mg/m3."
+    },
+    {
+      "name": "reading_count",
+      "type": "integer",
+      "description": "How many raw readings the average came from. A slot with no readings is simply absent, which the caller renders as an em dash."
+    }
+  ]
+}

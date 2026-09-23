@@ -1,0 +1,55 @@
+{
+  "slug": "dvw-jfb-water-quality-slots-v2",
+  "description": "Pre-buckets jfb_water_quality_readings into the fixed time slots the Water Quality tab and the daily PDF render, so the client never pulls raw readings. Returns one row per (slot, role) with the mean reading in the slot. Same purpose and shape as dvw-jfb-air-quality-slots-v2: the response size follows the WINDOW, not the reading volume, so it holds whether the table has thousands of readings or millions. Roles are the fixed background / early_warning / compliance triple the compliance-mode layout reads.",
+  "authoring_mode": "direct_sql",
+  "implementation": "function",
+  "direct_sql": "SELECT to_timestamp(floor(extract(epoch from r.reading_at) / (p_interval_min * 60)) * (p_interval_min * 60)) AS slot_at, r.role AS role, avg(r.value) AS avg_value, count(*) AS reading_count FROM usdf.jfb_water_quality_readings r WHERE r.project_id = p_project_id AND r.reading_at >= p_start AND r.reading_at < p_end GROUP BY 1, 2 ORDER BY 1, 2",
+  "parameters": [
+    {
+      "name": "p_project_id",
+      "type": "uuid",
+      "required": true,
+      "description": "Project whose water monitoring locations to read."
+    },
+    {
+      "name": "p_start",
+      "type": "timestamptz",
+      "required": true,
+      "description": "Inclusive UTC start of the monitoring window, from reportWindowUtc(config, dateISO)."
+    },
+    {
+      "name": "p_end",
+      "type": "timestamptz",
+      "required": true,
+      "description": "Exclusive UTC end of the monitoring window. The caller passes endUtc + 1ms so the final slot is included."
+    },
+    {
+      "name": "p_interval_min",
+      "type": "integer",
+      "required": true,
+      "description": "Slot width in minutes, from jfb_water_monitoring_config.interval_minutes (15 today)."
+    }
+  ],
+  "columns": [
+    {
+      "name": "slot_at",
+      "type": "timestamptz",
+      "description": "Start of the time slot, floored to p_interval_min. Aligns with the slots buildTurbidityDay generates."
+    },
+    {
+      "name": "role",
+      "type": "text",
+      "description": "Monitor role for this average: background, early_warning or compliance."
+    },
+    {
+      "name": "avg_value",
+      "type": "numeric",
+      "description": "Mean NTU across the slot."
+    },
+    {
+      "name": "reading_count",
+      "type": "integer",
+      "description": "How many raw readings the average came from. An absent slot renders as an em dash."
+    }
+  ]
+}

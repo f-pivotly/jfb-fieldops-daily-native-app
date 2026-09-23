@@ -10,6 +10,7 @@ import { prepareGrid, validatePlacementGrid } from '../../../lib/placement/grid'
 import { buildLiftPalette, renderPlacementChart } from '../../../lib/placement/chart'
 import { loadDesignExtents, loadPlacementGrid, loadPlacementReferenceLines } from '../../../lib/placement/loaders'
 import { useStagedFiles } from '../../../hooks/ui/useStagedFiles'
+import './chartSettings.css'
 
 const PLACEMENT_CONFIG_DOMAIN = 'jfb_placement_config'
 
@@ -163,7 +164,7 @@ function PlacementChartTabForm({ project, existingConfig, createConfig, updateCo
   }
 
   return (
-    <Stack gap="lg">
+    <Stack gap="lg" className="chart-settings">
       <Section
         title="Bucket grid & labels"
         help="The bucket grid is the accounting unit for placement coverage: every bucket in the day's .bkt file is indexed onto it, and a touched cell counts as its FULL area. Without a grid the Placement Progress tab stays hidden."
@@ -353,7 +354,7 @@ function Section({ title, help, children }) {
 function Field({ label, help, children }) {
   return (
     <Box>
-      <Text size="xs" c="dimmed" mb={4}>{label}</Text>
+      <Text size="xs" c="black" fw={700} mb={4}>{label}</Text>
       {children}
       {help && <Text size="10px" c="dimmed" mt={4}>{help}</Text>}
     </Box>
@@ -363,7 +364,7 @@ function Field({ label, help, children }) {
 function FileControl({ accept, label, onChange, uploading, uploaded, staged, error }) {
   return (
     <Box>
-      {label && <Text size="xs" c="dimmed" mb={4}>{label}</Text>}
+      {label && <Text size="xs" c="black" fw={700} mb={4}>{label}</Text>}
       <Group gap={8} align="center">
         <FileButton onChange={onChange ?? (() => {})} accept={accept}>
           {(props) => <Button {...props} variant="default" size="xs" loading={uploading}>Choose File</Button>}

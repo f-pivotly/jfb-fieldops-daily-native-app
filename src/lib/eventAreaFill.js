@@ -1,23 +1,3 @@
-/**
- * Area/Pass fill-down target selection (ported from the non-native app's
- * src/lib/eventAreaFill.ts, KZ field request 2026-09-18).
- *
- * The operator often forgets to tag Area/Pass in the field app, so the PE fixes
- * the day top-down in the Edit dialog: fix activity 1 → the whole day fills;
- * fix activity 5 with the next area → 5-onward re-fills. One edit per real move.
- *
- * Rules:
- *  - Walk the day's activities in chronological order AFTER the edited one.
- *  - Blank area, or an area a PE filled before (`area_source === 'pe'`), is a
- *    TARGET — PE corrections stay fluid.
- *  - An area that arrived WITH the activity (operator-entered, or any legacy
- *    area of unknown provenance) STOPS the fill: it marks a real known state,
- *    and everything below it belongs to that state. Never overwritten.
- *  - Soft-deleted activities are skipped — neither filled nor a stop.
- *
- * Treating unknown provenance as operator-grade is what makes a missed write
- * path fail safe: the fill stops early rather than overwriting real data.
- */
 
 function hasArea(a) {
   const area = a?.area

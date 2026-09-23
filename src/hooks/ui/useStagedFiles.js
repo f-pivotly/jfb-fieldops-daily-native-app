@@ -23,12 +23,6 @@ export function useStagedFiles() {
     setStagedTiles((s) => ({ ...s, [key]: list }))
   }
 
-  // Each file uploads in its OWN try/catch. One rejected file used to abort the
-  // loop, so every file after it silently never uploaded and the caller could
-  // only say "something failed". A failure now degrades to exactly what happens
-  // when no new file is chosen -- the slot keeps whatever was stored before --
-  // and the caller is told which ones failed so it can say so and keep those
-  // files staged for a retry.
   async function flushFiles({ recordId, domain, existing, update }) {
     const failedUploads = []
     const uploaded = []
@@ -55,7 +49,6 @@ export function useStagedFiles() {
         })
       }
     }
-    // Clear only what landed, so a failed file stays in its slot to retry.
     if (uploaded.length) {
       setStagedFiles((s) => {
         const next = { ...s }
@@ -66,8 +59,6 @@ export function useStagedFiles() {
     return { failedUploads }
   }
 
-  // Same rule per TILE: one bad tile must not cost the whole set. The tiles that
-  // did upload are merged in, the rest are reported.
   async function flushTiles({ recordId, domain, existing, update }) {
     const failedUploads = []
     const clearedFields = []

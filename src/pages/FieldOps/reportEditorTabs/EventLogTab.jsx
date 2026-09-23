@@ -18,6 +18,8 @@ import { browserTimeZone } from '../../../lib/reportTz'
 import { computeAreaFillTargets } from '../../../lib/eventAreaFill'
 import { WARNING_BG } from './components/WarningBanner'
 
+const PAGE_SIZE = 5
+
 const SAMPLE = '(sampleData)'
 
 function resolveDelayCode(delayCodeId, projectDelayCodeById, masterDelayCodeById) {
@@ -209,7 +211,18 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
   const fillTargets = editRow ? computeAreaFillTargets(activeSorted, editRow.id) : []
   const [deleteRow, setDeleteRow] = useState(null)
   const [hoverStrip, setHoverStrip] = useState(null)
+  const [shown, setShown] = useState(PAGE_SIZE)
   const [form, setForm] = useState(EMPTY_FORM)
+
+  const visibleRows = sorted.slice(0, shown)
+  const remaining = Math.max(0, sorted.length - visibleRows.length)
+
+  const listKey = `${selectedEquipmentId ?? ''}|${eventDate ?? ''}|${showDeleted}`
+  const [prevListKey, setPrevListKey] = useState(listKey)
+  if (listKey !== prevListKey) {
+    setPrevListKey(listKey)
+    setShown(PAGE_SIZE)
+  }
 
   function setField(key, value) {
     setForm((f) => ({ ...f, [key]: value }))
@@ -293,9 +306,6 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
       report_date: eventDate,
       category: resolveCategoryForForm(form),
       ...payload,
-      // An event created carrying an area is operator-grade, the same rule the
-      // non-native stack gets from its INSERT trigger. Pivotly has no triggers,
-      // so every writer stamps it.
       area_source: payload.area ? 'operator' : null,
     })
     setInsertOpen(false)
@@ -324,8 +334,6 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
     if (!editRow || !eventDate) return
     const { start, end } = eventTimestamps(eventDate, form.from, form.to)
     const payload = payloadFromForm(form)
-    // Stamp 'pe' only when the edit actually MOVES the area or pass. Fixing a
-    // time window must not quietly demote an operator's area to re-fillable.
     const changedArea =
       JSON.stringify(payload.area ?? null) !== JSON.stringify(editRow.area ?? null)
       || (payload.pass_type ?? null) !== (editRow.pass_type ?? null)
@@ -339,8 +347,6 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
       ...(changedArea ? { area_source: 'pe' } : {}),
     })
     if (fillDown && payload.area && fillTargets.length) {
-      // One record per call -- Pivotly has no bulk update. Failures are
-      // collected rather than thrown so one bad row cannot strand the rest.
       const failed = []
       for (const t of fillTargets) {
         try {
@@ -535,7 +541,7 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
         </Button>
       </Group>
 
-      <Table withTableBorder verticalSpacing="xs" fz="sm">
+      <Table withTableBorder verticalSpacing="xs" fz="xs">
         <Table.Thead>
           <Table.Tr>
             <Table.Th>#</Table.Th>
@@ -560,7 +566,7 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
               </Table.Td>
             </Table.Tr>
           )}
-          {sorted.map((e, i) => {
+          {visibleRows.map((e, i) => {
             const delayCode = resolveDelayCode(e.delay_code_id, projectDelayCodeById, masterDelayCodeById)
             return [
             <Table.Tr
@@ -648,6 +654,28 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
           })}
         </Table.Tbody>
       </Table>
+
+      {sorted.length > 0 && (
+        <Group justify="center" mt={10} gap={12} wrap="wrap">
+          <Text size="xs" c="dimmed">
+            Showing {visibleRows.length} of {sorted.length}
+          </Text>
+          {remaining > 0 && (
+            <Button
+              size="xs"
+              variant="default"
+              onClick={() => setShown((n) => n + PAGE_SIZE)}
+            >
+              Load {Math.min(PAGE_SIZE, remaining)} more
+            </Button>
+          )}
+          {remaining > PAGE_SIZE && (
+            <Button size="xs" variant="subtle" onClick={() => setShown(sorted.length)}>
+              Show all {sorted.length}
+            </Button>
+          )}
+        </Group>
+      )}
 
       <Modal key={insertKey} opened={insertOpen} onClose={() => setInsertOpen(false)} title={<Text fw={700} size="sm">Insert Event</Text>} size="sm">
         {FormFields()}

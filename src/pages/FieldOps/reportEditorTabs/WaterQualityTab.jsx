@@ -10,6 +10,8 @@ import { useAttachmentField } from '../../../hooks/ui/useAttachmentField'
 import { buildTurbidityDay } from '../../../lib/waterQuality/data'
 import { renderTurbidityChart } from '../../../lib/waterQuality/chart'
 
+const SLOT_PAGE = 5
+
 const MAX_AERIAL_BYTES = 10 * 1024 * 1024
 
 function fmt(v) {
@@ -75,6 +77,17 @@ export default function WaterQualityTab({ project, report }) {
       return null
     }
   }, [day, config])
+
+  const allSlots = day?.slots ?? []
+  const [shown, setShown] = useState(SLOT_PAGE)
+  const visibleSlots = allSlots.slice(0, shown)
+  const remaining = Math.max(0, allSlots.length - visibleSlots.length)
+  const slotKey = `${report?.id ?? ''}|${allSlots.length}`
+  const [prevSlotKey, setPrevSlotKey] = useState(slotKey)
+  if (slotKey !== prevSlotKey) {
+    setPrevSlotKey(slotKey)
+    setShown(SLOT_PAGE)
+  }
 
   if (configLoading) return <Text size="sm" c="dimmed">Loading water quality data...</Text>
   if (!config) return <Text size="sm" c="dimmed">No water monitoring configured for this project.</Text>
@@ -150,11 +163,11 @@ export default function WaterQualityTab({ project, report }) {
         </Box>
       )}
 
-      <Group align="flex-start" wrap="wrap">
+      <Stack gap="md">
         {}
-        <Box style={{ flex: '3 1 480px', border: '1px solid var(--mantine-color-gray-3)', borderRadius: 6, overflow: 'hidden' }}>
+        <Box style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 6, overflow: 'hidden' }}>
           <Box style={{ maxHeight: 540, overflowY: 'auto' }}>
-            <Table withTableBorder={false} verticalSpacing={4} fz="sm" stickyHeader>
+            <Table withTableBorder={false} verticalSpacing={4} fz="xs" stickyHeader>
               <Table.Thead bg="gray.0">
                 <Table.Tr>
                   <Table.Th>Time</Table.Th>
@@ -165,7 +178,7 @@ export default function WaterQualityTab({ project, report }) {
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
-                {day?.slots.map((s) => (
+                {visibleSlots.map((s) => (
                   <Table.Tr key={s.utcISO}>
                     <Table.Td>{s.timeLabel}</Table.Td>
                     <Table.Td ta="right">{fmt(s.background)}</Table.Td>
@@ -177,10 +190,22 @@ export default function WaterQualityTab({ project, report }) {
               </Table.Tbody>
             </Table>
           </Box>
+          {remaining > 0 && (
+            <Group justify="center" gap={12} p="xs" style={{ borderTop: '1px solid var(--mantine-color-gray-2)' }}>
+              <Text size="xs" c="dimmed">Showing {visibleSlots.length} of {allSlots.length}</Text>
+              <Button size="xs" variant="default" onClick={() => setShown((n) => n + SLOT_PAGE)}>
+                Load {Math.min(SLOT_PAGE, remaining)} more
+              </Button>
+              {remaining > SLOT_PAGE && (
+                <Button size="xs" variant="subtle" onClick={() => setShown(allSlots.length)}>
+                  Show all {allSlots.length}
+                </Button>
+              )}
+            </Group>
+          )}
         </Box>
 
-        {}
-        <Stack style={{ flex: '2 1 320px' }} gap="md">
+        <Stack gap="md">
           {}
           <Box p="xs" style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 6 }}>
             {aerialSrc ? (
@@ -280,7 +305,7 @@ export default function WaterQualityTab({ project, report }) {
             </Stack>
           </Box>
         </Stack>
-      </Group>
+      </Stack>
     </Stack>
   )
 }

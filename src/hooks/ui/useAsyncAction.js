@@ -2,7 +2,6 @@ import { useCallback, useState } from 'react'
 
 const WARN_KEY = '__asyncWarning'
 
-/** Wrap a message so `run` reports it as a WARNING rather than a success. */
 export function warn(text) {
   return { [WARN_KEY]: text }
 }
@@ -13,10 +12,6 @@ export function useAsyncAction() {
   const [warning, setWarning] = useState(null)
   const [error, setError] = useState(null)
 
-  // An action can finish three ways, not two. A save whose record went through
-  // but whose files did not is neither a success nor a failure, and saying
-  // either one misleads: green hides that a file is missing, red implies
-  // nothing was written. `fn` returns WARN(text) for that middle case.
   const run = useCallback(async (fn, { successMessage } = {}) => {
     setBusy(true)
     setError(null)

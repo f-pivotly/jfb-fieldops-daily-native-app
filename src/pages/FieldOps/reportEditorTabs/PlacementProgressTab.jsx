@@ -232,7 +232,6 @@ export default function PlacementProgressTab({ project, report, reports, equipme
     if (!cv || !v?.sc) return null
     const r = cv.getBoundingClientRect()
     if (!r.width || !r.height) return null
-    // The canvas is displayed scaled to fit, so go through its intrinsic size.
     const px = (ev.clientX - r.left) * (cv.width / r.width)
     const py = (ev.clientY - r.top) * (cv.height / r.height)
     const wx = v.wL + (px - v.ox) / v.sc

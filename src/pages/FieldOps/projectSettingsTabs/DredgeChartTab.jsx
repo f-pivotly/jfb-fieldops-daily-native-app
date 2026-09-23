@@ -22,6 +22,7 @@ import { makeZip } from '../../../lib/zip'
 import { useStagedFiles } from '../../../hooks/ui/useStagedFiles'
 import UploadedFile from './components/UploadedFile'
 import StagedFilePreview from './components/StagedFilePreview'
+import './chartSettings.css'
 
 const DATA_SOURCES = [
   { value: 'hypack', label: 'HYPACK RAW folder — hydraulic dredge cutter track' },
@@ -453,7 +454,7 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
   }
 
   return (
-    <Stack gap="lg">
+    <Stack gap="lg" className="chart-settings">
       {confirmModal}
       <Section
         title="Project background & labels"
@@ -805,7 +806,7 @@ function Section({ title, help, children }) {
 function Field({ label, help, children }) {
   return (
     <Box>
-      <Text size="xs" c="dimmed" mb={4}>{label}</Text>
+      <Text size="xs" c="black" fw={700} mb={4}>{label}</Text>
       {children}
       {help && <Text size="10px" c="dimmed" mt={4}>{help}</Text>}
     </Box>
@@ -898,7 +899,7 @@ function FileControl({ accept, label, onChange, uploading, fileId, fileName, sta
   const showStaged = !!staged && !uploading
   return (
     <Box>
-      {label && <Text size="xs" c="dimmed" mb={4}>{label}</Text>}
+      {label && <Text size="xs" c="black" fw={700} mb={4}>{label}</Text>}
       <Group gap={8} align="center">
         <FileButton onChange={onChange ?? (() => {})} accept={accept}>
           {(props) => <Button {...props} variant="default" size="xs" loading={uploading}>Choose File</Button>}

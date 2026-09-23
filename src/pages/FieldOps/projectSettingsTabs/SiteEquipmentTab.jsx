@@ -9,9 +9,6 @@ import SafeError from '../../../components/SafeError'
 
 const emptyDraft = () => ({ category: 'brennan', company: '', description: '', mobilized_at: '', demobilized_at: '', sort_order: 10 })
 
-/** Company belongs to subcontractor rows only — the category already says who
- *  owns a Brennan or Rental unit. Kept out of the payload elsewhere so switching
- *  a row's category cannot leave a stale company behind. */
 const companyFor = (category, company) =>
   (category === 'subcontractor' && company?.trim() ? company.trim() : null)
 

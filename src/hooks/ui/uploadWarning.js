@@ -1,5 +1,3 @@
-/** Slot names as the PM sees them on the settings form. A raw column name in a
- *  warning ("colorbar_path") tells them nothing about which control to fix. */
 const FIELD_LABELS = {
   aerial_path: 'Aerial image',
   aerial_tiles: 'Aerial tiles',
@@ -23,8 +21,6 @@ function labelFor(field) {
   return words ? words[0].toUpperCase() + words.slice(1) : 'File'
 }
 
-/** "Saved, but these files did not." Names each slot and why, and says what the
- *  slot kept — a save is only partial if the message admits which part. */
 export function uploadWarning(failedUploads, savedLabel = 'Settings saved') {
   const n = failedUploads.length
   return `${savedLabel}, but ${n} file${n > 1 ? 's' : ''} did not upload: `
