@@ -1,0 +1,44 @@
+{
+  "slug": "dvw-jfb-report-list-v2",
+  "description": "One ordered, paged stream of the rows the Report List screen draws: every jfb_reports row for a project, plus the 'pending' days that have jfb_daily_activities but no report yet, interleaved newest-first. Replaces a client-side merge of an unbounded useReports fetch (capped at 500, silently) and dvw-jfb-distinct-event-dates-v2 (deliberately unbounded, one row per day of project history). Merging server-side is what makes paging possible at all: page either source alone and a pending day can belong to a window the other has not fetched, so it lands in the wrong place. Response size is fixed by p_limit, never by how long the project has run. report_id NULL marks a pending day; the caller renders those as a Start-a-report link rather than a report link. Deliberately returns no total count -- a count(*) over a project's whole history on every open is exactly the unbounded read this view exists to remove, so the caller loads until a page comes back short.",
+  "authoring_mode": "direct_sql",
+  "implementation": "function",
+  "direct_sql": "SELECT q.row_date AS row_date, q.report_id AS report_id, q.status AS status FROM (SELECT r.report_date AS row_date, r.id AS report_id, r.status AS status FROM usdf.jfb_reports r WHERE r.project_id = p_project_id UNION ALL SELECT DISTINCT (a.start_date_time AT TIME ZONE COALESCE(a.timezone, 'UTC'))::date, NULL::uuid, NULL::text FROM usdf.jfb_daily_activities a WHERE a.project_id = p_project_id AND a.is_deleted IS NOT TRUE AND NOT EXISTS (SELECT 1 FROM usdf.jfb_reports r2 WHERE r2.project_id = a.project_id AND r2.report_date = (a.start_date_time AT TIME ZONE COALESCE(a.timezone, 'UTC'))::date)) q ORDER BY q.row_date DESC LIMIT p_limit OFFSET p_offset",
+  "parameters": [
+    {
+      "name": "p_project_id",
+      "type": "uuid",
+      "required": true,
+      "description": "Project whose report list to read."
+    },
+    {
+      "name": "p_limit",
+      "type": "integer",
+      "required": true,
+      "description": "How many rows this page returns. The caller asks for one more than it intends to show, so a short page tells it there is nothing left without a separate count query."
+    },
+    {
+      "name": "p_offset",
+      "type": "integer",
+      "required": true,
+      "description": "How many rows to skip. Each Load more click advances by the number already shown. Safe against a stable ORDER BY row_date DESC."
+    }
+  ],
+  "columns": [
+    {
+      "name": "row_date",
+      "type": "date",
+      "description": "The day this row is for. Reports use jfb_reports.report_date; pending days use the activity's own calendar date in its own timezone, matching dvw-jfb-distinct-event-dates-v2."
+    },
+    {
+      "name": "report_id",
+      "type": "uuid",
+      "description": "The jfb_reports row id, or NULL when this is a pending day the operator logged events on but nobody has opened a report for."
+    },
+    {
+      "name": "status",
+      "type": "text",
+      "description": "draft or released, or NULL on a pending day."
+    }
+  ]
+}

@@ -5,7 +5,7 @@ import { useEvents } from '../../../hooks/production/useEvents'
 import { useFieldOpsAction } from '../../../contexts/fieldOpsAccessContext'
 import { useOperators } from '../../../hooks/production/useOperators'
 import { useProjectAreas } from '../../../hooks/project/useProjectAreas'
-import { usePicklist } from '../../../hooks/core/usePicklist'
+import { usePassTypes } from '../../../hooks/core/usePassTypes'
 import { useDelayCodes } from '../../../hooks/production/useDelayCodes'
 import { useProjectDelayCodes } from '../../../hooks/production/useProjectDelayCodes'
 import { useProjectAttachments } from '../../../hooks/project/useProjectAttachments'
@@ -140,7 +140,6 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
   })
   const { operators } = useOperators(project?.id)
   const { areas } = useProjectAreas(project?.id)
-  const { labels: passTypeLabels, values: passTypeValues } = usePicklist('pkl-jfb-pass-type')
   const { delayCodes: masterDelayCodes } = useDelayCodes()
   const { projectDelayCodes } = useProjectDelayCodes(project?.id)
   const { attachments } = useProjectAttachments(project?.id)
@@ -153,6 +152,7 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
 
   const selectedEquipment = equipment.find((e) => e.id === selectedEquipmentId) ?? null
   const workType = equipmentWorkType(project, selectedEquipment, eventDate)
+  const { labels: passTypeLabels, values: passTypeValues } = usePassTypes(workType)
   const workTypeId = workTypes.find((w) => w.name === workType)?.id ?? null
 
   function effectiveDelayWorkTypeId(r) {

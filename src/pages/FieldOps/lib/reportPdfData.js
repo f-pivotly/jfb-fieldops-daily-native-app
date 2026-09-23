@@ -40,11 +40,28 @@ function weekdayName(dateISO) {
   return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'long' })
 }
 
+function sundayOfISO(dateISO) {
+  const [y, m, d] = dateISO.split('-').map(Number)
+  const dt = new Date(Date.UTC(y, m - 1, d))
+  dt.setUTCDate(dt.getUTCDate() - dt.getUTCDay())
+  return dt.getTime()
+}
+
+export function productionWeekNumber(reportDateISO, productionStartRaw) {
+  if (!productionStartRaw) return null
+  const start = sundayOfISO(String(productionStartRaw).slice(0, 10))
+  const days = Math.round((sundayOfISO(reportDateISO) - start) / 86_400_000)
+  if (days < 0) return 0
+  return Math.floor(days / 7) + 1
+}
+
 export function buildDateTableParams({ date, project }) {
+  const projectWeek = projectWeekNumber(date, project?.start_date)
   return {
     weekday: weekdayName(date),
     calWeek: isoCalWeek(date),
-    projectWeek: projectWeekNumber(date, project?.start_date),
+    projectWeek,
+    productionWeek: productionWeekNumber(date, project?.production_start_date) ?? projectWeek,
     reportNameCompact: date.replaceAll('-', ''),
     projectStartDate: project?.start_date ? prettyDate(project.start_date.slice(0, 10)) : null,
   }
@@ -137,6 +154,20 @@ export async function buildWeeklyChartAssetsParam({ appSlug, projectId, weekStar
   return renderWeeklyProgressCharts({ appSlug, projectId, weekStartISO: weekStart, weekEndISO: weekEnd })
 }
 
+const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, (ch) => HTML_ESCAPES[ch])
+}
+
+export function narrativeHtml(text) {
+  const safe = escapeHtml(text ?? '')
+  return safe
+    .replace(/\*\*\*([^*]+)\*\*\*/g, '<strong><em>$1</em></strong>')
+    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*([^*\n]+)\*/g, '<em>$1</em>')
+}
+
 export async function buildNarrativeSectionsParam({ appSlug, projectId, reportId }) {
   const [sectionRes, contentRes] = await Promise.all([
     fetchDomainRecords({ domain: 'jfb_project_report_narratives', system: 'core', appSlug, filters: { project_id: projectId }, limit: 1000 }),
@@ -147,10 +178,10 @@ export async function buildNarrativeSectionsParam({ appSlug, projectId, reportId
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
   const contentByKey = new Map((contentRes?.data ?? []).map((c) => [c.section_key, c.content]))
 
-  return sections.map((s) => ({
-    label: s.narrative_label,
-    content: (contentByKey.get(s.section_key) ?? '').trim(),
-  }))
+  return sections.map((s) => {
+    const content = (contentByKey.get(s.section_key) ?? '').trim()
+    return { label: s.narrative_label, content, contentHtml: narrativeHtml(content) }
+  })
 }
 
 function durationMinutes(startISO, endISO) {
@@ -223,19 +254,74 @@ function summarizeOperatorShift(rows, operatorNameById) {
 }
 
 const ACTIVITY_GRID_ROWS = { dredge: { max: 12, target: 15 }, capping: { max: 10, target: 12 } }
-function padActivityRows(rows, grid) {
+
+const ACTIVITY_LEAD = {
+  dredge: { num: '4.6%', from: '8.5%', to: '8.5%', min: '7.1%' },
+  capping: { num: '3.7%', from: '8.9%', to: '8.9%', min: '5.2%' },
+}
+
+const ACTIVITY_COLUMNS = {
+  dredge: [
+    { key: 'area', label: 'Area', cls: 'act-l', w: '18.6%' },
+    { key: 'pass', label: 'Pass', cls: 'act-l', w: '11.7%' },
+    { key: 'event', label: 'Event', cls: 'act-l', w: '18.6%' },
+    { key: 'notes', label: 'Notes', cls: 'act-l', w: '22.4%' },
+  ],
+  capping: [
+    { key: 'pass', label: 'Pass', cls: 'act-l', w: '8.2%' },
+    { key: 'area', label: 'Area', cls: 'act-l', w: '16.7%' },
+    { key: 'lane', label: 'Lane', cls: 'act-c', w: '5.2%' },
+    { key: 'step', label: 'Step', cls: 'act-r', w: '4.8%' },
+    { key: 'event', label: 'Event', cls: 'act-l', w: '16.7%' },
+    { key: 'notes', label: 'Notes', cls: 'act-l', w: '21.7%' },
+  ],
+}
+
+async function fetchAreaLevel1Label({ appSlug, projectId }) {
+  const res = await fetchDomainRecords({
+    domain: 'jfb_project_area_levels', system: 'core', appSlug,
+    filters: { project_id: projectId }, limit: 20,
+  })
+  const level1 = (res?.data ?? []).find((r) => Number(r.depth) === 1)
+  return String(level1?.label ?? '').trim() || 'Area'
+}
+
+function activityTableShape(isCapping, areaLevelLabel) {
+  const variant = isCapping ? 'capping' : 'dredge'
+  const areaHeader = isCapping ? areaLevelLabel : 'Area'
+  return {
+    lead: ACTIVITY_LEAD[variant],
+    columns: ACTIVITY_COLUMNS[variant].map((c) => (c.key === 'area' ? { ...c, label: areaHeader } : c)),
+  }
+}
+
+function padActivityRows(rows, grid, columns) {
   if (rows.length > grid.max) return rows
   const padded = rows.slice()
   for (let i = padded.length; i < grid.target; i++) {
-    padded.push({ num: i + 1, from: '', to: '', minutes: '', area: '', pass: '', event: '', notes: '' })
+    padded.push({
+      num: i + 1, from: '', to: '', minutes: '', pad: true,
+      cells: columns.map((c) => ({ v: '', cls: c.cls })),
+    })
   }
   return padded
+}
+
+function passLabelMap(...lists) {
+  const out = {}
+  for (const rows of lists) {
+    for (const r of rows || []) {
+      if (r.is_active === false) continue
+      out[r.value] = r.label ?? r.value
+    }
+  }
+  return out
 }
 
 export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, project, dateISO, equipment }) {
   const { gte, lt } = utcDayRange(dateISO)
 
-  const [activityRes, areaLabelRows, projectDelayRes, masterDelayRes, passTypeRows, operatorRes] = await Promise.all([
+  const [activityRes, areaLabelRows, projectDelayRes, masterDelayRes, passTypeRows, liftRows, operatorRes, areaLevelLabel] = await Promise.all([
     fetchDomainRecords({
       domain: 'jfb_daily_activities', system: 'core', appSlug,
       filters: { project_id: projectId, report_date: dateISO },
@@ -249,17 +335,17 @@ export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, p
     fetchDomainRecords({ domain: 'jfb_project_delay_codes', system: 'core', appSlug, filters: { project_id: projectId }, limit: 1000 }),
     fetchDomainRecords({ domain: 'jfb_delay_codes', system: 'core', appSlug, limit: 1000 }),
     fetchPicklistValues('pkl-jfb-pass-type'),
+    fetchPicklistValues('pkl-jfb-lift'),
     fetchDomainRecords({ domain: 'jfb_operators', system: 'core', appSlug, limit: 500 }),
+    fetchAreaLevel1Label({ appSlug, projectId }),
   ])
 
   const areaLabelByActivityId = new Map(
-    (areaLabelRows ?? []).map((r) => [r.activity_id, [r.area_l1, r.area_l2, r.area_l3].filter(Boolean).join(' / ') || '—']),
+    (areaLabelRows ?? []).map((r) => [r.activity_id, r.area_l1 ?? '']),
   )
   const projectDelayCodeById = new Map((projectDelayRes?.data ?? []).map((r) => [r.id, r]))
   const masterDelayCodeById = new Map((masterDelayRes?.data ?? []).map((r) => [r.id, r]))
-  const passTypeLabels = Object.fromEntries(
-    (passTypeRows || []).filter((r) => r.is_active !== false).map((r) => [r.value, r.label ?? r.value]),
-  )
+  const passTypeLabels = passLabelMap(passTypeRows, liftRows)
   const operatorNameById = new Map((operatorRes?.data ?? []).map((o) => [o.id, o.name]))
 
   const activities = (activityRes?.data ?? [])
@@ -282,16 +368,28 @@ export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, p
     const isCapping = cappingEquipmentIds.has(equipmentId)
     const sorted = rows.slice().sort((x, y) => new Date(x.start_date_time) - new Date(y.start_date_time))
     const listed = isCapping ? sorted.filter((a) => !isProductiveActivity(a)) : sorted
-    activitiesByEquipment[equipmentId] = padActivityRows(listed.map((a, i) => ({
-      num: i + 1,
-      from: hhmm(a.start_date_time),
-      to: hhmm(a.end_date_time),
-      minutes: durationMinutes(a.start_date_time, a.end_date_time) ?? '—',
-      area: areaLabelByActivityId.get(a.id) ?? '—',
-      pass: a.pass_type ? (passTypeLabels[a.pass_type] ?? a.pass_type) : '—',
-      event: a.category || resolveDelayCode(a.delay_code_id, projectDelayCodeById, masterDelayCodeById),
-      notes: a.notes || '',
-    })), isCapping ? ACTIVITY_GRID_ROWS.capping : ACTIVITY_GRID_ROWS.dredge)
+    const shape = activityTableShape(isCapping, areaLevelLabel)
+    const rowValues = listed.map((a, i) => {
+      const value = {
+        area: areaLabelByActivityId.get(a.id) ?? '',
+        pass: a.pass_type ? (passTypeLabels[a.pass_type] ?? a.pass_type) : '',
+        lane: a.lane ?? '',
+        step: a.step != null ? String(a.step) : '',
+        event: a.category || resolveDelayCode(a.delay_code_id, projectDelayCodeById, masterDelayCodeById),
+        notes: a.notes || '',
+      }
+      return {
+        num: i + 1,
+        from: hhmm(a.start_date_time),
+        to: hhmm(a.end_date_time),
+        minutes: durationMinutes(a.start_date_time, a.end_date_time) ?? '',
+        cells: shape.columns.map((c) => ({ v: value[c.key], cls: c.cls })),
+      }
+    })
+    activitiesByEquipment[equipmentId] = {
+      ...shape,
+      rows: padActivityRows(rowValues, isCapping ? ACTIVITY_GRID_ROWS.capping : ACTIVITY_GRID_ROWS.dredge, shape.columns),
+    }
     delaySummaryByEquipment[equipmentId] = buildDelaySummary(rows, projectDelayCodeById, masterDelayCodeById)
     opSummaryByEquipment[equipmentId] = summarizeOperatorShift(sorted, operatorNameById)
   }
@@ -527,9 +625,10 @@ function shapeCappingSheet({ acts, eqStats, project, labels }) {
   const { columns, total } = buildCappingColumns({ acts, eqStats, project, labels })
   const derivesCy =
     project?.cap_conversion_factor != null || columns.some((c) => c.raw.cyPlaced !== 0)
-  const metricRows = derivesCy
+  const metricRows = (derivesCy
     ? CAP_METRIC_ROWS
     : CAP_METRIC_ROWS.filter(([, key]) => !CAP_CY_DERIVED_ROWS.has(key))
+  ).map(([label, key]) => (key === 'areaLabel' ? [labels.areaLevelLabel, key] : [label, key]))
 
   const shaped = columns.length > 0
     ? columns.map((c) => ({ columnLabel: c.columnLabel, ...shapeCapStats(c.raw) }))
@@ -555,7 +654,7 @@ function shapeCappingSheet({ acts, eqStats, project, labels }) {
 }
 
 export async function buildProductionComboTotalsByEquipmentParam({ appSlug, projectId, project, reportId, dateISO, equipment }) {
-  const [activityRes, statsRes, areaRes, passTypeRows, attachmentRes, layerRes, materialRes] = await Promise.all([
+  const [activityRes, statsRes, areaRes, passTypeRows, liftRows, attachmentRes, layerRes, materialRes, areaLevelLabel] = await Promise.all([
     fetchDomainRecords({
       domain: 'jfb_daily_activities', system: 'core', appSlug,
       filters: { project_id: projectId, report_date: dateISO },
@@ -564,19 +663,20 @@ export async function buildProductionComboTotalsByEquipmentParam({ appSlug, proj
     fetchDomainRecords({ domain: 'jfb_production_stats', system: 'core', appSlug, filters: { report_id: reportId }, limit: 500 }),
     fetchDomainRecords({ domain: 'jfb_project_areas', system: 'core', appSlug, filters: { project_id: projectId }, limit: 1000 }),
     fetchPicklistValues('pkl-jfb-pass-type'),
+    fetchPicklistValues('pkl-jfb-lift'),
     fetchDomainRecords({ domain: 'jfb_project_attachments', system: 'core', appSlug, filters: { project_id: projectId }, limit: 200 }),
     fetchDomainRecords({ domain: 'jfb_project_layers', system: 'core', appSlug, filters: { project_id: projectId }, limit: 200 }),
     fetchDomainRecords({ domain: 'jfb_project_materials', system: 'core', appSlug, filters: { project_id: projectId }, limit: 200 }),
+    fetchAreaLevel1Label({ appSlug, projectId }),
   ])
 
   const areaNameById = new Map((areaRes?.data ?? []).map((a) => [a.id, a.name]))
-  const passLabels = Object.fromEntries(
-    (passTypeRows || []).filter((r) => r.is_active !== false).map((r) => [r.value, r.label ?? r.value]),
-  )
+  const passLabels = passLabelMap(passTypeRows, liftRows)
   const attachmentNameById = new Map((attachmentRes?.data ?? []).map((a) => [a.id, a.name]))
   const cappingLabels = {
     areaById: new Map((areaRes?.data ?? []).map((a) => [a.id, a])),
     areaNameById,
+    areaLevelLabel,
     passLabels,
     layerById: new Map(
       (layerRes?.data ?? []).map((l) => [l.id, { ...l, layer_name: l.layer_report_name || l.layer_name }]),
@@ -692,8 +792,6 @@ function sundayStartISO(dateISO) {
 function fmtCover2dp(n) {
   return n == null ? null : n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
 }
-const fmtCoverHrs = fmtCover2dp
-const fmtCoverPct = fmtCover2dp
 function fmtCoverCy(n) {
   return n == null ? null : n.toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 })
 }
@@ -701,65 +799,87 @@ function fmtCoverSf(n) {
   return n == null ? null : Math.round(n).toLocaleString('en-US')
 }
 
-export async function buildCoverProductionTotalsParam({ projectId, project, dateISO }) {
+export async function buildCoverProductionTotalsParam({ appSlug, projectId, project, dateISO }) {
   const projectStart = project?.production_start_date || (project?.start_date ? project.start_date.slice(0, 10) : '2000-01-01')
   const weekStart = sundayStartISO(dateISO)
 
-  const rows = await executeDataView('dvw-jfb-realized-daily-totals-v2', { p_project_id: projectId, p_start_date: projectStart })
-  const days = (rows ?? []).map((r) => ({
-    date: r.report_date,
-    cy: Number(r.cy) || 0,
-    sf: Number(r.sf) || 0,
-    goh: Number(r.goh) || 0,
-    noh: Number(r.noh) || 0,
+  const [metricRes, sourceRes] = await Promise.all([
+    fetchDomainRecords({
+      domain: 'jfb_metrics', system: 'core', appSlug,
+      filters: { project_id: projectId }, limit: 200,
+    }),
+    fetchDomainRecords({ domain: 'jfb_metric_sources', system: 'core', appSlug, limit: 100 }),
+  ])
+  const metrics = (Array.isArray(metricRes) ? metricRes : (metricRes?.data ?? []))
+    .filter((m) => m.active !== false)
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+  if (metrics.length === 0) return { rows: [] }
+
+  const resultColumn = new Map(
+    (Array.isArray(sourceRes) ? sourceRes : (sourceRes?.data ?? []))
+      .map((x) => [x.value, x.result_column]),
+  )
+
+  const autoCache = new Map()
+  async function autoTotal(metric, from, to) {
+    const col = resultColumn.get(metric.source)
+    if (!col) return null
+    const key = `${metric.source}|${metric.equipment_id ?? ''}|${from}|${to}`
+    if (!autoCache.has(key)) {
+      autoCache.set(key, executeDataView(metric.source, {
+        p_project_id: projectId,
+        p_start_date: from,
+        p_end_date: to,
+        p_equipment_id: metric.equipment_id ?? null,
+      }).then((rows) => {
+        const first = (rows ?? [])[0]
+        return first ? Number(first[col]) || 0 : 0
+      }).catch(() => null))
+    }
+    return autoCache.get(key)
+  }
+
+  const fmtValue = (unit, n) => {
+    if (n == null) return null
+    const u = String(unit ?? '').toLowerCase()
+    if (u === 'hrs' || u === 'hr' || u === '%') return fmtCover2dp(n)
+    if (u === 'sf') return fmtCoverSf(n)
+    if (u === 'cy') return fmtCoverCy(n)
+    return fmtCover2dp(n)
+  }
+
+  const windows = [
+    ['day', dateISO, dateISO],
+    ['week', weekStart, dateISO],
+    ['project', projectStart, dateISO],
+  ]
+
+  const manualByWindow = {}
+  if (metrics.some((m) => m.source === 'manual')) {
+    await Promise.all(windows.map(async ([slot, from, to]) => {
+      const rows = await executeDataView('dvw-jfb-metric-manual-totals-v2', {
+        p_project_id: projectId, p_start_date: from, p_end_date: to,
+      }).catch(() => [])
+      manualByWindow[slot] = new Map((rows ?? []).map((r) => [r.metric_key, Number(r.total) || 0]))
+    }))
+  }
+
+  const rows = await Promise.all(metrics.map(async (m) => {
+    const out = {
+      label: m.label ?? m.metric_key,
+      unit: m.unit ?? '',
+      isAuto: m.source !== 'manual',
+    }
+    for (const [slot, from, to] of windows) {
+      const raw = m.source === 'manual'
+        ? (manualByWindow[slot]?.get(m.metric_key) ?? 0)
+        : await autoTotal(m, from, to)
+      out[slot] = fmtValue(m.unit, raw)
+    }
+    return out
   }))
 
-  function windowStats(matching) {
-    const cy = matching.reduce((a, d) => a + d.cy, 0)
-    const sf = matching.reduce((a, d) => a + d.sf, 0)
-    const goh = matching.reduce((a, d) => a + d.goh, 0)
-    const noh = matching.reduce((a, d) => a + d.noh, 0)
-    return {
-      volume: fmtCoverCy(cy),
-      area: fmtCoverSf(sf),
-      operating: fmtCoverHrs(noh),
-      delay: fmtCoverHrs(Math.max(0, goh - noh)),
-      efficiency: fmtCoverPct(goh > 0 ? (noh / goh) * 100 : 0),
-    }
-  }
-
-  const dayRow = days.find((d) => d.date === dateISO) ?? null
-  const dayHasActivity = !!dayRow && (dayRow.goh !== 0 || dayRow.noh !== 0)
-  const dayEfficiencyPct = dayHasActivity && dayRow.goh > 0 ? (dayRow.noh / dayRow.goh) * 100 : 0
-  const day = dayRow
-    ? {
-        volume: fmtCoverCy(dayRow.cy),
-        area: fmtCoverSf(dayRow.sf),
-        operating: dayHasActivity ? fmtCoverHrs(dayRow.noh) : null,
-        delay: dayHasActivity ? fmtCoverHrs(Math.max(0, dayRow.goh - dayRow.noh)) : null,
-        efficiency: dayHasActivity ? fmtCoverPct(dayEfficiencyPct) : null,
-      }
-    : { volume: null, area: null, operating: null, delay: null, efficiency: null }
-
-  const week = windowStats(days.filter((d) => d.date >= weekStart && d.date <= dateISO))
-  const projectTotal = windowStats(days.filter((d) => d.date <= dateISO))
-
-  const METRIC_ROWS = [
-    ['Total Volume Removed', 'volume', 'CY'],
-    ['Total Area Covered', 'area', 'SF'],
-    ['Operating Hours', 'operating', 'hrs'],
-    ['Delay Hours', 'delay', 'hrs'],
-    ['Efficiency', 'efficiency', '%'],
-  ]
-  return {
-    rows: METRIC_ROWS.map(([label, key, unit]) => ({
-      label,
-      unit,
-      day: day[key],
-      week: week[key],
-      project: projectTotal[key],
-    })),
-  }
+  return { rows }
 }
 
 function dateOnlyPdf(iso) {

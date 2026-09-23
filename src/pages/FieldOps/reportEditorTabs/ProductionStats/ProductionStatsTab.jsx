@@ -9,7 +9,7 @@ import { useProjectLayers } from '../../../../hooks/capping/useProjectLayers'
 import { useProjectMaterials } from '../../../../hooks/capping/useProjectMaterials'
 import { useProjectLayerMaterials } from '../../../../hooks/capping/useProjectLayerMaterials'
 import { useConfirmDialog } from '../../../../hooks/ui/useConfirmDialog'
-import { usePicklist } from '../../../../hooks/core/usePicklist'
+import { usePassTypes } from '../../../../hooks/core/usePassTypes'
 import { equipmentWorkType, isProductiveActivity } from '../../lib/workType'
 import { useDomainData } from '../../../../hooks/core/useDomainData'
 import { useDayActivities } from '../../../../hooks/production/useDayActivities'
@@ -35,7 +35,7 @@ export default function ProductionStatsTab({ project, report, equipment = [], se
     .sort((a, b) => (a.depth ?? 0) - (b.depth ?? 0))
     .map((l) => l.label)
   const { attachments } = useProjectAttachments(project?.id)
-  const { labels: passTypeLabels } = usePicklist('pkl-jfb-pass-type')
+  const { labels: passTypeLabels } = usePassTypes()
 
   const selectedEquipment = equipment.find((eq) => eq.id === selectedEquipmentId) ?? null
   const resolvedWorkType = equipmentWorkType(project, selectedEquipment, report?.report_date).toLowerCase()

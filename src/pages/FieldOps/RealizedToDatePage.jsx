@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Box, Grid, Text, Table, Group, Button, Stack, TextInput, UnstyledButton } from '@mantine/core'
+import { Box, Grid, Text, Table, Group, Button, Select, Stack, TextInput, UnstyledButton } from '@mantine/core'
 import { executeDataView, executeReport } from '../../data'
 import { useAppConfig } from '../../contexts/appConfigContext'
 import { useProject } from '../../hooks/project/useProject'
 import { useRealizedExcludedDays } from '../../hooks/project/useRealizedExcludedDays'
 import { useProjectMaterials } from '../../hooks/capping/useProjectMaterials'
+import { useRealizedScopes } from '../../hooks/project/useRealizedScopes'
 import { useProductionWeekBreaks } from '../../hooks/project/useProductionWeekBreaks'
 import ReasonDialog from '../../components/ReasonDialog'
 import ScheduledOffDaysCard from '../../components/ScheduledOffDaysCard'
@@ -39,13 +40,51 @@ export default function RealizedToDatePage() {
   const currentWeekStart = addDaysISO(mondayStartISO(today), -7)
   const currentWeekEnd = addDaysISO(currentWeekStart, 6)
 
+  const { scopes } = useRealizedScopes(projectId)
+  const activeScopes = useMemo(
+    () => [...(scopes ?? [])]
+      .filter((sc) => sc.active !== false)
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || String(a.label).localeCompare(String(b.label))),
+    [scopes],
+  )
+  const [scopeId, setScopeId] = useState(null)
+  const scope = useMemo(
+    () => activeScopes.find((sc) => sc.id === scopeId) ?? activeScopes[0] ?? null,
+    [activeScopes, scopeId],
+  )
+  const scopeKey = activeScopes.map((sc) => sc.id).join(',')
+  const [prevScopeKey, setPrevScopeKey] = useState(scopeKey)
+  if (scopeKey !== prevScopeKey) {
+    setPrevScopeKey(scopeKey)
+    setScopeId(activeScopes[0]?.id ?? null)
+  }
+
+  const hasScope = !!scope
+  const idList = (v) => (Array.isArray(v) ? v.filter(Boolean).join(',') : '')
+  const OPEN_ENDED = '9999-12-31'
+  const projectStart = project?.production_start_date
+    || (project?.start_date ? project.start_date.slice(0, 10) : '2000-01-01')
+  const scopeStart = scope?.start_date ? String(scope.start_date).slice(0, 10) : projectStart
+  const scopeEnd = scope?.end_date ? String(scope.end_date).slice(0, 10) : OPEN_ENDED
+  const scopeInclude = scope ? idList(scope.include_area_ids) : ''
+  const scopeExclude = scope ? idList(scope.exclude_area_ids) : ''
+
   const [dailyTotals, setDailyTotals] = useState(null)
   const [dailyTotalsError, setDailyTotalsError] = useState(null)
   useEffect(() => {
     if (!project?.id) return
     let cancelled = false
-    const startDate = project.production_start_date || (project.start_date ? project.start_date.slice(0, 10) : '2000-01-01')
-    executeDataView('dvw-jfb-realized-daily-totals-v2', { p_project_id: project.id, p_start_date: startDate })
+    const view = hasScope ? 'dvw-jfb-realized-daily-totals-scoped-v2' : 'dvw-jfb-realized-daily-totals-v2'
+    const params = hasScope
+      ? {
+        p_project_id: project.id,
+        p_start_date: scopeStart,
+        p_end_date: scopeEnd,
+        p_include_ids: scopeInclude,
+        p_exclude_ids: scopeExclude,
+      }
+      : { p_project_id: project.id, p_start_date: scopeStart }
+    executeDataView(view, params)
       .then((rows) => {
         if (cancelled) return
         setDailyTotals(rows.map((r) => ({
@@ -59,19 +98,19 @@ export default function RealizedToDatePage() {
       })
       .catch((err) => { if (!cancelled) setDailyTotalsError(err.message) })
     return () => { cancelled = true }
-  }, [project?.id, project?.production_start_date, project?.start_date])
+  }, [project?.id, hasScope, scopeStart, scopeEnd, scopeInclude, scopeExclude])
 
   const [delayRows, setDelayRows] = useState([])
   useEffect(() => {
     if (!project?.id) return
     let cancelled = false
-    executeDataView('dvw-jfb-realized-delay-summary-v2', {
-      p_project_id: project.id, p_start_date: currentWeekStart, p_end_date: currentWeekEnd,
-    })
+    const view = hasScope ? 'dvw-jfb-realized-delay-summary-scoped-v2' : 'dvw-jfb-realized-delay-summary-v2'
+    const base = { p_project_id: project.id, p_start_date: currentWeekStart, p_end_date: currentWeekEnd }
+    executeDataView(view, hasScope ? { ...base, p_include_ids: scopeInclude, p_exclude_ids: scopeExclude } : base)
       .then((rows) => { if (!cancelled) setDelayRows(rows) })
       .catch(() => { if (!cancelled) setDelayRows([]) })
     return () => { cancelled = true }
-  }, [project?.id, currentWeekStart, currentWeekEnd])
+  }, [project?.id, currentWeekStart, currentWeekEnd, hasScope, scopeInclude, scopeExclude])
 
   // A project paid by the ton reports in TON, and only over its placement
   // phase: averaging the earlier dredging CY with placement tons would be
@@ -89,8 +128,20 @@ export default function RealizedToDatePage() {
         .filter((d) => !fromDate || d.date >= fromDate)
         .map((d) => ({ ...d, cy: d.tons }))
     }
-    return buildRealizedReport(project, days, delayRows, excludedSet, reasons, breaks, today, measure ?? undefined)
-  }, [project, dailyTotals, delayRows, excludedDays, breaks, today, measure])
+    const scoped = scope
+      ? {
+        ...project,
+        volume_goal: scope.goal ?? project.volume_goal,
+        cy_goh_goal: scope.cy_goh_goal ?? project.cy_goh_goal,
+        expected_goh_per_day: scope.expected_goh_per_day ?? project.expected_goh_per_day,
+        production_days_per_week: scope.production_days_per_week ?? project.production_days_per_week,
+        start_date: scopeStart,
+        production_start_date: scopeStart,
+      }
+      : project
+    const baseline = scope ? Number(scope.baseline_cy) || 0 : undefined
+    return buildRealizedReport(scoped, days, delayRows, excludedSet, reasons, breaks, today, measure ?? undefined, baseline)
+  }, [project, dailyTotals, delayRows, excludedDays, breaks, today, measure, scope, scopeStart])
 
   const [excludeTarget, setExcludeTarget] = useState(null)
   const [savingExclude, setSavingExclude] = useState(false)
@@ -151,7 +202,22 @@ export default function RealizedToDatePage() {
   return (
     <>
       <Group justify="space-between" mb={4}>
-        <Text fw={700} size="lg">Realized To-Date</Text>
+        <Group gap={12} align="baseline" wrap="wrap">
+          <Text fw={700} size="lg">Realized To-Date</Text>
+          {activeScopes.length === 1 && (
+            <Text size="sm" c="dimmed">{activeScopes[0].label}</Text>
+          )}
+          {activeScopes.length > 1 && (
+            <Select
+              size="xs"
+              w={260}
+              data={activeScopes.map((sc) => ({ value: sc.id, label: sc.label }))}
+              value={scope?.id ?? null}
+              onChange={(v) => setScopeId(v)}
+              allowDeselect={false}
+            />
+          )}
+        </Group>
         <Group gap="md">
           {report && report.weeks.length > 0 && (
             <Button size="xs" variant="outline" loading={pdfBusy} onClick={handleDownloadPdf}>

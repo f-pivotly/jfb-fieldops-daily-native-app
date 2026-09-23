@@ -15,6 +15,7 @@ import SpreaderChartTab from './projectSettingsTabs/SpreaderChartTab'
 import AttachmentsTab from './projectSettingsTabs/AttachmentsTab'
 import SiteEquipmentTab from './projectSettingsTabs/SiteEquipmentTab'
 import CoverMetricsTab from './projectSettingsTabs/CoverMetricsTab'
+import RealizedScopesTab from './projectSettingsTabs/RealizedScopesTab'
 
 export default function ProjectSettingsPage() {
   const { projectId } = useParams()
@@ -57,6 +58,7 @@ export default function ProjectSettingsPage() {
           <Tabs.Tab value="narratives">Narratives</Tabs.Tab>
           <Tabs.Tab value="metrics">Cover Metrics</Tabs.Tab>
           <Tabs.Tab value="siteEquipment">Site Equipment</Tabs.Tab>
+          <Tabs.Tab value="realizedScopes">Realized Scopes</Tabs.Tab>
           <Tabs.Tab value="attachments">Attachments</Tabs.Tab>
           {isDredging && <Tabs.Tab value="dredgeChart">Dredge Chart</Tabs.Tab>}
           {isPlacement && <Tabs.Tab value="placementChart">Placement Chart</Tabs.Tab>}
@@ -71,6 +73,9 @@ export default function ProjectSettingsPage() {
         </Tabs.Panel>
         <Tabs.Panel value="siteEquipment">
           <SiteEquipmentTab project={project} />
+        </Tabs.Panel>
+        <Tabs.Panel value="realizedScopes">
+          <RealizedScopesTab project={project} />
         </Tabs.Panel>
         <Tabs.Panel value="attachments">
           <AttachmentsTab project={project} />

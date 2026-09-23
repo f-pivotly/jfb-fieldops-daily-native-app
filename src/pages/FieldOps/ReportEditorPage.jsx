@@ -187,7 +187,7 @@ export default function ReportEditorPage() {
         buildDredgeChartAssetsParam({ appSlug: config.appSlug, reportId, project, equipment, dateISO: date }),
         buildSafetyPageDataParam({ appSlug: config.appSlug, projectId, reportId, dateISO: date, project }),
         buildProductionComboTotalsByEquipmentParam({ appSlug: config.appSlug, projectId, project, reportId, dateISO: date, equipment }),
-        buildCoverProductionTotalsParam({ projectId, project, dateISO: date }),
+        buildCoverProductionTotalsParam({ appSlug: config.appSlug, projectId, project, dateISO: date }),
         buildFlowAndPipeByEquipmentParam({ appSlug: config.appSlug, projectId, dateISO: date }),
         buildWaterQualityParam({ appSlug: config.appSlug, projectId, reportId, dateISO: date }),
         buildAirQualityParam({ appSlug: config.appSlug, projectId, reportId, dateISO: date }),

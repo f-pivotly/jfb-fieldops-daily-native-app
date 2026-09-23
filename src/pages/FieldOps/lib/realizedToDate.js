@@ -122,12 +122,12 @@ export function tonnageMeasure(materials) {
   return { unit: 'TON', goal, bidRate: goal / hours }
 }
 
-export function buildRealizedReport(project, days, delayRows, excluded, reasons, breaks, today, measure) {
+export function buildRealizedReport(project, days, delayRows, excluded, reasons, breaks, today, measure, baselineOverride) {
   const sorted = [...days].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
   const start = project.start_date ? project.start_date.slice(0, 10) : '2000-01-01'
   const goal = measure ? measure.goal : project.volume_goal ?? 0
   const bidRate = measure ? measure.bidRate : project.cy_goh_goal ?? 0
-  const baselineCy = measure?.baselineCy ?? 0
+  const baselineCy = baselineOverride ?? measure?.baselineCy ?? 0
   const paceByGoh = measure?.paceByGoh ?? false
   const expGoh = project.expected_goh_per_day
   const daysPerWeek = project.production_days_per_week

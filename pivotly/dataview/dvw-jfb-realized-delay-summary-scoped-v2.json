@@ -1,0 +1,56 @@
+{
+  "slug": "dvw-jfb-realized-delay-summary-scoped-v2",
+  "description": "Delay-code hours for ONE Realized To-Date scope: the same rollup as dvw-jfb-realized-delay-summary-v2 with the scope's area filter applied, so a project running two contracts on different ground does not show one contract's delays against the other's hours. The date window was already parameterised; only the area filter is new. Area matching uses the LEVEL-1 area id, the same level the reference app filters on. Empty filter strings mean every area, which reproduces the unscoped view exactly. Ids arrive as delimited text because published data views only accept scalar parameter types.",
+  "authoring_mode": "direct_sql",
+  "implementation": "function",
+  "direct_sql": "SELECT COALESCE(pdc.category, lib.category) AS category, COALESCE(pdc.code, lib.code) AS code, SUM(EXTRACT(EPOCH FROM (da.end_date_time - da.start_date_time)) / 3600.0) AS hours FROM usdf.jfb_daily_activities da JOIN usdf.jfb_project_delay_codes pdc ON pdc.id = da.delay_code_id LEFT JOIN usdf.jfb_delay_codes lib ON lib.id = pdc.delay_code_id WHERE da.project_id = p_project_id AND da.report_date BETWEEN p_start_date AND p_end_date AND da.is_deleted IS NOT TRUE AND (p_include_ids = '' OR COALESCE(da.area->>'area_id', '') = ANY (string_to_array(p_include_ids, ','))) AND (p_exclude_ids = '' OR COALESCE(da.area->>'area_id', '') <> ALL (string_to_array(p_exclude_ids, ','))) GROUP BY COALESCE(pdc.category, lib.category), COALESCE(pdc.code, lib.code) ORDER BY hours DESC",
+  "parameters": [
+    {
+      "name": "p_project_id",
+      "type": "uuid",
+      "required": true,
+      "description": "Project to scope the sum to."
+    },
+    {
+      "name": "p_start_date",
+      "type": "date",
+      "required": true,
+      "description": "Inclusive start of the date range -- typically the captured week's Monday."
+    },
+    {
+      "name": "p_end_date",
+      "type": "date",
+      "required": true,
+      "description": "Inclusive end of the date range -- typically the captured week's Sunday."
+    },
+    {
+      "name": "p_include_ids",
+      "type": "text",
+      "required": true,
+      "description": "Comma-separated jfb_project_areas ids to count, or '' for every area."
+    },
+    {
+      "name": "p_exclude_ids",
+      "type": "text",
+      "required": true,
+      "description": "Comma-separated jfb_project_areas ids to leave out, or '' for none. Applied after p_include_ids."
+    }
+  ],
+  "columns": [
+    {
+      "name": "category",
+      "type": "text",
+      "description": "Delay code category (e.g. General, Mechanical, Booster, Land Plant)."
+    },
+    {
+      "name": "code",
+      "type": "text",
+      "description": "Delay code display name (e.g. \"ShutDown\", \"Wash Pipeline\")."
+    },
+    {
+      "name": "hours",
+      "type": "numeric",
+      "description": "Summed duration (hours) of matching delay activities for that code."
+    }
+  ]
+}

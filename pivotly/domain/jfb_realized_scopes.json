@@ -1,0 +1,352 @@
+{
+  "schema": [
+    {
+      "pii": false,
+      "name": "project_id",
+      "slug": "project_id",
+      "type": "uuid",
+      "label": "Project Id",
+      "unique": false,
+      "indexed": true,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "uuid",
+      "fk_config": {
+        "required": true,
+        "target_attr": "id",
+        "target_domain": "jfb_projects",
+        "resolution_policy": "lookup_only"
+      },
+      "column_name": "project_id",
+      "description": "The project this scope belongs to. A project with NO scope rows keeps the whole-project behaviour it has today, reading its goal and rate straight off jfb_projects -- so adding this domain changes nothing until someone configures a scope.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "label",
+      "slug": "label",
+      "type": "text",
+      "label": "Label",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": false,
+      "required": true,
+      "data_type": "text",
+      "column_name": "label",
+      "description": "What the Realized To-Date scope selector shows, e.g. \"Part 1\" or \"Mechanical Dredging (complete)\". The selector only appears when a project has two or more active scopes; a single scope is used silently.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "sort_order",
+      "slug": "sort_order",
+      "type": "integer",
+      "label": "Sort Order",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "integer",
+      "column_name": "sort_order",
+      "description": "Order the scopes appear in the selector.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "start_date",
+      "slug": "start_date",
+      "type": "date",
+      "label": "Start Date",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "date",
+      "column_name": "start_date",
+      "description": "First date this scope counts production from. Anything produced before it belongs in baseline_cy rather than the series.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "end_date",
+      "slug": "end_date",
+      "type": "date",
+      "label": "End Date",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "date",
+      "column_name": "end_date",
+      "description": "Last date this scope counts, inclusive. LEAVE BLANK for a scope still accruing. Set it on a FINISHED phase, otherwise later work in the same areas keeps being added to it -- the case this domain exists for: a project that dredges then places in the SAME areas would otherwise count placement toward the dredging goal and report over 100% complete.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "baseline_cy",
+      "slug": "baseline_cy",
+      "type": "numeric",
+      "label": "Baseline",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "baseline_cy",
+      "description": "Opening balance already produced before start_date, in this scope's unit. A frozen historical figure, not derived -- if earlier history is ever corrected, this has to be corrected with it.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "goal",
+      "slug": "goal",
+      "type": "numeric",
+      "label": "Goal",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "goal",
+      "description": "Total contract quantity this scope works toward. Drives percent complete and the projected completion date; without it neither can be shown.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "cy_goh_goal",
+      "slug": "cy_goh_goal",
+      "type": "numeric",
+      "label": "Bid Rate",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "cy_goh_goal",
+      "description": "Bid or forecast production rate per gross operating hour. A scope carries its own rate rather than inheriting the project's, because separate contracts genuinely differ -- Kalamazoo's two parts run 100 and 120 CY/GOH.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "expected_goh_per_day",
+      "slug": "expected_goh_per_day",
+      "type": "numeric",
+      "label": "Expected GOH / Day",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "numeric",
+      "column_name": "expected_goh_per_day",
+      "description": "Planned gross operating hours per production day. With the bid rate this gives anticipated daily production, which is what planned-vs-actual variance is measured against.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "production_days_per_week",
+      "slug": "production_days_per_week",
+      "type": "integer",
+      "label": "Production Days / Week",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "integer",
+      "column_name": "production_days_per_week",
+      "description": "How many days a week this scope expects to work. Used to project a completion date from the remaining quantity.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "include_area_ids",
+      "slug": "include_area_ids",
+      "type": "jsonb",
+      "label": "Include Areas",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "jsonb",
+      "column_name": "include_area_ids",
+      "description": "Array of jfb_project_areas ids. When set, ONLY production and events in these areas count toward this scope. Stored as ids rather than area names so renaming an area cannot silently change what a scope measures. Leave empty to count every area.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "exclude_area_ids",
+      "slug": "exclude_area_ids",
+      "type": "jsonb",
+      "label": "Exclude Areas",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "jsonb",
+      "column_name": "exclude_area_ids",
+      "description": "Array of jfb_project_areas ids to leave OUT. Used instead of include_area_ids when it is easier to name the exceptions -- e.g. everything except a separate non-contaminated bucket and a pilot channel. Ignored when include_area_ids is set.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "chart_region",
+      "slug": "chart_region",
+      "type": "text",
+      "label": "Chart Region",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "chart_region",
+      "description": "How this scope's GROUND is identified on progress charts, from pkl-jfb-scope-chart-region: csc-cells for work inside the numbered sampling cells, outside-csc-cells for a new cut that has none. Ring-level and independent of which areas a day's events logged, because one day can work both contracts. Blank on projects with no such split.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "notes",
+      "slug": "notes",
+      "type": "text",
+      "label": "Notes",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "notes",
+      "description": "Why this scope is drawn the way it is -- the reasoning that would otherwise be lost. Worth recording things like which changeover day belongs to neither phase and why, or why a phase has no scope yet. Without it, an end date looks arbitrary and gets \"corrected\" a year later.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "active",
+      "slug": "active",
+      "type": "boolean",
+      "label": "Active",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "boolean",
+      "column_name": "active",
+      "description": "Whether this scope is offered on the Realized To-Date page. False retires it without deleting the figures behind an already-issued report.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    }
+  ],
+  "archive": true,
+  "contact": {
+    "name": "System Administrator"
+  },
+  "multi_tenant": false,
+  "xref_enabled": true,
+  "access_control": {
+    "model": "all_systems",
+    "read_access": true,
+    "delete_access": true,
+    "insert_access": true,
+    "update_access": true,
+    "hard_delete_allowed": true,
+    "direct_write_enabled": true
+  },
+  "archive_policy": {
+    "retention_days": 365,
+    "max_record_versions": 10000
+  },
+  "track_versions": true,
+  "domain_table_name": "jfb_realized_scopes",
+  "slug": "jfb_realized_scopes",
+  "domain_name_singular": "jfb_realized_scope",
+  "default_conflict_resolution": {
+    "code": "lww",
+    "human_readable": "Last Write Wins"
+  }
+}

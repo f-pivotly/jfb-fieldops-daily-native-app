@@ -3,15 +3,17 @@ import { useNavigate, useParams, Link } from 'react-router-dom'
 import { Box, Group, Text, Badge, Table, Button, TextInput } from '@mantine/core'
 import { REPORT_STATUS_LABEL, REPORT_STATUS_COLOR } from '../../config/reportStatus'
 import { useProject } from '../../hooks/project/useProject'
-import { useReports } from '../../hooks/report/useReports'
+import { useAppConfig } from '../../contexts/appConfigContext'
+import { useReportList } from '../../hooks/report/useReportList'
 import { useFieldOpsAction } from '../../contexts/fieldOpsAccessContext'
-import { executeDataView } from '../../data'
+import { fetchDomainRecords } from '../../data'
 import { todayISO, addDaysISO, prettyDate } from './lib/realizedToDate'
 import { isoCalWeek, projectWeekNumber } from './lib/reportPdfData'
 import { WARNING_BG } from './reportEditorTabs/components/WarningBanner'
 import { setReportTimeZone } from '../../lib/reportTz'
 
 const DAY_LABEL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+const PAGE_SIZE = 5
 
 function isSaturday(dateISO) {
   const [y, m, d] = String(dateISO).split('-').map(Number)
@@ -54,42 +56,38 @@ export default function ReportListPage() {
   const navigate = useNavigate()
   const { project } = useProject(projectId)
   setReportTimeZone(project?.report_timezone)
-  const { reports: reportRecords } = useReports(projectId)
+  const { config } = useAppConfig()
   const canManageSettings = useFieldOpsAction('manage_project_settings')
+  const { rows: listRows, done, loading: listLoading, error: listError, loadMore } =
+    useReportList(projectId, PAGE_SIZE)
 
-  const [eventDates, setEventDates] = useState([])
-  useEffect(() => {
-    if (!projectId) return
-    let cancelled = false
-    executeDataView('dvw-jfb-distinct-event-dates-v2', { p_project_id: projectId })
-      .then((rows) => {
-        if (cancelled) return
-        const dates = (Array.isArray(rows) ? rows : []).map((r) => String(r.event_date).slice(0, 10))
-        setEventDates(dates)
-      })
-      .catch(() => { if (!cancelled) setEventDates([]) })
-    return () => { cancelled = true }
-  }, [projectId])
-
-  const reportDateSet = new Set(reportRecords.map((r) => r.report_date))
-  const reportRows = reportRecords.map((r) => ({
-    kind: 'report',
-    id: r.id,
-    date: r.report_date,
-    day: dayOf(r.report_date),
-    status: r.status,
-  }))
-  const pendingRows = eventDates
-    .filter((d) => !reportDateSet.has(d))
-    .map((d) => ({ kind: 'pending', id: `pending-${d}`, date: d, day: dayOf(d) }))
-  const rows = [...reportRows, ...pendingRows].sort((a, b) => b.date.localeCompare(a.date))
+  const rows = listRows.map((r) => {
+    const date = String(r.row_date).slice(0, 10)
+    return r.report_id
+      ? { kind: 'report', id: r.report_id, date, day: dayOf(date), status: r.status }
+      : { kind: 'pending', id: `pending-${date}`, date, day: dayOf(date) }
+  })
   const groups = groupByCalWeek(rows, project)
 
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pickerDate, setPickerDate] = useState(yesterdayISO())
   const today = todayISO()
-  const pickerAlreadyExists = reportDateSet.has(pickerDate)
-  const pickerHasEvents = eventDates.includes(pickerDate)
+  const [pickerInfo, setPickerInfo] = useState({ date: null, exists: false, hasEvents: false })
+  useEffect(() => {
+    if (!projectId || !pickerDate || !pickerOpen) return undefined
+    let alive = true
+    const one = (domain) => fetchDomainRecords({
+      domain, system: 'core', appSlug: config.appSlug,
+      filters: { project_id: projectId, report_date: pickerDate }, limit: 1,
+    }).then((res) => ((Array.isArray(res) ? res : (res?.data ?? [])).length > 0)).catch(() => false)
+    Promise.all([one('jfb_reports'), one('jfb_daily_activities')])
+      .then(([exists, hasEvents]) => {
+        if (alive) setPickerInfo({ date: pickerDate, exists, hasEvents })
+      })
+    return () => { alive = false }
+  }, [projectId, pickerDate, pickerOpen, config.appSlug])
+  const pickerAlreadyExists = pickerInfo.date === pickerDate && pickerInfo.exists
+  const pickerHasEvents = pickerInfo.date === pickerDate && pickerInfo.hasEvents
 
   function openPicker() {
     setPickerDate(yesterdayISO())
@@ -162,7 +160,19 @@ export default function ReportListPage() {
         </Box>
       )}
 
-      {rows.length === 0 && (
+      {listError && (
+        <Box p={16} mb={16} style={{ background: WARNING_BG, borderRadius: 6 }}>
+          <Text size="sm" c="#92400E">Could not load the report list: {listError}</Text>
+        </Box>
+      )}
+
+      {listLoading && (
+        <Box p={40} ta="center">
+          <Text size="sm" c="dimmed">Loading reports...</Text>
+        </Box>
+      )}
+
+      {!listLoading && !listError && rows.length === 0 && (
         <Box p={40} ta="center" style={{ border: '1px dashed var(--mantine-color-gray-4)', borderRadius: 8 }}>
           <Text fw={500}>No reports yet for this project.</Text>
           <Text size="sm" c="dimmed" mt={4}>Reports appear here once operators log events, or a PE starts one.</Text>
@@ -222,6 +232,17 @@ export default function ReportListPage() {
           </Table>
         </Box>
       ))}
+
+      {!listLoading && rows.length > 0 && (
+        <Group justify="center" mt={4} mb={20} gap={12}>
+          <Text size="xs" c="dimmed">
+            {done ? `${rows.length} report${rows.length === 1 ? '' : 's'}` : `Showing ${rows.length}`}
+          </Text>
+          {!done && (
+            <Button size="xs" variant="default" onClick={loadMore}>Load more</Button>
+          )}
+        </Group>
+      )}
     </>
   )
 }

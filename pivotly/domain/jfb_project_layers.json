@@ -179,6 +179,48 @@
         "code": "lww"
       },
       "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "pay_group",
+      "slug": "pay_group",
+      "type": "text",
+      "label": "Pay Group",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "pay_group",
+      "description": "The paid line item this layer rolls up into on the capping production sheet. Layers sharing a value are SUMMED into one row, while staying separate everywhere else -- coverage, the .bkt split, per-layer hours and the placement chart all keep them distinct, because only the PAY figure is combined. NULL means the layer is reported on its own, which is every project except Torch Lake - LLRA (152601): it places Structural Backfill and Sand Backfill as one 'Stabilization Backfill' CY line and Restoration Backfill as its own SY line. A project opts in purely by having any layer carry a value here, so leaving it blank changes nothing. Ported from the reference app's project_layers.pay_group (sql/2026-08-19_layer_pay_groups.sql).",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "pay_unit",
+      "slug": "pay_unit",
+      "type": "text",
+      "label": "Pay Unit",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "pay_unit",
+      "description": "The unit the pay group is measured in -- CY, SY, SF or TON. SY is derived as area_sf / 9 and is never stored. NULL keeps the project's existing fixed row list (tons / CY). A layer carrying a pay_group but no pay_unit is skipped rather than guessed at. Ported from the reference app's project_layers.pay_unit (sql/2026-08-19_layer_pay_groups.sql), where a CHECK constraint limits it to those four values; enforce the same set in the UI since this is a plain text column.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
     }
   ],
   "archive": true,
