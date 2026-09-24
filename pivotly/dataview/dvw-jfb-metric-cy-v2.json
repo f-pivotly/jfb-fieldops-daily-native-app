@@ -1,9 +1,9 @@
 {
   "slug": "dvw-jfb-metric-cy-v2",
-  "description": "Sums jfb_production_stats.volume (CY) for a project across an inclusive report_date range, optionally scoped to one equipment unit. Backs the 'Total Volume Removed' auto metric on the cover-page Metrics tab. Auto metrics are never persisted (see METRICS_MIGRATION_PLAN.md §1) -- app code calls this once per Day/Week/Total column with a different date range rather than storing a result.",
+  "description": "Sums jfb_production_stats.volume (CY) for a project across an inclusive report_date range, optionally scoped to one equipment unit. Backs the 'Total Volume Removed' auto metric on the cover-page Metrics tab. Auto metrics are never persisted (see METRICS_MIGRATION_PLAN.md \u00a71) -- app code calls this once per Day/Week/Total column with a different date range rather than storing a result. Changed 2026-09-24: the sum is no longer COALESCEd to 0. SUM over zero rows returns NULL, which is what the cover's em dash means -- 'this metric has no data in this window' -- while a window that really does total zero still returns 0. Torch Lake 152601's Stability Backfill Placed is scoped to the placement machine and printed '0.0 CY' on dredging days, asserting that nothing was placed when in fact nothing was tracked; the reference app prints an em dash (CoverPageGrid.tsx: value === null -> '\u2014').",
   "authoring_mode": "direct_sql",
   "implementation": "function",
-  "direct_sql": "SELECT COALESCE(SUM(ps.volume), 0) AS total_volume FROM usdf.jfb_production_stats ps JOIN usdf.jfb_reports r ON r.id = ps.report_id WHERE r.project_id = p_project_id AND r.report_date BETWEEN p_start_date AND p_end_date AND (p_equipment_id IS NULL OR ps.equipment_id = p_equipment_id)",
+  "direct_sql": "SELECT SUM(ps.volume) AS total_volume FROM usdf.jfb_production_stats ps JOIN usdf.jfb_reports r ON r.id = ps.report_id WHERE r.project_id = p_project_id AND r.report_date BETWEEN p_start_date AND p_end_date AND (p_equipment_id IS NULL OR ps.equipment_id = p_equipment_id)",
   "parameters": [
     {
       "name": "p_project_id",

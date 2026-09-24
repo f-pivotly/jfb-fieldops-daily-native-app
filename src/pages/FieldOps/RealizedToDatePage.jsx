@@ -105,12 +105,15 @@ export default function RealizedToDatePage() {
     if (!project?.id) return
     let cancelled = false
     const view = hasScope ? 'dvw-jfb-realized-delay-summary-scoped-v2' : 'dvw-jfb-realized-delay-summary-v2'
-    const base = { p_project_id: project.id, p_start_date: currentWeekStart, p_end_date: currentWeekEnd }
+    const from = hasScope && scopeStart > currentWeekStart ? scopeStart : currentWeekStart
+    const to = hasScope && scopeEnd < currentWeekEnd ? scopeEnd : currentWeekEnd
+    if (from > to) { setDelayRows([]); return }
+    const base = { p_project_id: project.id, p_start_date: from, p_end_date: to }
     executeDataView(view, hasScope ? { ...base, p_include_ids: scopeInclude, p_exclude_ids: scopeExclude } : base)
       .then((rows) => { if (!cancelled) setDelayRows(rows) })
       .catch(() => { if (!cancelled) setDelayRows([]) })
     return () => { cancelled = true }
-  }, [project?.id, currentWeekStart, currentWeekEnd, hasScope, scopeInclude, scopeExclude])
+  }, [project?.id, currentWeekStart, currentWeekEnd, hasScope, scopeStart, scopeEnd, scopeInclude, scopeExclude])
 
   // A project paid by the ton reports in TON, and only over its placement
   // phase: averaging the earlier dredging CY with placement tons would be
@@ -140,7 +143,16 @@ export default function RealizedToDatePage() {
       }
       : project
     const baseline = scope ? Number(scope.baseline_cy) || 0 : undefined
-    return buildRealizedReport(scoped, days, delayRows, excludedSet, reasons, breaks, today, measure ?? undefined, baseline)
+    const scopedMeasure = scope
+      ? {
+        unit: measure?.unit ?? project.primary_measure ?? 'CY',
+        goal: scope.goal ?? project.volume_goal ?? 0,
+        bidRate: scope.cy_goh_goal ?? project.cy_goh_goal ?? 0,
+        baselineCy: baseline,
+        paceByGoh: true,
+      }
+      : measure ?? undefined
+    return buildRealizedReport(scoped, days, delayRows, excludedSet, reasons, breaks, today, scopedMeasure, baseline)
   }, [project, dailyTotals, delayRows, excludedDays, breaks, today, measure, scope, scopeStart])
 
   const [excludeTarget, setExcludeTarget] = useState(null)

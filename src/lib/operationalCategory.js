@@ -19,3 +19,11 @@ export function isOperationalCategory(category) {
   if (c === TRANSITION_CATEGORY) return false
   return OPERATIONAL_CATEGORIES.has(c.toUpperCase())
 }
+
+export function normalizeDelayCategoryForSummary(category) {
+  const upper = normalizedCategory(category).toUpperCase()
+  if (upper === 'STARTUP' || upper === 'SHUTDOWN' || upper === 'STARTUP/SHUTDOWN') {
+    return 'Startup/Shutdown'
+  }
+  return normalizedCategory(category)
+}

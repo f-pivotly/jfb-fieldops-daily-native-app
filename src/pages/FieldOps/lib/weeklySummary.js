@@ -89,7 +89,7 @@ export function buildWeeklyReport({ project, weekStart, reports, sections, conte
   const delayTotalHours = delayRows.reduce((a, r) => a + (Number(r.hours) || 0), 0)
   const delaySummary = [...delayRows]
     .map((r) => ({
-      description: r.code || r.category || 'Uncategorized',
+      description: r.description || 'Uncategorized',
       hours: Number(r.hours) || 0,
       pct: delayTotalHours > 0 ? (Number(r.hours) || 0) / delayTotalHours : 0,
     }))

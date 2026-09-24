@@ -1,7 +1,7 @@
 import { fetchDomainRecords, fetchPicklistValues, downloadAttachment, executeDataView, fetchPublicAsset } from '../../../data'
 import { renderWeeklyProgressCharts } from '../../../lib/dredge/weeklyChart'
 import { buildCombosFromActivities, comboNOH, isUnassigned } from '../../../lib/productionCombos'
-import { equipmentWorkType, isProductiveActivity } from './workType'
+import { equipmentWorkType, isProductiveActivity, isTransitionActivity } from './workType'
 import { prettyDate, blobToDataUri, fmtNum, fmtHrs } from './realizedToDate'
 import { UNATTRIBUTED_CATEGORY, shiftTotals } from './eventTotals'
 import { metricValueKey } from '../../../lib/metricValueKey'
@@ -202,7 +202,7 @@ function resolveDelayCode(delayCodeId, projectDelayCodeById, masterDelayCodeById
 
 function buildDelaySummary(activities, projectDelayCodeById, masterDelayCodeById) {
   const sorted = activities.slice().sort((x, y) => new Date(x.start_date_time) - new Date(y.start_date_time))
-  const delays = sorted.filter((a) => !isProductiveActivity(a))
+  const delays = sorted.filter((a) => !isTransitionActivity(a) && !isProductiveActivity(a))
   if (delays.length === 0) return []
 
   const ssEvents = delays.filter((a) => a.category === 'STARTUP/SHUTDOWN')
@@ -392,7 +392,7 @@ export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, p
   for (const [equipmentId, rows] of byEquipment) {
     const isCapping = cappingEquipmentIds.has(equipmentId)
     const sorted = rows.slice().sort((x, y) => new Date(x.start_date_time) - new Date(y.start_date_time))
-    const listed = isCapping ? sorted.filter((a) => !isProductiveActivity(a)) : sorted
+    const listed = sorted.filter((a) => !isTransitionActivity(a) && !isProductiveActivity(a))
     const shape = activityTableShape(isCapping, areaLevelLabel, useLayerCol)
     const rowValues = listed.map((a, i) => {
       const value = {
@@ -868,8 +868,10 @@ function fmtCoverSf(n) {
   return n == null ? null : Math.round(n).toLocaleString('en-US')
 }
 
-export async function buildCoverProductionTotalsParam({ appSlug, projectId, project, dateISO }) {
-  const projectStart = project?.production_start_date || (project?.start_date ? project.start_date.slice(0, 10) : '2000-01-01')
+const NO_DATE_FLOOR = '2000-01-01'
+
+export async function buildCoverProductionTotalsParam({ appSlug, projectId, dateISO }) {
+  const projectStart = NO_DATE_FLOOR
   const weekStart = sundayStartISO(dateISO)
 
   const [metricRes, sourceRes] = await Promise.all([
@@ -902,7 +904,8 @@ export async function buildCoverProductionTotalsParam({ appSlug, projectId, proj
         p_equipment_id: metric.equipment_id ?? null,
       }).then((rows) => {
         const first = (rows ?? [])[0]
-        return first ? Number(first[col]) || 0 : 0
+        if (!first || first[col] == null) return null
+        return Number(first[col])
       }).catch(() => null))
     }
     return autoCache.get(key)
@@ -941,7 +944,7 @@ export async function buildCoverProductionTotalsParam({ appSlug, projectId, proj
     }
     for (const [slot, from, to] of windows) {
       const raw = m.source === 'manual'
-        ? (manualByWindow[slot]?.get(m.metric_key) ?? 0)
+        ? (manualByWindow[slot]?.get(m.metric_key) ?? null)
         : await autoTotal(m, from, to)
       out[slot] = fmtValue(m.unit, raw)
     }
@@ -1435,14 +1438,48 @@ export async function buildWaterQualityParam({ appSlug, projectId, reportId, dat
       coords: l.display_coords ?? '',
     })),
     notes: notesRow?.notes ?? null,
-    referenceNtu: fmtNtu(refNtu),
-    earlyWarningDelta: ewDelta,
-    complianceDelta: compDelta,
-    responseActionNtu: fmtNtu(refNtu != null && ewDelta != null ? refNtu + ewDelta : null),
-    notToExceedNtu: fmtNtu(refNtu != null && compDelta != null ? refNtu + compDelta : null),
-    hasLimits: refNtu != null,
+    ...turbidityLimits(config, refNtu, ewDelta, compDelta),
     aerialDataUri: await monitoringImageDataUri(config.aerial_path),
     chartDataUri,
+  }
+}
+
+/** The limits block, which differs by site type exactly as the reference app's
+ *  WaterQualityPage does. A tidal two-monitor site (WQData LIVE / Penobscot)
+ *  works off the engineer's daily reference plus fixed deltas; a fixed-role
+ *  HydroVu site works off flat thresholds held in the config. The native app
+ *  used to render the tidal block for everyone, so Torch Lake 152601 -- HydroVu,
+ *  with early_warning_ntu 13 / compliance_1hr_ntu 50 / compliance_4hr_ntu 26
+ *  sitting in its config -- printed em dashes and "no daily reference entered".
+ */
+function turbidityLimits(config, refNtu, ewDelta, compDelta) {
+  const t = config.thresholds ?? {}
+  if (config.provider === 'wqdatalive') {
+    return {
+      limitRows: [
+        { label: 'Reference (continuous 90th percentile)', value: fmtNtu(refNtu) },
+        { label: `Response Action Alarm (Reference + ${ewDelta ?? '\u2014'})`,
+          value: fmtNtu(refNtu != null && ewDelta != null ? refNtu + ewDelta : null) },
+        { label: `Not-to-Exceed (Reference + ${compDelta ?? '\u2014'})`,
+          value: fmtNtu(refNtu != null && compDelta != null ? refNtu + compDelta : null) },
+      ],
+      hasLimits: refNtu != null,
+      limitsWarning: 'No daily reference entered \u2014 enter it on the Water Quality tab to activate the limit lines.',
+    }
+  }
+  const rows = [
+    ['Early Warning Level', t.early_warning_ntu],
+    ['Compliance Level (1-HR)', t.compliance_1hr_ntu],
+    ['Compliance Level (4-HR)', t.compliance_4hr_ntu],
+    ['Early-Warning Criterion (Background + %)', t.early_warning_delta_ntu],
+    ['Compliance Criterion (Background + %)', t.compliance_delta_ntu],
+  ]
+    .filter(([, v]) => v != null)
+    .map(([label, v]) => ({ label: label.replace('%', String(v)), value: `${v}` }))
+  return {
+    limitRows: rows,
+    hasLimits: rows.length > 0,
+    limitsWarning: 'No turbidity limits configured for this project.',
   }
 }
 

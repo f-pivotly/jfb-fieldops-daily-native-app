@@ -1,3 +1,5 @@
+import { isOperationalCategory, normalizedCategory, TRANSITION_CATEGORY } from '../../../lib/operationalCategory'
+
 function dayOf(dateLike) {
   if (!dateLike) return null
   const s = String(dateLike).slice(0, 10)
@@ -56,9 +58,10 @@ export function activeCategoryLabel(project, equipment, reportDateISO) {
   return (wt.includes('cap') || wt.includes('placement')) ? 'ACTIVE PLACEMENT' : 'ACTIVE DREDGING'
 }
 
-const PRODUCTIVE_CATEGORIES = new Set(['ACTIVE DREDGING', 'ACTIVE PLACEMENT'])
-
 export function isProductiveActivity(a) {
-  if (a.category && PRODUCTIVE_CATEGORIES.has(a.category)) return true
-  return !a.category && !a.delay_code_id
+  return isOperationalCategory(a?.category)
+}
+
+export function isTransitionActivity(a) {
+  return normalizedCategory(a?.category) === TRANSITION_CATEGORY
 }

@@ -1,3 +1,5 @@
+import { normalizeDelayCategoryForSummary } from '../../../lib/operationalCategory'
+
 function formatDate(d) {
   const yyyy = d.getFullYear()
   const mm = String(d.getMonth() + 1).padStart(2, '0')
@@ -369,11 +371,16 @@ export function buildRealizedReport(project, days, delayRows, excluded, reasons,
   })()
 
   const delayTotalHours = delayRows.reduce((a, r) => a + (Number(r.hours) || 0), 0)
-  const delaySummary = [...delayRows]
-    .map((r) => ({
-      description: r.code || r.category || 'Uncategorized',
-      hours: Number(r.hours) || 0,
-      pct: delayTotalHours > 0 ? (Number(r.hours) || 0) / delayTotalHours : 0,
+  const byCat = new Map()
+  for (const r of delayRows) {
+    const key = normalizeDelayCategoryForSummary(r.description) || 'Uncategorized'
+    byCat.set(key, (byCat.get(key) ?? 0) + (Number(r.hours) || 0))
+  }
+  const delaySummary = [...byCat.entries()]
+    .map(([description, hours]) => ({
+      description,
+      hours,
+      pct: delayTotalHours > 0 ? hours / delayTotalHours : 0,
     }))
     .sort((a, b) => b.hours - a.hours)
 
