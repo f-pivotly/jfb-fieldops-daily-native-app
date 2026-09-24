@@ -6,6 +6,14 @@ import "./theme/fonts.css";
 import { theme } from "./theme";
 import App from "./App";
 import { PivotlyAppConfigProvider } from "./contexts/PivotlyAppConfigContext";
+import { setTruncationListener } from "./data";
+
+const truncations = [];
+setTruncationListener((detail) => {
+  truncations.push({ ...detail, at: new Date().toISOString() });
+  console.error(detail.message, detail);
+});
+window.__pivotlyTruncations = truncations;
 
 const router = createMemoryRouter([{ path: "*", element: <App /> }]);
 

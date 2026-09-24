@@ -1,4 +1,4 @@
-import { fetchDomainRecords, downloadAttachment } from '../../data'
+import { fetchDomainRecords, fetchAllDomainRecords, downloadAttachment } from '../../data'
 import { renderChart, parseCells } from './chart'
 import { loadAttachmentImage, loadPublicImage, loadTiles } from './imageLoaders'
 
@@ -26,12 +26,12 @@ async function loadCellsFor(path) {
 
 export async function fetchWeekCoverage({ appSlug, projectId, weekStartISO, weekEndISO }) {
   const [reportsRes, progressRes] = await Promise.all([
-    fetchDomainRecords({ domain: 'jfb_reports', system: 'core', appSlug, filters: { project_id: projectId }, limit: 1000 }),
-    fetchDomainRecords({ domain: 'jfb_dredge_progress', system: 'core', appSlug, filters: { project_id: projectId }, limit: 1000 }),
+    fetchAllDomainRecords({ domain: 'jfb_reports', system: 'core', appSlug, filters: { project_id: projectId } }),
+    fetchAllDomainRecords({ domain: 'jfb_dredge_progress', system: 'core', appSlug, filters: { project_id: projectId } }),
   ])
-  const reportDateById = new Map((reportsRes?.data ?? []).map((r) => [r.id, r.report_date]))
+  const reportDateById = new Map(reportsRes.map((r) => [r.id, r.report_date]))
   const byEquipment = new Map()
-  for (const row of progressRes?.data ?? []) {
+  for (const row of progressRes) {
     const date = reportDateById.get(row.report_id)
     if (!date || date > weekEndISO) continue
     const rings = row.footprint_rings ?? row.coverage_rings ?? []

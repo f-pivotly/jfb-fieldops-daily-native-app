@@ -389,7 +389,7 @@ export function buildRealizedReport(project, days, delayRows, excluded, reasons,
   return {
     summary: {
       projectName: project.name,
-      client: project.client ?? '',
+      client: project.client_name ?? '',
       startDate: start,
       throughDate,
       unit: measure ? measure.unit : project.primary_measure || 'CY',

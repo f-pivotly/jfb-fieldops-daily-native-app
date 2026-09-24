@@ -5,7 +5,7 @@ const inflightCreate = new Map()
 
 export function useReports(projectId) {
   const { records, loading, error, creating, updating, create, update, remove } =
-    useDomainData({ domain: 'jfb_reports', system: 'core', projectId })
+    useDomainData({ domain: 'jfb_reports', system: 'core', projectId, fetchAll: true })
 
   const ensureReport = useCallback(
     (payload) => {

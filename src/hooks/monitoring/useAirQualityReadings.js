@@ -2,8 +2,9 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { fetchDomainRecords } from '../../data'
 import { useAppConfig } from '../../contexts/appConfigContext'
 import { airWindowUtc } from '../../lib/airQuality/data'
+import { FETCH_PAGE_SIZE } from '../../constants/pagination'
 
-const PAGE_SIZE = 1000
+const PAGE_SIZE = FETCH_PAGE_SIZE
 
 export function useAirQualityReadings(config, dateISO) {
   const { config: appConfig } = useAppConfig()

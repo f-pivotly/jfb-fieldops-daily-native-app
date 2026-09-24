@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { fetchDomainRecords, createDomainRecord, updateDomainRecord, deleteDomainRecord } from '../../data'
 import { useAppConfig } from '../../contexts/appConfigContext'
+import { FETCH_PAGE_SIZE } from '../../constants/pagination'
 
-const PAGE_SIZE = 1000
+const PAGE_SIZE = FETCH_PAGE_SIZE
 const DOMAIN = 'jfb_report_metric_value'
 
 export function useReportMetricValues() {

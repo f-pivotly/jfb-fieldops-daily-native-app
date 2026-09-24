@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Box, Text, Group, Button, Stack, Textarea, SimpleGrid, Switch, Modal } from '@mantine/core'
+import { Box, Text, Group, Button, Stack, Textarea, SimpleGrid, Switch, Modal, Table } from '@mantine/core'
 import {
   executeDataView, deleteAttachment, readWrittenRecordId, executeReport,
 } from '../../data'
@@ -24,8 +24,9 @@ import {
   buildNarrativeSectionsParam,
   buildPhotoAssetsParam,
 } from './lib/weeklySummary'
-import { buildWeeklyChartAssetsParam } from './lib/reportPdfData'
+import { buildWeeklyChartAssetsParam, isoCalWeek, projectWeekNumber } from './lib/reportPdfData'
 import { prettyDate } from './lib/realizedToDate'
+import { todayISO } from '../../lib/reportDates'
 import { downloadAndLogReport } from './lib/reportDownload'
 import { useDebouncedDraft } from '../../hooks/ui/useDebouncedDraft'
 import SaveIndicator from '../../components/SaveIndicator'
@@ -52,6 +53,8 @@ function fmtNum(n) {
 function fmtRate(n) {
   return (n ?? 0).toLocaleString(undefined, { maximumFractionDigits: 1 })
 }
+const NO_DATE_FLOOR = '2000-01-01'
+
 function fmtHours(n) {
   return (n ?? 0).toFixed(2)
 }
@@ -76,7 +79,7 @@ function buildWeeklyDelayChartParams(report) {
   }
 }
 
-const TODAY_ISO = new Date().toISOString().slice(0, 10)
+const TODAY_ISO = todayISO()
 const DEFAULT_WEEK_START = defaultWeeklyWeekStart(TODAY_ISO)
 
 export default function WeeklySummaryPage() {
@@ -119,12 +122,11 @@ export default function WeeklySummaryPage() {
   useEffect(() => {
     if (!projectId) return
     let cancelled = false
-    const startDate = project?.production_start_date || (project?.start_date ? project.start_date.slice(0, 10) : '2000-01-01')
-    executeDataView('dvw-jfb-realized-daily-totals-v2', { p_project_id: projectId, p_start_date: startDate })
+    executeDataView('dvw-jfb-realized-daily-totals-v2', { p_project_id: projectId, p_start_date: NO_DATE_FLOOR })
       .then((rows) => { if (!cancelled) setDailyTotals(rows) })
       .catch((err) => { if (!cancelled) setDailyTotalsError(err.message) })
     return () => { cancelled = true }
-  }, [projectId, project?.production_start_date, project?.start_date])
+  }, [projectId])
 
   const [delayRows, setDelayRows] = useState([])
   useEffect(() => {
@@ -258,9 +260,15 @@ export default function WeeklySummaryPage() {
           equipmentFilter: { project_id: projectId },
           weekStart,
           weekEnd,
-          releasedCount: report.releasedCount,
+          weekStartPretty: prettyDate(weekStart),
+          weekEndPretty: prettyDate(weekEnd),
+          calWeek: isoCalWeek(weekStart),
+          projectWeek: projectWeekNumber(weekStart, project?.start_date),
+          projectStartDate: project?.start_date ? prettyDate(project.start_date.slice(0, 10)) : null,
+          location: [project?.site_city, project?.site_state].filter(Boolean).join(', ') || null,
           narrativeSections,
           weeklyPhotoAssets,
+          hasWeeklyPhotos: Object.values(weeklyPhotoAssets).some((x) => !!x?.dataUri),
           weeklyChartAssets,
           unit: report.unit,
           weeklyProduction: {
@@ -281,7 +289,7 @@ export default function WeeklySummaryPage() {
             toDateVariancePositive: hasPlan ? p.toDateVariance >= 0 : null,
             anticipatedDailyProduction: hasPlan ? fmtNum(p.anticipatedDailyProduction) : null,
           },
-          generatedDate: prettyDate(new Date().toISOString().slice(0, 10)),
+          generatedDate: prettyDate(todayISO()),
           ...buildWeeklyDelayChartParams(report),
         },
       })
@@ -352,8 +360,8 @@ export default function WeeklySummaryPage() {
               ← Previous week
             </Text>
             <Box ta="center">
-              <Text size="sm" fw={500}>{weekStart} – {weekEnd}</Text>
-              <Text size="10px" c="dimmed">{report.releasedCount} released reports this week</Text>
+              <Text size="sm" fw={500}>{prettyDate(weekStart)} – {prettyDate(weekEnd)}</Text>
+              <Text size="10px" c="dimmed">{report.releasedCount} released report{report.releasedCount === 1 ? '' : 's'} this week</Text>
             </Box>
             <Text
               size="sm"
@@ -401,7 +409,7 @@ export default function WeeklySummaryPage() {
                       <Text size="xs" c="dimmed">No released daily entries for this section this week.</Text>
                     )}
                     {s.entries.map((e) => (
-                      <Text key={e.date} size="xs" c="dimmed">{e.date} — {e.text}</Text>
+                      <Text key={e.date} size="xs">{e.date} — {e.text}</Text>
                     ))}
                   </Stack>
                   <WeeklySummaryTextarea
@@ -487,7 +495,7 @@ function WeeklySummaryTextarea({ summaryRow, onSave }) {
   return (
     <>
       <Group justify="space-between" mb={4}>
-        <Text size="10px" c="dimmed">Weekly summary</Text>
+        <Text size="sm" fw={600}>Weekly summary</Text>
         <SaveIndicator state={saveState} />
       </Group>
       <Textarea
@@ -555,21 +563,29 @@ function DelayCard({ report }) {
       {delaySummary.length === 0 ? (
         <Text size="xs" c="dimmed">No delays logged this week.</Text>
       ) : (
-        <Stack gap={4}>
-          {delaySummary.map((d) => (
-            <Group key={d.description} justify="space-between" gap={8}>
-              <Text size="xs">{d.description}</Text>
-              <Group gap={10}>
-                <Text size="xs" fw={600}>{fmtHours(d.hours)}h</Text>
-                <Text size="xs" c="dimmed" w={30} ta="right">{(d.pct * 100).toFixed(0)}%</Text>
-              </Group>
-            </Group>
-          ))}
-          <Group justify="space-between" mt={4} pt={4} style={{ borderTop: '1px solid var(--mantine-color-gray-2)' }}>
-            <Text size="xs" fw={700}>Total</Text>
-            <Text size="xs" fw={700}>{fmtHours(delayTotalHours)}h</Text>
-          </Group>
-        </Stack>
+        <Table fz="xs" withRowBorders={false} verticalSpacing={3} horizontalSpacing={0}>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th fw={500} c="dimmed" tt="uppercase" fz="10px">Description</Table.Th>
+              <Table.Th fw={500} c="dimmed" tt="uppercase" fz="10px" ta="right" w={56}>Hours</Table.Th>
+              <Table.Th fw={500} c="dimmed" tt="uppercase" fz="10px" ta="right" w={40}>%</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
+            {delaySummary.map((d) => (
+              <Table.Tr key={d.description}>
+                <Table.Td>{d.description}</Table.Td>
+                <Table.Td ta="right" fw={600} style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtHours(d.hours)}</Table.Td>
+                <Table.Td ta="right" c="dimmed" style={{ fontVariantNumeric: 'tabular-nums' }}>{(d.pct * 100).toFixed(0)}%</Table.Td>
+              </Table.Tr>
+            ))}
+            <Table.Tr style={{ borderTop: '1px solid var(--mantine-color-gray-2)' }}>
+              <Table.Td fw={700}>Total</Table.Td>
+              <Table.Td ta="right" fw={700} style={{ fontVariantNumeric: 'tabular-nums' }}>{fmtHours(delayTotalHours)}</Table.Td>
+              <Table.Td />
+            </Table.Tr>
+          </Table.Tbody>
+        </Table>
       )}
     </Box>
   )

@@ -1,10 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { fetchDomainRecords, createDomainRecord, updateDomainRecord, deleteDomainRecord } from '../../data'
+import { fetchDomainRecords, fetchAllDomainRecords, createDomainRecord, updateDomainRecord, deleteDomainRecord } from '../../data'
 import { useAppConfig } from '../../contexts/appConfigContext'
 
 
 export function useDomainData(options) {
-  const { domain, system, projectId, reportId, includeDeleted, limit = 500, filters: extraFilters } = options
+  const { domain, system, projectId, reportId, includeDeleted, limit = 500, fetchAll = false, filters: extraFilters } = options
 
   const extraFiltersKey = JSON.stringify(extraFilters ?? null)
 
@@ -39,7 +39,11 @@ export function useDomainData(options) {
     if (projectId) scoped.project_id = projectId
     else if (reportId) scoped.report_id = reportId
     const filters = Object.keys(scoped).length ? scoped : undefined
-    return fetchDomainRecords({ domain, system, appSlug: config.appSlug, filters, limit, includeDeleted })
+    const request = fetchAll
+      ? fetchAllDomainRecords({ domain, system, appSlug: config.appSlug, filters, includeDeleted })
+      : fetchDomainRecords({ domain, system, appSlug: config.appSlug, filters, limit, includeDeleted })
+
+    return request
       .then((res) => {
         if (isCurrent()) setRecords(Array.isArray(res) ? res : (res?.data ?? []))
       })
@@ -49,7 +53,7 @@ export function useDomainData(options) {
       .finally(() => {
         if (isCurrent()) setLoading(false)
       })
-  }, [domain, system, config.appSlug, projectId, reportId, includeDeleted, limit, scopeMissing, extraFiltersKey])
+  }, [domain, system, config.appSlug, projectId, reportId, includeDeleted, limit, fetchAll, scopeMissing, extraFiltersKey])
 
   useEffect(() => {
     load()

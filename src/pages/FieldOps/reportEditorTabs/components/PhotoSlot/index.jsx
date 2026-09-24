@@ -235,7 +235,7 @@ export default function PhotoSlot({
 
       <Box px={16} py={12}>
         <Group justify="space-between" mb={4}>
-          <Text size="10px" tt="uppercase" c="dimmed">Label</Text>
+          <Text size="sm" fw={600}>Label</Text>
           <Group gap={4}>
             <ActionIcon variant="default" size="sm" disabled={!canEdit} onClick={() => wrapSelection('*')} onMouseDown={(e) => e.preventDefault()} title="Italic (Ctrl+I)">
               <Text size="11px" style={{ fontStyle: 'italic' }}>I</Text>

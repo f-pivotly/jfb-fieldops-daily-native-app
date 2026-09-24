@@ -50,8 +50,20 @@ const bySortOrder = (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0);
 // project's active materials, these give the Realized To-Date report its goal
 // and blended bid rate, and switch that report from CY to TON.
 const MATERIAL_TONNAGE_FIELDS = [
-  { column: "tons_goal", label: "Tons Goal", description: "Contract tons of this material. Leave blank on projects not paid by the ton." },
-  { column: "tons_per_hour_goal", label: "Bid Rate (tons/GOH)", description: "Bid placement rate for this material." },
+  { column: "tons_goal", kind: "number", label: "Tons Goal", description: "Contract tons of this material. Leave blank on projects not paid by the ton." },
+  { column: "tons_per_hour_goal", kind: "number", label: "Bid Rate (tons/GOH)", description: "Bid placement rate for this material." },
+];
+
+// Several layers can be paid as ONE line item on the capping production sheet.
+// The layers stay separate everywhere else -- coverage, the .bkt split,
+// per-layer hours and the placement chart -- because only the PAY figure is
+// combined. A project opts in purely by giving a layer a Pay Group, so leaving
+// these blank keeps the existing fixed row list.
+const PAY_UNIT_OPTIONS = ["CY", "SY", "SF", "TON"];
+
+const LAYER_PAY_FIELDS = [
+  { column: "pay_group", kind: "text", label: "Pay Group", description: "Layers sharing this name are summed into one paid row. Blank = reported on its own." },
+  { column: "pay_unit", kind: "select", options: PAY_UNIT_OPTIONS, label: "Pay Unit", description: "Unit that paid row is measured in. Required for the Pay Group to print." },
 ];
 
 export default function CappingSetupTab({ project }) {
@@ -168,6 +180,7 @@ export default function CappingSetupTab({ project }) {
               subtitle="The cap layers / lifts placed on this project (e.g. Lift 1–6, Armor)."
               icon="🧱"
               emptyText="No layers yet. Add the cap lifts/layers for this project."
+              extraFields={LAYER_PAY_FIELDS}
               saving={creatingLayer || updatingLayer}
               onCreate={(payload) => createLayer({ project_id: project.id, ...payload })}
               onUpdate={updateLayer}
@@ -372,7 +385,12 @@ function NamedTypeList({ rows, typeRef, nameField, typeField, reportNameField, e
     toPayload: (f, { editRow: er }) => {
       if (!f.name.trim()) return null;
       const payload = { [nameField]: f.name.trim(), [typeField]: f.type || null, [reportNameField]: f.reportName.trim() || null, sort_order: Number(f.sortOrder) || 0 };
-      for (const extra of extraFields) payload[extra.column] = f[extra.column] === "" ? null : Number(f[extra.column]);
+      for (const extra of extraFields) {
+        const raw = f[extra.column];
+        if (raw === "" || raw == null) payload[extra.column] = null;
+        else if (extra.kind === "number") payload[extra.column] = Number(raw);
+        else payload[extra.column] = String(raw).trim() || null;
+      }
       return er ? payload : { ...payload, active: true };
     },
     onCreate,
@@ -399,7 +417,11 @@ function NamedTypeList({ rows, typeRef, nameField, typeField, reportNameField, e
               chip={r[typeField] ? typeName(r[typeField]) : null}
               note={[
                 r[reportNameField] ? `“${r[reportNameField]}”` : null,
-                ...extraFields.map((f) => (r[f.column] != null ? `${f.label} ${Number(r[f.column]).toLocaleString()}` : null)),
+                ...extraFields.map((f) => {
+                  const v = r[f.column];
+                  if (v == null || v === "") return null;
+                  return f.kind === "number" ? `${f.label} ${Number(v).toLocaleString()}` : `${f.label} ${v}`;
+                }),
               ].filter(Boolean).join(" · ") || null}
               active={r.active}
               onToggle={() => onUpdate(r.id, { active: !r.active })}
@@ -417,16 +439,42 @@ function NamedTypeList({ rows, typeRef, nameField, typeField, reportNameField, e
         <TextInput label="Report Name (optional)" placeholder="Defaults to name above" value={form.reportName} onChange={(e) => setFormField("reportName", e.currentTarget.value)} mb={extraFields.length ? 10 : 16} />
         {extraFields.length > 0 && (
           <Group grow mb={16} align="flex-start">
-            {extraFields.map((f) => (
-              <NumberInput
-                key={f.column}
-                label={f.label}
-                description={f.description}
-                hideControls
-                value={form[f.column]}
-                onChange={(v) => setFormField(f.column, v)}
-              />
-            ))}
+            {extraFields.map((f) => {
+              if (f.kind === "select") {
+                return (
+                  <Select
+                    key={f.column}
+                    label={f.label}
+                    description={f.description}
+                    data={f.options.map((o) => ({ value: o, label: o }))}
+                    value={form[f.column] || null}
+                    onChange={(v) => setFormField(f.column, v ?? "")}
+                    clearable
+                  />
+                );
+              }
+              if (f.kind === "text") {
+                return (
+                  <TextInput
+                    key={f.column}
+                    label={f.label}
+                    description={f.description}
+                    value={form[f.column]}
+                    onChange={(e) => setFormField(f.column, e.currentTarget.value)}
+                  />
+                );
+              }
+              return (
+                <NumberInput
+                  key={f.column}
+                  label={f.label}
+                  description={f.description}
+                  hideControls
+                  value={form[f.column]}
+                  onChange={(v) => setFormField(f.column, v)}
+                />
+              );
+            })}
           </Group>
         )}
         <Group justify="flex-end">

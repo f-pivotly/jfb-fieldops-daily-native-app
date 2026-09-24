@@ -6,10 +6,17 @@ import EquipmentTab from "./EquipmentTab";
 import DelayCodesTab from "./DelayCodesTab";
 import OperatorsTab from "./OperatorsTab";
 import CappingSetupTab from "./CappingSetupTab";
+import { useEquipment } from "../../../hooks/project/useEquipment";
+import { equipmentWorkType } from "../../FieldOps/lib/workType";
 
 export default function ProjectDetailShell({ project, onBack }) {
   const [tab, setTab] = useState("areas");
-  const isCapping = (project?.work_type || "").toLowerCase().includes("cap");
+  const { equipment } = useEquipment(project?.id);
+  const isCapping = [
+    project?.work_type,
+    project?.prior_work_type,
+    ...(equipment ?? []).map((eq) => equipmentWorkType(project, eq, null)),
+  ].some((wt) => (wt || "").toLowerCase().includes("cap"));
 
   return (
     <Box>

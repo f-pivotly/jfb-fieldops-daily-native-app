@@ -188,12 +188,12 @@ export default function ReportEditorPage() {
         buildSafetyPageDataParam({ appSlug: config.appSlug, projectId, reportId, dateISO: date, project }),
         buildProductionComboTotalsByEquipmentParam({ appSlug: config.appSlug, projectId, project, reportId, dateISO: date, equipment }),
         buildCoverProductionTotalsParam({ appSlug: config.appSlug, projectId, project, dateISO: date }),
-        buildFlowAndPipeByEquipmentParam({ appSlug: config.appSlug, projectId, dateISO: date }),
+        buildFlowAndPipeByEquipmentParam({ appSlug: config.appSlug, projectId, project, equipment, dateISO: date }),
         buildWaterQualityParam({ appSlug: config.appSlug, projectId, reportId, dateISO: date }),
         buildAirQualityParam({ appSlug: config.appSlug, projectId, reportId, dateISO: date }),
       ])
       const { activitiesByEquipment: dailyActivityByEquipment, delaySummaryByEquipment, opSummaryByEquipment } = dailyActivityData
-      const { flowStatsByEquipment, pipeSegments, pipeTotalLength } = flowAndPipe
+      const { flowStatsByEquipment, pipeSegments, pipeTotalLength, showFlowAndPipeByEquipment } = flowAndPipe
       const dateTable = buildDateTableParams({ date, project })
       const reportNumberByEquipment = buildEquipmentReportNumbers({ date, equipment })
       const { density: coverDensity } = pickDensity({
@@ -219,6 +219,7 @@ export default function ReportEditorPage() {
           productionStatsByEquipment,
           productionTotals,
           flowStatsByEquipment,
+          showFlowAndPipeByEquipment,
           pipeSegments,
           pipeTotalLength,
           reportNumberByEquipment,

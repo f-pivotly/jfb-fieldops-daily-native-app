@@ -5,6 +5,7 @@ import { equipmentWorkType, isProductiveActivity } from './workType'
 import { prettyDate, blobToDataUri, fmtNum, fmtHrs } from './realizedToDate'
 import { UNATTRIBUTED_CATEGORY, shiftTotals } from './eventTotals'
 import { metricValueKey } from '../../../lib/metricValueKey'
+import { payGroupsOf, payQuantity, payQtyDecimals } from '../../../lib/capping/payGroups'
 import { isDirectImageUrl } from '../../../lib/imageSource'
 import { hhmm, utcDayRange } from '../../../lib/reportDates'
 import { airWindowUtc, buildAirDay } from '../../../lib/airQuality/data'
@@ -258,6 +259,7 @@ const ACTIVITY_GRID_ROWS = { dredge: { max: 12, target: 15 }, capping: { max: 10
 const ACTIVITY_LEAD = {
   dredge: { num: '4.6%', from: '8.5%', to: '8.5%', min: '7.1%' },
   capping: { num: '3.7%', from: '8.9%', to: '8.9%', min: '5.2%' },
+  cappingLayer: { num: '3.7%', from: '8.9%', to: '8.9%', min: '5.2%' },
 }
 
 const ACTIVITY_COLUMNS = {
@@ -275,6 +277,25 @@ const ACTIVITY_COLUMNS = {
     { key: 'event', label: 'Event', cls: 'act-l', w: '16.7%' },
     { key: 'notes', label: 'Notes', cls: 'act-l', w: '21.7%' },
   ],
+  cappingLayer: [
+    { key: 'pass', label: 'Pass', cls: 'act-l', w: '8.2%' },
+    { key: 'area', label: 'Area', cls: 'act-l', w: '9.3%' },
+    { key: 'layer', label: 'Layer', cls: 'act-c', w: '17.4%' },
+    { key: 'event', label: 'Event', cls: 'act-l', w: '16.7%' },
+    { key: 'notes', label: 'Notes', cls: 'act-l', w: '21.7%' },
+  ],
+}
+
+function equipmentDensity(n) {
+  if (n > 55) return { fontSize: 5.5, lineHeight: 1.0 }
+  if (n > 40) return { fontSize: 6, lineHeight: 1.05 }
+  if (n > 22) return { fontSize: 6.5, lineHeight: 1.1 }
+  if (n > 12) return { fontSize: 7.25, lineHeight: 1.15 }
+  return { fontSize: 8, lineHeight: 1.25 }
+}
+
+function softBreakInsideParens(text) {
+  return String(text ?? '').replace(/\([^)]*\)/g, (paren) => paren.replace(/,(?!\s)/g, ', '))
 }
 
 async function fetchAreaLevel1Label({ appSlug, projectId }) {
@@ -286,8 +307,8 @@ async function fetchAreaLevel1Label({ appSlug, projectId }) {
   return String(level1?.label ?? '').trim() || 'Area'
 }
 
-function activityTableShape(isCapping, areaLevelLabel) {
-  const variant = isCapping ? 'capping' : 'dredge'
+function activityTableShape(isCapping, areaLevelLabel, useLayerCol) {
+  const variant = isCapping ? (useLayerCol ? 'cappingLayer' : 'capping') : 'dredge'
   const areaHeader = isCapping ? areaLevelLabel : 'Area'
   return {
     lead: ACTIVITY_LEAD[variant],
@@ -321,7 +342,7 @@ function passLabelMap(...lists) {
 export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, project, dateISO, equipment }) {
   const { gte, lt } = utcDayRange(dateISO)
 
-  const [activityRes, areaLabelRows, projectDelayRes, masterDelayRes, passTypeRows, liftRows, operatorRes, areaLevelLabel] = await Promise.all([
+  const [activityRes, areaLabelRows, projectDelayRes, masterDelayRes, passTypeRows, liftRows, operatorRes, areaLevelLabel, layerRes] = await Promise.all([
     fetchDomainRecords({
       domain: 'jfb_daily_activities', system: 'core', appSlug,
       filters: { project_id: projectId, report_date: dateISO },
@@ -338,6 +359,7 @@ export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, p
     fetchPicklistValues('pkl-jfb-lift'),
     fetchDomainRecords({ domain: 'jfb_operators', system: 'core', appSlug, limit: 500 }),
     fetchAreaLevel1Label({ appSlug, projectId }),
+    fetchDomainRecords({ domain: 'jfb_project_layers', system: 'core', appSlug, filters: { project_id: projectId }, limit: 200 }),
   ])
 
   const areaLabelByActivityId = new Map(
@@ -347,6 +369,9 @@ export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, p
   const masterDelayCodeById = new Map((masterDelayRes?.data ?? []).map((r) => [r.id, r]))
   const passTypeLabels = passLabelMap(passTypeRows, liftRows)
   const operatorNameById = new Map((operatorRes?.data ?? []).map((o) => [o.id, o.name]))
+  const projectLayers = layerRes?.data ?? []
+  const useLayerCol = payGroupsOf(projectLayers).length > 0
+  const layerNameById = new Map(projectLayers.map((l) => [l.id, l.layer_report_name || l.layer_name]))
 
   const activities = (activityRes?.data ?? [])
 
@@ -368,13 +393,14 @@ export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, p
     const isCapping = cappingEquipmentIds.has(equipmentId)
     const sorted = rows.slice().sort((x, y) => new Date(x.start_date_time) - new Date(y.start_date_time))
     const listed = isCapping ? sorted.filter((a) => !isProductiveActivity(a)) : sorted
-    const shape = activityTableShape(isCapping, areaLevelLabel)
+    const shape = activityTableShape(isCapping, areaLevelLabel, useLayerCol)
     const rowValues = listed.map((a, i) => {
       const value = {
         area: areaLabelByActivityId.get(a.id) ?? '',
         pass: a.pass_type ? (passTypeLabels[a.pass_type] ?? a.pass_type) : '',
         lane: a.lane ?? '',
         step: a.step != null ? String(a.step) : '',
+        layer: a.layer_id ? (layerNameById.get(a.layer_id) ?? '') : '',
         event: a.category || resolveDelayCode(a.delay_code_id, projectDelayCodeById, masterDelayCodeById),
         notes: a.notes || '',
       }
@@ -542,6 +568,7 @@ function buildCappingColumns({ acts, eqStats, project, labels }) {
       layerId: st?.layer_id ?? null,
       layerRank: layerRank(st?.layer_id),
       areaText,
+      layerText: layerById.get(st?.layer_id)?.layer_name || '—',
       raw: {
         goh,
         noh,
@@ -625,25 +652,66 @@ function shapeCappingSheet({ acts, eqStats, project, labels }) {
   const { columns, total } = buildCappingColumns({ acts, eqStats, project, labels })
   const derivesCy =
     project?.cap_conversion_factor != null || columns.some((c) => c.raw.cyPlaced !== 0)
-  const metricRows = (derivesCy
+  const baseRows = (derivesCy
     ? CAP_METRIC_ROWS
     : CAP_METRIC_ROWS.filter(([, key]) => !CAP_CY_DERIVED_ROWS.has(key))
   ).map(([label, key]) => (key === 'areaLabel' ? [labels.areaLevelLabel, key] : [label, key]))
 
+  const groups = payGroupsOf(labels.layers)
+  const payKey = (g) => `pay:${g.name}`
+  const metricRows = groups.length === 0
+    ? baseRows
+    : baseRows.flatMap(([label, key]) => {
+      if (key === 'acres') return [['Layer', 'layerText']]
+      if (key === 'designTons') return []
+      if (key === 'cyPlaced') return groups.map((g) => [g.rowLabel, payKey(g)])
+      return [[label, key]]
+    })
+
+  const payValues = (row) => {
+    const out = {}
+    for (const g of groups) {
+      out[payKey(g)] = fmtDec(
+        payQuantity(g, [{ layerId: row.layerId, volumeCy: row.cyPlaced, areaSf: row.areaSf, tons: row.tonsPlaced }]),
+        payQtyDecimals(g.unit),
+      )
+    }
+    return out
+  }
+
   const shaped = columns.length > 0
-    ? columns.map((c) => ({ columnLabel: c.columnLabel, ...shapeCapStats(c.raw) }))
+    ? columns.map((c) => ({
+      columnLabel: c.columnLabel,
+      ...shapeCapStats(c.raw),
+      layerText: c.layerText,
+      ...payValues({ layerId: c.layerId, cyPlaced: c.raw.cyPlaced, areaSf: c.raw.areaSf, tonsPlaced: c.raw.tonsPlaced }),
+    }))
     : [{
         columnLabel: 'Standard',
         ...shapeCapStats({ goh: 0, noh: 0, areaSf: 0, tonsPlaced: 0, cyPlaced: 0, designTons: 0, material: '—', passText: '—', areaLabel: '—' }),
+        layerText: '—',
       }]
-  const shapedTotal = shapeCapStats(total)
+  const totalPay = {}
+  for (const g of groups) {
+    totalPay[payKey(g)] = fmtDec(
+      payQuantity(g, columns.map((c) => ({
+        layerId: c.layerId, volumeCy: c.raw.cyPlaced, areaSf: c.raw.areaSf, tons: c.raw.tonsPlaced,
+      }))),
+      payQtyDecimals(g.unit),
+    )
+  }
+  const shapedTotal = {
+    ...shapeCapStats(total),
+    layerText: joinUnique(columns.map((c) => c.layerText)),
+    ...totalPay,
+  }
 
   return {
     columns: shaped.map((c) => c.columnLabel),
     rows: metricRows.map(([label, key]) => ({
       label,
       total: shapedTotal[key],
-      values: shaped.map((c) => c[key]),
+      values: shaped.map((c) => c[key] ?? ''),
     })),
     headline: {
       goh: fmtHrs(total.goh),
@@ -677,6 +745,7 @@ export async function buildProductionComboTotalsByEquipmentParam({ appSlug, proj
     areaById: new Map((areaRes?.data ?? []).map((a) => [a.id, a])),
     areaNameById,
     areaLevelLabel,
+    layers: layerRes?.data ?? [],
     passLabels,
     layerById: new Map(
       (layerRes?.data ?? []).map((l) => [l.id, { ...l, layer_name: l.layer_report_name || l.layer_name }]),
@@ -892,7 +961,7 @@ function fmtFlow0(n) {
   return Math.round(n).toLocaleString('en-US')
 }
 
-export async function buildFlowAndPipeByEquipmentParam({ appSlug, projectId, dateISO }) {
+export async function buildFlowAndPipeByEquipmentParam({ appSlug, projectId, project, equipment, dateISO }) {
   const [flowRes, pipeRes] = await Promise.all([
     fetchDomainRecords({ domain: 'jfb_hydraulic_flow_stats', system: 'core', appSlug, filters: { project_id: projectId }, limit: 5000 }),
     fetchDomainRecords({ domain: 'jfb_hydraulic_pipe_configurations', system: 'core', appSlug, filters: { project_id: projectId }, limit: 500 }),
@@ -929,7 +998,15 @@ export async function buildFlowAndPipeByEquipmentParam({ appSlug, projectId, dat
   const pipeSegments = todaysPipeRows.map((r) => ({ id: r.id, name: r.segment_name, lengthFt: fmtFlow0(Number(r.length_ft) || 0) }))
   const pipeTotalLength = fmtFlow0(todaysPipeRows.reduce((a, r) => a + (Number(r.length_ft) || 0), 0))
 
-  return { flowStatsByEquipment, pipeSegments, pipeTotalLength }
+  const showFlowAndPipeByEquipment = {}
+  for (const eq of equipment ?? []) {
+    const wt = equipmentWorkType(project, eq, dateISO).toLowerCase()
+    const capping = wt.includes('cap') || wt.includes('placement')
+    showFlowAndPipeByEquipment[eq.id] =
+      !!project?.is_pipe_tracking && (!capping || wt.includes('hydraulic'))
+  }
+
+  return { flowStatsByEquipment, pipeSegments, pipeTotalLength, showFlowAndPipeByEquipment }
 }
 
 export async function validatePdfIssues({ appSlug, reportId, narrativeSections }) {
@@ -1036,7 +1113,15 @@ export async function buildSafetyPageDataParam({ appSlug, projectId, reportId, d
     .filter((g) => g.title.startsWith('Subcontractor'))
     .reduce((a, g) => a + g.items.length, 0)
   const equipmentCrowded = subItemCount > 0 && equipmentRows.length > 55
-  for (const g of equipmentGroups) g.inline = equipmentCrowded ? g.items.join('  ·  ') : null
+  for (const g of equipmentGroups) {
+    g.inline = equipmentCrowded && g.title.startsWith('Subcontractor') ? g.items.join('  ·  ') : null
+    const density = equipmentDensity(g.items.length + (equipmentCrowded ? 23 : 0))
+    g.fontSize = `${density.fontSize}pt`
+    g.lineHeight = String(density.lineHeight)
+    const split = Math.ceil(g.items.length / 2)
+    g.left = g.items.slice(0, split).map(softBreakInsideParens)
+    g.right = g.items.slice(split).map(softBreakInsideParens)
+  }
 
   const [preparerSignatureDataUri, sshoSignatureDataUri] = await Promise.all([
     safety?.signature_image_path

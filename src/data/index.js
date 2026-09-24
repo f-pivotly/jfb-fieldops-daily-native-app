@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { requestNewToken, setAuthToken } from '../helpers/pivotlyHelpers'
+import { FETCH_PAGE_SIZE } from '../constants/pagination'
 
 const IS_LOCAL = true
 
@@ -122,6 +123,18 @@ export async function fetchCurrentUser() {
   return data?.data ?? data
 }
 
+const MAX_PAGED_ROWS = 50000
+
+let truncationListener = null
+
+export function setTruncationListener(fn) {
+  truncationListener = fn
+}
+
+function onTruncation(detail) {
+  if (truncationListener) truncationListener(detail)
+}
+
 export async function fetchDomainRecords({ domain, system, appSlug, limit = 25, offset = 0, filters, sortCol, sortDir, countMode, forceMeta, includeDeleted }) {
   const { data } = await api.post('/core-data-read', {
     parameters: {
@@ -136,12 +149,27 @@ export async function fetchDomainRecords({ domain, system, appSlug, limit = 25, 
   })
 
   if (data?.meta?.has_more === true && limit > 1) {
-    console.warn(
-      `[core-data-read] TRUNCATED: ${domain} returned ${limit} rows at offset ${offset} and more exist — this caller is working from partial data.`,
-      { domain, limit, offset, filters },
-    )
+    const message = `[core-data-read] TRUNCATED: ${domain} returned ${limit} rows at offset ${offset} and more exist — this caller is working from partial data.`
+    console.warn(message, { domain, limit, offset, filters })
+    onTruncation({ domain, limit, offset, filters, message })
   }
   return data
+}
+
+export async function fetchAllDomainRecords({ domain, system, appSlug, filters, sortCol, sortDir, includeDeleted, pageSize = FETCH_PAGE_SIZE }) {
+  const all = []
+  for (let offset = 0; ; offset += pageSize) {
+    const res = await fetchDomainRecords({
+      domain, system, appSlug, filters, sortCol, sortDir, includeDeleted,
+      limit: pageSize, offset,
+    })
+    const page = Array.isArray(res) ? res : (res?.data ?? [])
+    all.push(...page)
+    if (page.length < pageSize) return all
+    if (all.length > MAX_PAGED_ROWS) {
+      throw new Error(`${domain} exceeded ${MAX_PAGED_ROWS} rows while paging — refusing to keep loading.`)
+    }
+  }
 }
 
 export function readWrittenRecordId(res) {

@@ -8,7 +8,7 @@ export async function buildPhotoAssetsParam(photos, weekStart) {
     weekPhotos.map(async (p) => {
       const blob = await downloadAttachment(p.photo_file_path)
       const dataUri = await blobToDataUri(blob)
-      return [String(p.photo_number), { label: p.label || `Photo ${p.photo_number}`, dataUri }]
+      return [String(p.photo_number), { label: p.label || '', dataUri }]
     }),
   )
   return Object.fromEntries(entries)
