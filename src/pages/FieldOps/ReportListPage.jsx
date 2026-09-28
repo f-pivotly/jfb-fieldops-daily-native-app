@@ -11,7 +11,7 @@ import { todayISO, addDaysISO, prettyDate } from './lib/realizedToDate'
 import { isoCalWeek, projectWeekNumber } from './lib/reportPdfData'
 import { WARNING_BG } from './reportEditorTabs/components/WarningBanner'
 import { setReportTimeZone } from '../../lib/reportTz'
-import LoadMoreButton from '../../components/LoadMoreButton'
+import PaginationBar from '../../components/PaginationBar'
 
 const DAY_LABEL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const PAGE_SIZE = 5
@@ -59,7 +59,7 @@ export default function ReportListPage() {
   setReportTimeZone(project?.report_timezone)
   const { config } = useAppConfig()
   const canManageSettings = useFieldOpsAction('manage_project_settings')
-  const { rows: listRows, done, loading: listLoading, error: listError, loadMore } =
+  const { rows: listRows, hasNext, loading: listLoading, error: listError, page, setPage } =
     useReportList(projectId, PAGE_SIZE)
 
   const rows = listRows.map((r) => {
@@ -235,7 +235,7 @@ export default function ReportListPage() {
       ))}
 
       {!listLoading && (
-        <LoadMoreButton count={rows.length} hasMore={!done} onClick={loadMore} noun="report" mt={4} mb={20} />
+        <PaginationBar page={page} pageSize={PAGE_SIZE} count={rows.length} hasNext={hasNext} onChange={setPage} noun="report" mt={4} mb={20} />
       )}
     </>
   )

@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Box, Text, Group, Button, Table, Badge, Modal, TextInput, Select, PasswordInput } from "@mantine/core";
 import { IconPlus } from "@tabler/icons-react";
 import { USER_ROLES } from "../../data/adminSampleData";
+import PaginationBar from "../../components/PaginationBar";
+import { usePagedRows } from "../../hooks/ui/usePagedRows";
 
 const LIVE_PROJECTS_PLACEHOLDER = [];
 
@@ -67,6 +69,7 @@ export default function AdminUsersSection() {
 }
 
 function UsersTab({ users, openAdd, toggleActive, modalOpen, setModalOpen, form, setField, passwordValid, canSave, handleSave }) {
+  const { pageRows: usersPageRows, page: usersPage, setPage: setUsersPage, total: usersTotal, pageSize: usersPageSize } = usePagedRows(users);
   return (
     <Box>
       <Group justify="space-between" mb={16}>
@@ -88,7 +91,7 @@ function UsersTab({ users, openAdd, toggleActive, modalOpen, setModalOpen, form,
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {users.map((u) => (
+              {usersPageRows.map((u) => (
                 <Table.Tr key={u.id}>
                   <Table.Td style={{ fontWeight: 600 }}>{u.full_name}</Table.Td>
                   <Table.Td>{u.email}</Table.Td>
@@ -109,6 +112,7 @@ function UsersTab({ users, openAdd, toggleActive, modalOpen, setModalOpen, form,
             </Table.Tbody>
           </Table>
         </Box>
+        <Box px={16} pb={16}><PaginationBar page={usersPage} pageSize={usersPageSize} count={usersPageRows.length} total={usersTotal} onChange={setUsersPage} noun="user" /></Box>
       </Box>
 
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">Add User</Text>} size="sm">

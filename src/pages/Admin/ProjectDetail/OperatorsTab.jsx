@@ -1,12 +1,13 @@
 import { useState } from "react";
-import { Box, Text, Group, Button, Modal, TextInput, Select, Checkbox, Avatar, SegmentedControl } from "@mantine/core";
+import { Box, Text, Group, Button, Modal, TextInput, Checkbox, Avatar, SegmentedControl } from "@mantine/core";
 import { IconPlus, IconRefresh } from "@tabler/icons-react";
 import { useDomainData } from "../../../hooks/core/useDomainData";
 import { useConfirmDialog } from "../../../hooks/ui/useConfirmDialog";
 import { useDomainAccess } from "../../../contexts/adminAccessContext";
 import { readWrittenRecordId } from "../../../data";
-import { useShowMore } from "../../../hooks/ui/useShowMore";
-import LoadMoreButton from "../../../components/LoadMoreButton";
+import { usePagedRows } from "../../../hooks/ui/usePagedRows";
+import PaginationBar from "../../../components/PaginationBar";
+import PagedSelect from "../../../components/PagedSelect";
 
 function initials(fullName) {
   return (fullName || "")
@@ -54,7 +55,7 @@ export default function OperatorsTab({ project }) {
         .filter((r) => r.operator)
     : [];
 
-  const { visible: visibleRows, hasMore, showMore } = useShowMore(rows);
+  const { pageRows: visibleRows, page, setPage, total, pageSize } = usePagedRows(rows);
 
   const linkedOperatorIds = new Set(links.filter((l) => l.is_active !== false).map((l) => l.operator_id));
   const availableOperators = allOperators.filter((o) => !linkedOperatorIds.has(o.id));
@@ -148,7 +149,7 @@ export default function OperatorsTab({ project }) {
             </Group>
           </Group>
         ))}
-        {!loading && !error && <LoadMoreButton count={visibleRows.length} hasMore={hasMore} onClick={showMore} noun="operator" />}
+        {!loading && !error && <PaginationBar page={page} pageSize={pageSize} count={visibleRows.length} total={total} onChange={setPage} noun="operator" />}
       </Box>
 
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">Add Operator</Text>} size="xs">
@@ -167,13 +168,14 @@ export default function OperatorsTab({ project }) {
 
         {mode === "existing" && (
           <>
-            <Select
+            <PagedSelect
               label="Operator"
               placeholder={availableOperators.length === 0 ? "No available operators" : "Choose an operator"}
               data={availableOperators.map((o) => ({ value: o.id, label: o.name }))}
               value={existingOperatorId}
               onChange={setExistingOperatorId}
-              searchable
+              nothingFoundMessage="No matching operators"
+              noun="operator"
               disabled={availableOperators.length === 0}
               mb={16}
             />

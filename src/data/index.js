@@ -2,7 +2,7 @@ import axios from 'axios'
 import { requestNewToken, setAuthToken } from '../helpers/pivotlyHelpers'
 import { FETCH_PAGE_SIZE } from '../constants/pagination'
 
-const IS_LOCAL = false
+const IS_LOCAL = true
 
 function resolveApiBase() {
   const runtimeConfig = window.__PIVOTLY_RUNTIME_CONFIG__;
@@ -156,20 +156,27 @@ export async function fetchDomainRecords({ domain, system, appSlug, limit = 25, 
   return data
 }
 
-export async function fetchAllDomainRecords({ domain, system, appSlug, filters, sortCol, sortDir, includeDeleted, pageSize = FETCH_PAGE_SIZE }) {
-  const all = []
+export async function* iterateDomainRecords({ domain, system, appSlug, filters, sortCol, sortDir, includeDeleted, pageSize = FETCH_PAGE_SIZE }) {
   for (let offset = 0; ; offset += pageSize) {
     const res = await fetchDomainRecords({
       domain, system, appSlug, filters, sortCol, sortDir, includeDeleted,
       limit: pageSize, offset, paged: true,
     })
     const page = Array.isArray(res) ? res : (res?.data ?? [])
+    if (page.length) yield page
+    if (page.length < pageSize || res?.meta?.has_more === false) return
+  }
+}
+
+export async function fetchAllDomainRecords(options) {
+  const all = []
+  for await (const page of iterateDomainRecords(options)) {
     all.push(...page)
-    if (page.length < pageSize || res?.meta?.has_more === false) return all
     if (all.length > MAX_PAGED_ROWS) {
-      throw new Error(`${domain} exceeded ${MAX_PAGED_ROWS} rows while paging — refusing to keep loading.`)
+      throw new Error(`${options.domain} exceeded ${MAX_PAGED_ROWS} rows while paging — refusing to keep loading.`)
     }
   }
+  return all
 }
 
 export function readWrittenRecordId(res) {

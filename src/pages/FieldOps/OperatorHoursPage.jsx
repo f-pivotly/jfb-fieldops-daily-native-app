@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Box, Group, Text, Table } from '@mantine/core'
 import { executeDataView } from '../../data'
+import PaginationBar from '../../components/PaginationBar'
+import { usePagedRows } from '../../hooks/ui/usePagedRows'
 
 function fmtHours(h) {
   return Number(h).toFixed(2)
@@ -20,6 +22,8 @@ export default function OperatorHoursPage() {
       .catch((err) => { if (!cancelled) setError(err.message) })
     return () => { cancelled = true }
   }, [])
+
+  const { pageRows: rowsPageRows, page: rowsPage, setPage: setRowsPage, total: rowsTotal, pageSize: rowsPageSize } = usePagedRows(rows ?? [])
 
   return (
     <>
@@ -58,7 +62,7 @@ export default function OperatorHoursPage() {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {rows.map((r) => (
+            {rowsPageRows.map((r) => (
               <Table.Tr key={r.operator_id}>
                 <Table.Td fw={500}>{r.full_name}</Table.Td>
                 <Table.Td ta="right">{fmtHours(r.operating_hours)}</Table.Td>
@@ -69,6 +73,9 @@ export default function OperatorHoursPage() {
             ))}
           </Table.Tbody>
         </Table>
+      )}
+      {rows && rows.length > 0 && (
+        <PaginationBar page={rowsPage} pageSize={rowsPageSize} count={rowsPageRows.length} total={rowsTotal} onChange={setRowsPage} noun="operator" />
       )}
 
       <Text size="xs" c="dimmed" mt={16}>

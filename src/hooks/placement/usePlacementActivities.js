@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { fetchDomainRecords } from '../../data'
+import { fetchAllDomainRecords } from '../../data'
 import { useAppConfig } from '../../contexts/appConfigContext'
 
 const EMPTY = new Map()
@@ -19,13 +19,12 @@ export function usePlacementActivities(projectId, equipmentId, dates) {
     let alive = true
     const wanted = key.split('|')[2].split(',')
     Promise.all(wanted.map((d) =>
-      fetchDomainRecords({
+      fetchAllDomainRecords({
         domain: 'jfb_daily_activities',
         system: 'core',
         appSlug: config.appSlug,
         filters: { project_id: projectId, equipment_id: equipmentId, report_date: d },
-        limit: 1000,
-      }).then((res) => [d, Array.isArray(res) ? res : (res?.data ?? [])]),
+      }).then((rows) => [d, rows]),
     ))
       .then((pairs) => { if (alive) setLoaded({ key, map: new Map(pairs), error: null }) })
       .catch((err) => { if (alive) setLoaded({ key, map: EMPTY, error: err.message }) })

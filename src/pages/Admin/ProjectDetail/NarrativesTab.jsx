@@ -8,6 +8,8 @@ import LoadingSpinner from "../../../components/LoadingSpinner";
 import SafeError from "../../../components/SafeError";
 import { uniqueSectionKey, slugifySectionKey } from "../../../lib/narrativeSectionKey";
 import TabToolbar from "./TabToolbar";
+import PaginationBar from "../../../components/PaginationBar";
+import { usePagedRows } from "../../../hooks/ui/usePagedRows";
 
 const EMPTY_FORM = { section_key: "", narrative_label: "", date: "", sort_order: 0, is_active: true };
 
@@ -31,6 +33,7 @@ export default function NarrativesTab({ project }) {
   const { records: defaultSections } = useDomainData({ domain: "jfb_narrative_section_defaults", system: "core" });
 
   const rows = hasProject ? [...records].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)) : [];
+  const { pageRows: rowsPageRows, page: rowsPage, setPage: setRowsPage, total: rowsTotal, pageSize: rowsPageSize } = usePagedRows(rows);
 
   const [addOpen, setAddOpen] = useState(false);
   const [editRow, setEditRow] = useState(null);
@@ -154,6 +157,7 @@ export default function NarrativesTab({ project }) {
           </Box>
         )}
         {!loading && !error && hasProject && rows.length > 0 && (
+          <>
           <Table withTableBorder verticalSpacing="xs" fz="sm">
             <Table.Thead>
               <Table.Tr>
@@ -166,7 +170,7 @@ export default function NarrativesTab({ project }) {
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {rows.map((r) => (
+              {rowsPageRows.map((r) => (
                 <Table.Tr key={r.id}>
                   <Table.Td style={{ fontFamily: "monospace", fontSize: 12 }}>{r.section_key || "—"}</Table.Td>
                   <Table.Td>{r.narrative_label}</Table.Td>
@@ -190,6 +194,8 @@ export default function NarrativesTab({ project }) {
               ))}
             </Table.Tbody>
           </Table>
+          <PaginationBar page={rowsPage} pageSize={rowsPageSize} count={rowsPageRows.length} total={rowsTotal} onChange={setRowsPage} noun="section" />
+          </>
         )}
       </Box>
 

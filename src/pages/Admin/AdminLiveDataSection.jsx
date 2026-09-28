@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Box, Text, Group, Select, TextInput, Table, Badge } from "@mantine/core";
 import { IconRefresh } from "@tabler/icons-react";
 import { NON_OPERATIONAL_CATEGORIES } from "../../data/adminSampleData";
+import PaginationBar from "../../components/PaginationBar";
+import { usePagedRows } from "../../hooks/ui/usePagedRows";
 
 const LIVE_EVENTS_PLACEHOLDER = [];
 const LIVE_PROJECTS_PLACEHOLDER = [];
@@ -26,6 +28,7 @@ export default function AdminLiveDataSection() {
     return true;
   });
 
+  const { pageRows: eventsPageRows, page: eventsPage, setPage: setEventsPage, total: eventsTotal, pageSize: eventsPageSize } = usePagedRows(events);
   return (
     <Box>
       <Text fw={700} size="lg" mb={4}>Live Data</Text>
@@ -72,7 +75,7 @@ export default function AdminLiveDataSection() {
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
-                  {events.map((e) => {
+                  {eventsPageRows.map((e) => {
                     const isDowntime = NON_OPERATIONAL_CATEGORIES.includes(e.category);
                     const area = [e.area_l1, e.area_l2, e.area_l3].filter(Boolean).join(" · ") || "—";
                     return (
@@ -93,6 +96,7 @@ export default function AdminLiveDataSection() {
               </Table>
             </Box>
           )}
+          {events.length > 0 && <PaginationBar page={eventsPage} pageSize={eventsPageSize} count={eventsPageRows.length} total={eventsTotal} onChange={setEventsPage} noun="event" />}
         </Box>
       </Box>
     </Box>

@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { Box, Text, SimpleGrid, Table } from "@mantine/core";
 import { useDomainData } from "../../hooks/core/useDomainData";
 import { useAppConfig } from "../../contexts/appConfigContext";
-import { fetchDomainRecords } from "../../data";
+import { fetchDomainRecords, fetchAllDomainRecords } from "../../data";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import SafeError from "../../components/SafeError";
+import PaginationBar from "../../components/PaginationBar";
+import { usePagedRows } from "../../hooks/ui/usePagedRows";
 
 const NAVY = "#0F2744";
 const BLUE = "#1A5CA8";
@@ -17,8 +19,7 @@ async function countRecords(appSlug, domain, filters) {
 }
 
 async function countActiveOperators(appSlug) {
-  const res = await fetchDomainRecords({ domain: "jfb_project_operators", system: "core", appSlug, limit: 1000 });
-  const rows = res?.data ?? [];
+  const rows = await fetchAllDomainRecords({ domain: "jfb_project_operators", system: "core", appSlug });
   return new Set(rows.filter((r) => r.is_active !== false).map((r) => r.operator_id)).size;
 }
 
@@ -53,6 +54,7 @@ export default function AdminDashboardSection() {
   const { records: areaLevels } = useDomainData({ domain: "jfb_project_area_levels", system: "core" });
   const counts = useDashboardCounts(config.appSlug);
   const activeProjects = records.filter((r) => r.is_active);
+  const { pageRows: activeProjectsPageRows, page: activeProjectsPage, setPage: setActiveProjectsPage, total: activeProjectsTotal, pageSize: activeProjectsPageSize } = usePagedRows(activeProjects);
 
   const levelPathByProject = {};
   for (const level of areaLevels.slice().sort((a, b) => (a.depth ?? 0) - (b.depth ?? 0))) {
@@ -109,7 +111,7 @@ export default function AdminDashboardSection() {
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
-                {activeProjects.map((row) => (
+                {activeProjectsPageRows.map((row) => (
                   <Table.Tr key={row.id}>
                     <Table.Td style={{ fontWeight: 700 }}>{row.name}</Table.Td>
                     <Table.Td>{row.client_name || "—"}</Table.Td>
@@ -128,6 +130,9 @@ export default function AdminDashboardSection() {
               </Table.Tbody>
             </Table>
           </Box>
+        )}
+        {!loading && !error && activeProjects.length > 0 && (
+          <Box px={16} pb={16}><PaginationBar page={activeProjectsPage} pageSize={activeProjectsPageSize} count={activeProjectsPageRows.length} total={activeProjectsTotal} onChange={setActiveProjectsPage} noun="project" /></Box>
         )}
       </Box>
     </Box>

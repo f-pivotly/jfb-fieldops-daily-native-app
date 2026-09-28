@@ -9,6 +9,8 @@ import { useConfirmDialog } from '../../../hooks/ui/useConfirmDialog'
 import { useFieldOpsDomainAccess, useFieldOpsAction } from '../../../contexts/fieldOpsAccessContext'
 import LoadingSpinner from '../../../components/LoadingSpinner'
 import SafeError from '../../../components/SafeError'
+import PaginationBar from '../../../components/PaginationBar'
+import { usePagedRows } from '../../../hooks/ui/usePagedRows'
 
 function slugify(label) {
   const trimmed = label.trim().toLowerCase()
@@ -74,6 +76,7 @@ export default function CoverMetricsTab({ project }) {
   const [formError, setFormError] = useState(null)
 
   const sorted = [...metrics].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+  const { pageRows: sortedPageRows, page: sortedPage, setPage: setSortedPage, total: sortedTotal, pageSize: sortedPageSize } = usePagedRows(sorted)
   const addKey = (addForm.metric_key ?? '').replace(/^_+|_+$/g, '')
   const addKeyTaken = !!addKey && metrics.some((m) => m.metric_key === addKey)
 
@@ -243,6 +246,7 @@ export default function CoverMetricsTab({ project }) {
       )}
 
       {!loading && !error && hasProject && sorted.length > 0 && (
+        <>
         <Table withTableBorder verticalSpacing="xs" fz="sm">
           <Table.Thead>
             <Table.Tr>
@@ -256,7 +260,7 @@ export default function CoverMetricsTab({ project }) {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {sorted.map((row) => (
+            {sortedPageRows.map((row) => (
               <Table.Tr key={row.id}>
                 <Table.Td style={{ fontFamily: 'monospace', fontSize: 12 }}>{row.metric_key || '—'}</Table.Td>
                 <Table.Td>{row.label}</Table.Td>
@@ -286,6 +290,8 @@ export default function CoverMetricsTab({ project }) {
             ))}
           </Table.Tbody>
         </Table>
+        <PaginationBar page={sortedPage} pageSize={sortedPageSize} count={sortedPageRows.length} total={sortedTotal} onChange={setSortedPage} noun="metric" />
+        </>
       )}
 
       <Modal opened={addOpen} onClose={() => setAddOpen(false)} title={<Text fw={700} size="sm">Add Metric</Text>} size="sm">

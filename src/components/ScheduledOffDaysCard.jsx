@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Box, Text, Group, Button, TextInput, UnstyledButton } from '@mantine/core'
 import { addDaysISO, daysBetween, prettyDate } from '../pages/FieldOps/lib/realizedToDate'
+import PaginationBar from './PaginationBar'
+import { usePagedRows } from '../hooks/ui/usePagedRows'
 
 export default function ScheduledOffDaysCard({ projectId, excludedDays, today, onCreate, onRemove, onError }) {
   const [startDate, setStartDate] = useState('')
@@ -91,10 +93,12 @@ export default function ScheduledOffDaysCard({ projectId, excludedDays, today, o
 }
 
 function DayList({ items, onRemove, highlight }) {
+  const { pageRows, page, setPage, total, pageSize } = usePagedRows(items)
   return (
+    <>
     <Box style={{ border: `1px solid ${highlight ? '#fde68a' : 'var(--mantine-color-gray-3)'}`, borderRadius: 6, background: highlight ? '#fffbeb' : undefined }}>
-      {items.map((d, i) => (
-        <Group key={d.exclude_date} justify="space-between" px={8} py={4} style={{ borderBottom: i < items.length - 1 ? '1px solid var(--mantine-color-gray-1)' : 'none' }}>
+      {pageRows.map((d, i) => (
+        <Group key={d.exclude_date} justify="space-between" px={8} py={4} style={{ borderBottom: i < pageRows.length - 1 ? '1px solid var(--mantine-color-gray-1)' : 'none' }}>
           <Group gap={8}>
             <Text size="xs" fw={600}>{prettyDate(d.exclude_date)}</Text>
             <Text size="xs" c="dimmed">{d.reason}</Text>
@@ -105,5 +109,7 @@ function DayList({ items, onRemove, highlight }) {
         </Group>
       ))}
     </Box>
+    <PaginationBar page={page} pageSize={pageSize} count={pageRows.length} total={total} onChange={setPage} noun="day" mt={8} />
+    </>
   )
 }

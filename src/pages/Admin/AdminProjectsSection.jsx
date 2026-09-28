@@ -1,5 +1,5 @@
 import { useState } from "react";
-import LoadMoreButton from "../../components/LoadMoreButton";
+import PaginationBar from "../../components/PaginationBar";
 import {
   Box,
   Text,
@@ -101,10 +101,10 @@ export default function AdminProjectsSection({ onConfigure }) {
   const { canCreate: canCreateProject } = useDomainAccess("jfb_projects");
   const { canCreate: canCreateAreaLevels, canUpdate: canUpdateAreaLevels, canDelete: canDeleteAreaLevels } = useDomainAccess("jfb_project_area_levels");
   const canEditAreaLevels = canCreateAreaLevels || canUpdateAreaLevels;
-  const { records, loading, error, creating, updating, reload, create, update, hasMore, loadingMore, loadMore } = useDomainData({
+  const { records, loading, error, creating, updating, reload, create, update, page, setPage, total, pageLoading, pageSize } = useDomainData({
     domain: "jfb_projects",
     system: "core",
-    loadMore: true,
+    paginate: true,
     sortCol: "name",
     sortDir: "asc",
   });
@@ -223,7 +223,7 @@ export default function AdminProjectsSection({ onConfigure }) {
           )}
           {!loading && !error && records.length > 0 && (
             <Box style={{ overflowX: "auto" }}>
-              <Table striped highlightOnHover withTableBorder withColumnBorders style={{ fontSize: 12, minWidth: 760 }}>
+              <Table striped highlightOnHover withTableBorder withColumnBorders style={{ fontSize: 12, minWidth: 760, opacity: pageLoading ? 0.5 : 1 }}>
                 <Table.Thead>
                   <Table.Tr>
                     <Table.Th>Project</Table.Th>
@@ -265,8 +265,10 @@ export default function AdminProjectsSection({ onConfigure }) {
                   ))}
                 </Table.Tbody>
               </Table>
-              <LoadMoreButton count={records.length} hasMore={hasMore} loading={loadingMore} onClick={loadMore} noun="project" />
             </Box>
+          )}
+          {!loading && !error && (
+            <PaginationBar page={page} pageSize={pageSize} count={records.length} total={total} onChange={setPage} disabled={pageLoading} noun="project" />
           )}
         </Box>
       </Box>

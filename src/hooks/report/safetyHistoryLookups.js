@@ -1,4 +1,4 @@
-import { fetchDomainRecords } from '../../data'
+import { fetchDomainRecords, fetchAllDomainRecords } from '../../data'
 
 const MAX_PRIOR_REPORT_CANDIDATES = 15
 
@@ -18,11 +18,10 @@ export function priorReportsFor(reports, report) {
 }
 
 async function fetchCrewRowsForReport(reportId, appSlug) {
-  const res = await fetchDomainRecords({
+  return fetchAllDomainRecords({
     domain: 'jfb_report_crew_summary_v2', system: 'core', appSlug,
-    filters: { report_id: reportId }, limit: 1000,
+    filters: { report_id: reportId },
   })
-  return Array.isArray(res) ? res : (res?.data ?? [])
 }
 
 export async function findMostRecentCrewCategories(candidates, appSlug) {

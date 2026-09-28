@@ -45,21 +45,21 @@ export async function fetchWeekCoverage({ appSlug, projectId, weekStartISO, week
 }
 
 export async function renderWeeklyProgressCharts({ appSlug, projectId, weekStartISO, weekEndISO }) {
-  const [projectRes, dredgeConfigRes, equipmentConfigRes, areasRes, equipmentRes, coverage] = await Promise.all([
+  const [projectRes, dredgeConfigRes, equipmentConfigRows, areaRows, equipmentRows, coverage] = await Promise.all([
     fetchDomainRecords({ domain: 'jfb_projects', system: 'core', appSlug, filters: { id: projectId }, limit: 1 }),
     fetchDomainRecords({ domain: 'jfb_dredge_config', system: 'core', appSlug, filters: { project_id: projectId }, limit: 1 }),
-    fetchDomainRecords({ domain: 'jfb_dredge_equipment_config', system: 'core', appSlug, filters: { project_id: projectId }, limit: 100 }),
-    fetchDomainRecords({ domain: 'jfb_project_areas', system: 'core', appSlug, filters: { project_id: projectId }, limit: 1000 }),
-    fetchDomainRecords({ domain: 'jfb_equipments', system: 'core', appSlug, filters: { project_id: projectId }, limit: 100 }),
+    fetchAllDomainRecords({ domain: 'jfb_dredge_equipment_config', system: 'core', appSlug, filters: { project_id: projectId } }),
+    fetchAllDomainRecords({ domain: 'jfb_project_areas', system: 'core', appSlug, filters: { project_id: projectId } }),
+    fetchAllDomainRecords({ domain: 'jfb_equipments', system: 'core', appSlug, filters: { project_id: projectId } }),
     fetchWeekCoverage({ appSlug, projectId, weekStartISO, weekEndISO }),
   ])
   const project = projectRes?.data?.[0]
   const cfg = dredgeConfigRes?.data?.[0]
   if (!project || !cfg) return {}
 
-  const equipmentConfigByEqId = new Map((equipmentConfigRes?.data ?? []).map((e) => [e.equipment_id, e]))
-  const areaNameById = new Map((areasRes?.data ?? []).map((a) => [a.id, a.name]))
-  const equipmentById = new Map((equipmentRes?.data ?? []).map((e) => [e.id, e]))
+  const equipmentConfigByEqId = new Map(equipmentConfigRows.map((e) => [e.equipment_id, e]))
+  const areaNameById = new Map(areaRows.map((a) => [a.id, a.name]))
+  const equipmentById = new Map(equipmentRows.map((e) => [e.id, e]))
 
   const [bgImage, aerialImage, colorbarImage, northImage, logoImage, isopachTiles, aerialTiles, cells] = await Promise.all([
     loadAttachmentImage(cfg.bg_path),

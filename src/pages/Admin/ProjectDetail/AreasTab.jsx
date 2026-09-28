@@ -6,6 +6,8 @@ import { useProjectAreas } from "../../../hooks/project/useProjectAreas";
 import { useAreaLevels } from "../../../hooks/project/useAreaLevels";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import SafeError from "../../../components/SafeError";
+import PaginationBar from "../../../components/PaginationBar";
+import { usePagedRows } from "../../../hooks/ui/usePagedRows";
 
 const EMPTY_FORM = { name: "", volume_goal_cy: "", area_goal_sf: "", notes: "", sort_order: 0 };
 
@@ -105,6 +107,7 @@ export default function AreasTab({ project }) {
   }
 
   const level1Areas = areasWithDepth.filter((a) => a.depth === 1).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+  const { pageRows: level1AreasPageRows, page: level1AreasPage, setPage: setLevel1AreasPage, total: level1AreasTotal, pageSize: level1AreasPageSize } = usePagedRows(level1Areas);
   const anyGoalSet = areasWithDepth.some((a) => a.volume_goal_cy || a.area_goal_sf);
   const sumCy = areasWithDepth.reduce((sum, a) => sum + (a.volume_goal_cy || 0), 0);
   const projectGoal = project?.volume_goal ? Number(project.volume_goal) : null;
@@ -174,7 +177,7 @@ export default function AreasTab({ project }) {
               <Text size="xs" c="dimmed" ta="center" py={16}>No {l1.label.toLowerCase()}s yet</Text>
             )}
             <Stack gap={8}>
-              {level1Areas.map((a1) => (
+              {level1AreasPageRows.map((a1) => (
                 <AreaNode
                   key={a1.id}
                   area={a1}
@@ -189,6 +192,7 @@ export default function AreasTab({ project }) {
                 />
               ))}
             </Stack>
+            <PaginationBar page={level1AreasPage} pageSize={level1AreasPageSize} count={level1AreasPageRows.length} total={level1AreasTotal} onChange={setLevel1AreasPage} noun={l1.label.toLowerCase()} />
           </Box>
         </>
       )}

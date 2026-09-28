@@ -7,6 +7,8 @@ import { useDomainData } from "../../../hooks/core/useDomainData";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import SafeError from "../../../components/SafeError";
 import TabToolbar from "./TabToolbar";
+import PaginationBar from "../../../components/PaginationBar";
+import { usePagedRows } from "../../../hooks/ui/usePagedRows";
 import { compareEquipmentSortOrder } from "../../FieldOps/lib/workType";
 
 function toDateInputValue(iso) {
@@ -21,6 +23,7 @@ export default function EquipmentTab({ project }) {
   const workTypeData = workTypeRecords.map((r) => ({ value: r.name, label: r.name }));
 
   const equipment = hasProject ? [...equipmentRecords].sort(compareEquipmentSortOrder) : [];
+  const { pageRows: pagedEquipment, page, setPage, total, pageSize } = usePagedRows(equipment);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editRow, setEditRow] = useState(null);
@@ -104,7 +107,7 @@ export default function EquipmentTab({ project }) {
         {!loading && !error && hasProject && equipment.length === 0 && (
           <Text size="xs" c="dimmed" ta="center" py={16}>No equipment configured</Text>
         )}
-        {!loading && !error && equipment.map((row) => (
+        {!loading && !error && pagedEquipment.map((row) => (
           <Group key={row.id} justify="space-between" p={8} mb={6} style={{ background: "#f5f6f8", border: "1px solid #ebebeb", borderRadius: 6 }}>
             <Group gap={8} style={{ opacity: row.is_active === false ? 0.55 : 1 }}>
               <IconAnchor size={14} color="#0F2744" />
@@ -136,6 +139,9 @@ export default function EquipmentTab({ project }) {
             </Group>
           </Group>
         ))}
+        {!loading && !error && (
+          <PaginationBar page={page} pageSize={pageSize} count={pagedEquipment.length} total={total} onChange={setPage} noun="equipment" plural="equipment" />
+        )}
       </Box>
 
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit" : "Add"} Equipment</Text>} size="sm">

@@ -4,11 +4,13 @@ import { Box, SimpleGrid, Text, Group } from '@mantine/core'
 import { useHover } from '@mantine/hooks'
 import { useVisibleProjects } from '../../hooks/project/useVisibleProjects'
 import { useAppConfig } from '../../contexts/appConfigContext'
-import { fetchDomainRecords } from '../../data'
+import { fetchDomainRecords, fetchAllDomainRecords } from '../../data'
 import { REPORT_STATUS_LABEL } from '../../config/reportStatus'
 import { todayISO, prettyDate } from './lib/realizedToDate'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import SafeError from '../../components/SafeError'
+import PaginationBar from '../../components/PaginationBar'
+import { usePagedRows } from '../../hooks/ui/usePagedRows'
 
 const STATUS_STYLE = {
   no_report: { background: '#F3F4F6', color: '#4B5563', ring: '#E5E7EB' },
@@ -20,8 +22,8 @@ const STATUS_STYLE = {
 
 async function loadDashboardDetails(appSlug, projectIds, today) {
   const [equipmentRes, todayRes, lastReportRows] = await Promise.all([
-    fetchDomainRecords({ domain: 'jfb_equipments', system: 'core', appSlug, filters: { is_active: true }, limit: 1000 }),
-    fetchDomainRecords({ domain: 'jfb_reports', system: 'core', appSlug, filters: { report_date: today }, limit: 500 }),
+    fetchAllDomainRecords({ domain: 'jfb_equipments', system: 'core', appSlug, filters: { is_active: true } }),
+    fetchAllDomainRecords({ domain: 'jfb_reports', system: 'core', appSlug, filters: { report_date: today } }),
     Promise.all(
       projectIds.map((projectId) =>
         fetchDomainRecords({
@@ -34,11 +36,11 @@ async function loadDashboardDetails(appSlug, projectIds, today) {
   ])
 
   const equipmentCounts = {}
-  for (const row of equipmentRes?.data ?? []) {
+  for (const row of equipmentRes) {
     equipmentCounts[row.project_id] = (equipmentCounts[row.project_id] ?? 0) + 1
   }
   const todayStatus = {}
-  for (const row of todayRes?.data ?? []) {
+  for (const row of todayRes) {
     todayStatus[row.project_id] = row.status
   }
   const lastReportDates = Object.fromEntries(
@@ -57,7 +59,8 @@ export default function DashboardPage() {
     .filter((p) => p.is_active)
     .slice()
     .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''))
-  const projectIdsKey = activeProjects.map((p) => p.id).join(',')
+  const { pageRows: pagedProjects, page, setPage, total, pageSize } = usePagedRows(activeProjects)
+  const projectIdsKey = pagedProjects.map((p) => p.id).join(',')
 
   const detailsKey = `${config.appSlug}|${today}|${projectIdsKey}`
 
@@ -96,7 +99,7 @@ export default function DashboardPage() {
 
       {ready && activeProjects.length > 0 && (
         <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing={16}>
-          {activeProjects.map((project) => (
+          {pagedProjects.map((project) => (
             <ProjectCard
               key={project.id}
               project={project}
@@ -106,6 +109,9 @@ export default function DashboardPage() {
             />
           ))}
         </SimpleGrid>
+      )}
+      {ready && activeProjects.length > 0 && (
+        <PaginationBar page={page} pageSize={pageSize} count={pagedProjects.length} total={total} onChange={setPage} noun="project" mt={16} />
       )}
     </>
   )

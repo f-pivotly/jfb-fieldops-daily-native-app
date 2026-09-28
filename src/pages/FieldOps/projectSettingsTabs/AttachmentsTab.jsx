@@ -5,6 +5,8 @@ import { useProjectAttachments } from '../../../hooks/project/useProjectAttachme
 import { useConfirmDialog } from '../../../hooks/ui/useConfirmDialog'
 import LoadingSpinner from '../../../components/LoadingSpinner'
 import SafeError from '../../../components/SafeError'
+import PaginationBar from '../../../components/PaginationBar'
+import { usePagedRows } from '../../../hooks/ui/usePagedRows'
 
 export default function AttachmentsTab({ project }) {
   const hasProject = !!project?.id
@@ -18,6 +20,7 @@ export default function AttachmentsTab({ project }) {
   const [formError, setFormError] = useState(null)
 
   const sorted = [...attachments].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+  const { pageRows: sortedPageRows, page: sortedPage, setPage: setSortedPage, total: sortedTotal, pageSize: sortedPageSize } = usePagedRows(sorted)
 
   function openAdd() {
     const nextSort = sorted.length === 0 ? 10 : Math.max(...sorted.map((a) => a.sort_order ?? 0)) + 10
@@ -108,6 +111,7 @@ export default function AttachmentsTab({ project }) {
       )}
 
       {!loading && !error && hasProject && sorted.length > 0 && (
+        <>
         <Table withTableBorder verticalSpacing="xs" fz="sm">
           <Table.Thead>
             <Table.Tr>
@@ -118,7 +122,7 @@ export default function AttachmentsTab({ project }) {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {sorted.map((row) => (
+            {sortedPageRows.map((row) => (
               <Table.Tr key={row.id}>
                 <Table.Td>{row.name}</Table.Td>
                 <Table.Td c="dimmed">{row.sort_order ?? '—'}</Table.Td>
@@ -135,6 +139,8 @@ export default function AttachmentsTab({ project }) {
             ))}
           </Table.Tbody>
         </Table>
+        <PaginationBar page={sortedPage} pageSize={sortedPageSize} count={sortedPageRows.length} total={sortedTotal} onChange={setSortedPage} noun="attachment" />
+        </>
       )}
 
       <Modal opened={addOpen} onClose={() => setAddOpen(false)} title={<Text fw={700} size="sm">Add Attachment</Text>} size="sm">

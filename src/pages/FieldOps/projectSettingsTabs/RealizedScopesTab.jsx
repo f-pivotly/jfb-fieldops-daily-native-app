@@ -12,6 +12,8 @@ import { useAsyncAction } from '../../../hooks/ui/useAsyncAction'
 import LoadingSpinner from '../../../components/LoadingSpinner'
 import SafeError from '../../../components/SafeError'
 import { prettyDate } from '../lib/realizedToDate'
+import PaginationBar from '../../../components/PaginationBar'
+import { usePagedRows } from '../../../hooks/ui/usePagedRows'
 
 const emptyDraft = () => ({
   label: '',
@@ -147,6 +149,7 @@ export default function RealizedScopesTab({ project }) {
     return 'All areas'
   }
 
+  const { pageRows: sortedPageRows, page: sortedPage, setPage: setSortedPage, total: sortedTotal, pageSize: sortedPageSize } = usePagedRows(sorted)
   if (!hasProject) return null
   if (loading) return <LoadingSpinner />
 
@@ -240,6 +243,7 @@ export default function RealizedScopesTab({ project }) {
           </Text>
         </Box>
       ) : (
+        <>
         <Table withTableBorder verticalSpacing="xs" fz="xs">
           <Table.Thead>
             <Table.Tr>
@@ -254,7 +258,7 @@ export default function RealizedScopesTab({ project }) {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {sorted.map((r) => (
+            {sortedPageRows.map((r) => (
               <Table.Tr key={r.id}>
                 <Table.Td fw={500}>{r.label}</Table.Td>
                 <Table.Td>{r.start_date ? prettyDate(String(r.start_date).slice(0, 10)) : '—'}</Table.Td>
@@ -285,6 +289,8 @@ export default function RealizedScopesTab({ project }) {
             ))}
           </Table.Tbody>
         </Table>
+        <PaginationBar page={sortedPage} pageSize={sortedPageSize} count={sortedPageRows.length} total={sortedTotal} onChange={setSortedPage} noun="scope" />
+        </>
       )}
 
       <Modal opened={addOpen} onClose={() => setAddOpen(false)} size="lg"

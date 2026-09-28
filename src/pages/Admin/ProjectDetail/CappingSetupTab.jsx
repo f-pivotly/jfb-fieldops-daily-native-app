@@ -13,6 +13,9 @@ import { useProjectLayerMaterials } from "../../../hooks/capping/useProjectLayer
 import { useProjectMaterialComponents } from "../../../hooks/capping/useProjectMaterialComponents";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import SafeError from "../../../components/SafeError";
+import PaginationBar from "../../../components/PaginationBar";
+import { usePagedRows } from "../../../hooks/ui/usePagedRows";
+import PagedSelect from "../../../components/PagedSelect";
 
 const UOM_OPTIONS = ["", "Tons", "CY", "Qty"];
 
@@ -399,6 +402,7 @@ function NamedTypeList({ rows, typeRef, nameField, typeField, reportNameField, e
     confirmMessage: (row) => `Delete "${row[nameField]}"? Any mappings that use it will also be removed.`,
   });
 
+  const { pageRows: pagedPageRows, page: pagedPage, setPage: setPagedPage, total: pagedTotal, pageSize: pagedPageSize } = usePagedRows(rows);
   const typeName = (id) => typeRef.find((t) => t.id === id)?.name ?? null;
 
   return (
@@ -409,7 +413,7 @@ function NamedTypeList({ rows, typeRef, nameField, typeField, reportNameField, e
         <EmptyState icon={icon} text={emptyText} />
       ) : (
         <Stack gap={8}>
-          {rows.map((r) => (
+          {pagedPageRows.map((r) => (
             <ListItem
               key={r.id}
               icon={icon}
@@ -431,6 +435,7 @@ function NamedTypeList({ rows, typeRef, nameField, typeField, reportNameField, e
           ))}
         </Stack>
       )}
+      {rows.length > 0 && <PaginationBar page={pagedPage} pageSize={pagedPageSize} count={pagedPageRows.length} total={pagedTotal} onChange={setPagedPage} noun={entityLabel.toLowerCase()} />}
 
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit" : "Add"} {entityLabel}</Text>} size="sm">
         <TextInput label={`${entityLabel} Name`} required value={form.name} onChange={(e) => setFormField("name", e.currentTarget.value)} mb={10} autoFocus />
@@ -517,6 +522,7 @@ function ComponentsList({ rows, typeRef, saving, onCreate, onUpdate, onDelete })
     confirmMessage: (row) => `Delete "${row.component_name}"? Any mappings that use it will also be removed.`,
   });
 
+  const { pageRows: pagedPageRows, page: pagedPage, setPage: setPagedPage, total: pagedTotal, pageSize: pagedPageSize } = usePagedRows(rows);
   const typeName = (id) => typeRef.find((t) => t.id === id)?.name ?? null;
 
   return (
@@ -531,7 +537,7 @@ function ComponentsList({ rows, typeRef, saving, onCreate, onUpdate, onDelete })
         <EmptyState icon="🧪" text="No components yet. Only needed when a material is a blend (e.g. amended sand)." />
       ) : (
         <Stack gap={8}>
-          {rows.map((r) => (
+          {pagedPageRows.map((r) => (
             <ListItem
               key={r.id}
               icon="🧪"
@@ -546,6 +552,7 @@ function ComponentsList({ rows, typeRef, saving, onCreate, onUpdate, onDelete })
           ))}
         </Stack>
       )}
+      {rows.length > 0 && <PaginationBar page={pagedPage} pageSize={pagedPageSize} count={pagedPageRows.length} total={pagedTotal} onChange={setPagedPage} noun="component" />}
 
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit" : "Add"} Component</Text>} size="sm">
         <TextInput label="Component Name" required value={form.name} onChange={(e) => setFormField("name", e.currentTarget.value)} mb={10} autoFocus />
@@ -606,12 +613,13 @@ function AreaLayerMappings({ areas, layers, map, saving, onCreate, onUpdate, onD
 
   const availableLayers = (id, excludeRowId) => layers.filter((l) => !map.some((m) => m.area_id === id && m.layer_id === l.id && m.id !== excludeRowId));
 
+  const { pageRows: pagedPageRows, page: pagedPage, setPage: setPagedPage, total: pagedTotal, pageSize: pagedPageSize } = usePagedRows(areas);
   if (areas.length === 0) return <EmptyState icon="📍" text="No areas yet — add areas on the Areas tab first." />;
   if (layers.length === 0) return <EmptyState icon="🧱" text="No layers yet — add layers first." />;
 
   return (
     <Box>
-      {areas.map((area) => {
+      {pagedPageRows.map((area) => {
         const rows = map.filter((m) => m.area_id === area.id);
         return (
           <MapGroup key={area.id} icon="📍" title={areaPath(area.id, areas)} addLabel="Add Layer" onAdd={() => openAdd(area.id)}>
@@ -640,12 +648,13 @@ function AreaLayerMappings({ areas, layers, map, saving, onCreate, onUpdate, onD
                 />
               );
             })}
+      <PaginationBar page={pagedPage} pageSize={pagedPageSize} count={pagedPageRows.length} total={pagedTotal} onChange={setPagedPage} noun="area" />
           </MapGroup>
         );
       })}
 
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit Area Layer" : "Add Layer to Area"}</Text>} size="sm">
-        <Select label="Layer" required data={availableLayers(areaId, editRow?.id).map((l) => ({ value: l.id, label: l.layer_name }))} value={form.layerId} onChange={(v) => setFormField("layerId", v ?? "")} mb={10} />
+        <PagedSelect label="Layer" required noun="layer" nothingFoundMessage="No matching layers" data={availableLayers(areaId, editRow?.id).map((l) => ({ value: l.id, label: l.layer_name }))} value={form.layerId} onChange={(v) => setFormField("layerId", v ?? "")} mb={10} />
         <Group grow mb={10}>
           <NumberInput label='Min Thickness (in)' hideControls value={form.minThickness} onChange={(v) => setFormField("minThickness", v)} />
           <NumberInput label='Target Thickness (in)' hideControls value={form.targetThickness} onChange={(v) => setFormField("targetThickness", v)} />
@@ -696,12 +705,13 @@ function LayerMaterialMappings({ layers, materials, map, saving, onCreate, onUpd
 
   const availableMaterials = (id, excludeRowId) => materials.filter((m) => !map.some((x) => x.layer_id === id && x.material_id === m.id && x.id !== excludeRowId));
 
+  const { pageRows: pagedPageRows, page: pagedPage, setPage: setPagedPage, total: pagedTotal, pageSize: pagedPageSize } = usePagedRows(layers);
   if (layers.length === 0) return <EmptyState icon="🧱" text="No layers yet." />;
   if (materials.length === 0) return <EmptyState icon="⛏️" text="No materials yet." />;
 
   return (
     <Box>
-      {layers.map((layer) => {
+      {pagedPageRows.map((layer) => {
         const rows = map.filter((m) => m.layer_id === layer.id);
         return (
           <MapGroup key={layer.id} icon="🧱" title={layer.layer_name} addLabel="Add Material" onAdd={() => openAdd(layer.id)}>
@@ -721,9 +731,10 @@ function LayerMaterialMappings({ layers, materials, map, saving, onCreate, onUpd
           </MapGroup>
         );
       })}
+      <PaginationBar page={pagedPage} pageSize={pagedPageSize} count={pagedPageRows.length} total={pagedTotal} onChange={setPagedPage} noun="layer" />
 
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit Layer Material" : "Add Material to Layer"}</Text>} size="sm">
-        <Select label="Material" required data={availableMaterials(layerId, editRow?.id).map((m) => ({ value: m.id, label: m.material_name }))} value={form.materialId} onChange={(v) => setFormField("materialId", v ?? "")} mb={10} />
+        <PagedSelect label="Material" required noun="material" nothingFoundMessage="No matching materials" data={availableMaterials(layerId, editRow?.id).map((m) => ({ value: m.id, label: m.material_name }))} value={form.materialId} onChange={(v) => setFormField("materialId", v ?? "")} mb={10} />
         <NumberInput label="Loading Rate (tons/hr, optional)" hideControls value={form.loadingRate} onChange={(v) => setFormField("loadingRate", v)} mb={10} />
         <TextInput label="Report Name Override (optional)" value={form.reportName} onChange={(e) => setFormField("reportName", e.currentTarget.value)} mb={16} />
         <Group justify="flex-end">
@@ -764,12 +775,13 @@ function MaterialComponentMappings({ materials, components, map, saving, onCreat
 
   const availableComponents = (id, excludeRowId) => components.filter((c) => !map.some((x) => x.material_id === id && x.component_id === c.id && x.id !== excludeRowId));
 
+  const { pageRows: pagedPageRows, page: pagedPage, setPage: setPagedPage, total: pagedTotal, pageSize: pagedPageSize } = usePagedRows(materials);
   if (materials.length === 0) return <EmptyState icon="⛏️" text="No materials yet." />;
   if (components.length === 0) return <EmptyState icon="🧪" text="No components yet. Add components first (only needed for blended materials)." />;
 
   return (
     <Box>
-      {materials.map((material) => {
+      {pagedPageRows.map((material) => {
         const rows = map.filter((m) => m.material_id === material.id);
         const sumPct = rows.reduce((sum, r) => sum + (Number(r.component_percent_of_material) || 0), 0);
         return (
@@ -796,9 +808,10 @@ function MaterialComponentMappings({ materials, components, map, saving, onCreat
           </MapGroup>
         );
       })}
+      <PaginationBar page={pagedPage} pageSize={pagedPageSize} count={pagedPageRows.length} total={pagedTotal} onChange={setPagedPage} noun="material" />
 
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit Material Component" : "Add Component to Material"}</Text>} size="sm">
-        <Select label="Component" required data={availableComponents(materialId, editRow?.id).map((c) => ({ value: c.id, label: c.component_name }))} value={form.componentId} onChange={(v) => setFormField("componentId", v ?? "")} mb={10} />
+        <PagedSelect label="Component" required noun="component" nothingFoundMessage="No matching components" data={availableComponents(materialId, editRow?.id).map((c) => ({ value: c.id, label: c.component_name }))} value={form.componentId} onChange={(v) => setFormField("componentId", v ?? "")} mb={10} />
         <NumberInput label="% of Material (optional)" hideControls min={0} max={100} value={form.percent} onChange={(v) => setFormField("percent", v)} mb={16} />
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => setModalOpen(false)}>Cancel</Button>

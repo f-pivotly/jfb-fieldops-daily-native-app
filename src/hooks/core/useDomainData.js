@@ -5,7 +5,7 @@ import { FETCH_PAGE_SIZE } from '../../constants/pagination'
 
 
 export function useDomainData(options) {
-  const { domain, system, projectId, reportId, includeDeleted, limit = 500, fetchAll = true, loadMore: incremental = false, sortCol, sortDir, filters: extraFilters } = options
+  const { domain, system, projectId, reportId, includeDeleted, limit = 500, fetchAll = true, paginate = false, sortCol, sortDir, filters: extraFilters } = options
 
   const extraFiltersKey = JSON.stringify(extraFilters ?? null)
 
@@ -17,10 +17,13 @@ export function useDomainData(options) {
   const [creating, setCreating] = useState(false)
   const [updating, setUpdating] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [hasMore, setHasMore] = useState(false)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const shownRef = useRef(FETCH_PAGE_SIZE)
-  const recordsRef = useRef([])
+  const [total, setTotal] = useState(null)
+  const [pageLoading, setPageLoading] = useState(false)
+  const pagedLoadedRef = useRef(false)
+  const scopeKey = `${domain}|${projectId ?? ''}|${reportId ?? ''}|${extraFiltersKey}`
+  const [pageState, setPageState] = useState({ key: scopeKey, page: 1 })
+  const page = pageState.key === scopeKey ? pageState.page : 1
+  const setPage = useCallback((next) => setPageState({ key: scopeKey, page: next }), [scopeKey])
   const generationRef = useRef(0)
   const mountedRef = useRef(true)
   useEffect(() => {
@@ -39,29 +42,41 @@ export function useDomainData(options) {
       }
       return Promise.resolve()
     }
+    const quietPageChange = paginate && pagedLoadedRef.current
     if (isCurrent()) {
-      setLoading(true)
+      if (quietPageChange) setPageLoading(true)
+      else setLoading(true)
       setError(null)
     }
     const scoped = JSON.parse(extraFiltersKey) ?? {}
     if (projectId) scoped.project_id = projectId
     else if (reportId) scoped.report_id = reportId
     const filters = Object.keys(scoped).length ? scoped : undefined
-    if (incremental) {
-      const pageLimit = shownRef.current
-      return fetchDomainRecords({ domain, system, appSlug: config.appSlug, filters, sortCol, sortDir, includeDeleted, limit: pageLimit, offset: 0, paged: true })
+    if (paginate) {
+      return fetchDomainRecords({
+        domain, system, appSlug: config.appSlug, filters, sortCol, sortDir, includeDeleted,
+        limit: FETCH_PAGE_SIZE, offset: (page - 1) * FETCH_PAGE_SIZE,
+        countMode: 'exact', forceMeta: true, paged: true,
+      })
         .then((res) => {
           if (!isCurrent()) return
           const rows = res?.data ?? []
-          recordsRef.current = rows
+          if (!rows.length && page > 1) {
+            setPage(page - 1)
+            return
+          }
+          pagedLoadedRef.current = true
           setRecords(rows)
-          setHasMore(res?.meta?.has_more ?? rows.length >= pageLimit)
+          setTotal(res?.meta?.total_records ?? null)
         })
         .catch((err) => {
           if (isCurrent()) setError(err.message)
         })
         .finally(() => {
-          if (isCurrent()) setLoading(false)
+          if (isCurrent()) {
+            setLoading(false)
+            setPageLoading(false)
+          }
         })
     }
     const request = fetchAll
@@ -78,39 +93,11 @@ export function useDomainData(options) {
       .finally(() => {
         if (isCurrent()) setLoading(false)
       })
-  }, [domain, system, config.appSlug, projectId, reportId, includeDeleted, limit, fetchAll, incremental, sortCol, sortDir, scopeMissing, extraFiltersKey])
+  }, [domain, system, config.appSlug, projectId, reportId, includeDeleted, limit, fetchAll, paginate, page, setPage, sortCol, sortDir, scopeMissing, extraFiltersKey])
 
   useEffect(() => {
-    shownRef.current = FETCH_PAGE_SIZE
     load()
   }, [load])
-
-  const loadMore = useCallback(async () => {
-    if (!incremental || loadingMore) return
-    const generation = generationRef.current
-    const scoped = JSON.parse(extraFiltersKey) ?? {}
-    if (projectId) scoped.project_id = projectId
-    else if (reportId) scoped.report_id = reportId
-    const filters = Object.keys(scoped).length ? scoped : undefined
-    setLoadingMore(true)
-    try {
-      const res = await fetchDomainRecords({
-        domain, system, appSlug: config.appSlug, filters, sortCol, sortDir, includeDeleted,
-        limit: FETCH_PAGE_SIZE, offset: recordsRef.current.length, paged: true,
-      })
-      if (!mountedRef.current || generation !== generationRef.current) return
-      const page = res?.data ?? []
-      const next = [...recordsRef.current, ...page]
-      recordsRef.current = next
-      shownRef.current = next.length
-      setRecords(next)
-      setHasMore(res?.meta?.has_more ?? page.length >= FETCH_PAGE_SIZE)
-    } catch (err) {
-      if (mountedRef.current) setError(err.message)
-    } finally {
-      if (mountedRef.current) setLoadingMore(false)
-    }
-  }, [incremental, loadingMore, domain, system, config.appSlug, projectId, reportId, includeDeleted, sortCol, sortDir, extraFiltersKey])
 
   const create = useCallback(async (recordData) => {
     setCreating(true)
@@ -145,5 +132,5 @@ export function useDomainData(options) {
     }
   }, [domain, system, config.appSlug, load])
 
-  return { records, loading, error, creating, updating, deleting, reload: load, create, update, remove, hasMore, loadingMore, loadMore }
+  return { records, loading, error, creating, updating, deleting, reload: load, create, update, remove, page, setPage, total, pageLoading, pageSize: FETCH_PAGE_SIZE }
 }

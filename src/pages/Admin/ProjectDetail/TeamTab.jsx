@@ -1,11 +1,14 @@
 import { useState } from "react";
-import { Box, Text, Group, Button, Modal, Select, Checkbox, Avatar, SegmentedControl } from "@mantine/core";
+import { Box, Text, Group, Button, Modal, Checkbox, Avatar, SegmentedControl } from "@mantine/core";
 import { IconPlus, IconRefresh } from "@tabler/icons-react";
 import { useDomainData } from "../../../hooks/core/useDomainData";
 import { useConfirmDialog } from "../../../hooks/ui/useConfirmDialog";
 import { useDomainAccess } from "../../../contexts/adminAccessContext";
 import { useRoleUsers } from "../../../hooks/iam/useRoleUsers";
 import { useRoleByCode } from "../../../hooks/iam/useRoleByCode";
+import PaginationBar from "../../../components/PaginationBar";
+import { usePagedRows } from "../../../hooks/ui/usePagedRows";
+import PagedSelect from "../../../components/PagedSelect";
 
 const PE_ROLE_CODE = "jfb_project_engineers";
 const PM_ROLE_CODE = "jfb_project_managers";
@@ -49,6 +52,7 @@ export default function TeamTab({ project }) {
     ? links.map((link) => ({ link, user: usersById.get(link.user_id) })).filter((r) => r.user)
     : [];
 
+  const { pageRows: rowsPageRows, page: rowsPage, setPage: setRowsPage, total: rowsTotal, pageSize: rowsPageSize } = usePagedRows(rows);
   const linkedUserIds = new Set(links.filter((l) => l.is_active !== false).map((l) => l.user_id));
 
   const [modalOpen, setModalOpen] = useState(false);
@@ -121,7 +125,7 @@ export default function TeamTab({ project }) {
         {!loading && !error && hasProject && rows.length === 0 && (
           <Text size="xs" c="dimmed" ta="center" py={16}>No team members assigned yet</Text>
         )}
-        {!loading && !error && rows.map(({ link, user }) => (
+        {!loading && !error && rowsPageRows.map(({ link, user }) => (
           <Group key={link.id} justify="space-between" p={8} mb={6} style={{ background: "#f5f6f8", border: "1px solid #ebebeb", borderRadius: 6, opacity: link.is_active === false ? 0.5 : 1 }}>
             <Group gap={10}>
               <Avatar size={26} radius="xl" style={{ background: "#0F2744", color: "#fff", fontSize: 10, fontWeight: 700 }}>
@@ -142,6 +146,7 @@ export default function TeamTab({ project }) {
             </Group>
           </Group>
         ))}
+        {!loading && !error && hasProject && <PaginationBar page={rowsPage} pageSize={rowsPageSize} count={rowsPageRows.length} total={rowsTotal} onChange={setRowsPage} noun="member" />}
       </Box>
 
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">Add to Team</Text>} size="xs">
@@ -158,13 +163,14 @@ export default function TeamTab({ project }) {
             { label: "PM", value: "pm" },
           ]}
         />
-        <Select
+        <PagedSelect
           label="User"
           placeholder={userSelectPlaceholder}
           data={availableUsers.map((u) => ({ value: u.userId, label: u.displayName || u.email }))}
           value={selectedUserId}
           onChange={setSelectedUserId}
-          searchable
+          nothingFoundMessage="No matching users"
+          noun="user"
           disabled={usersLoading || availableUsers.length === 0}
           mb={16}
         />

@@ -6,8 +6,8 @@ import { usePicklist } from '../../../hooks/core/usePicklist'
 import { useConfirmDialog } from '../../../hooks/ui/useConfirmDialog'
 import LoadingSpinner from '../../../components/LoadingSpinner'
 import SafeError from '../../../components/SafeError'
-import LoadMoreButton from '../../../components/LoadMoreButton'
-import { useShowMore } from '../../../hooks/ui/useShowMore'
+import PaginationBar from '../../../components/PaginationBar'
+import { usePagedRows } from '../../../hooks/ui/usePagedRows'
 
 const emptyDraft = () => ({ category: 'brennan', company: '', description: '', mobilized_at: '', demobilized_at: '', sort_order: 10 })
 
@@ -300,7 +300,7 @@ export default function SiteEquipmentTab({ project, reportDate }) {
 }
 
 function EquipmentTable({ rows, categoryLabels, onEdit, onDelete, muted = false, showCategory = true }) {
-  const { visible, hasMore, showMore } = useShowMore(rows)
+  const { pageRows: visible, page, setPage, total, pageSize } = usePagedRows(rows)
   return (
     <>
     <Table withTableBorder verticalSpacing="xs" fz="sm" opacity={muted ? 0.6 : 1}>
@@ -334,7 +334,7 @@ function EquipmentTable({ rows, categoryLabels, onEdit, onDelete, muted = false,
         ))}
       </Table.Tbody>
     </Table>
-    <LoadMoreButton count={visible.length} hasMore={hasMore} onClick={showMore} noun="item" />
+    <PaginationBar page={page} pageSize={pageSize} count={visible.length} total={total} onChange={setPage} noun="item" />
     </>
   )
 }
