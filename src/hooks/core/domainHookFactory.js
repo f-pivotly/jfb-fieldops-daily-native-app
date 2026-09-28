@@ -13,7 +13,7 @@ export function makeListHook(domain, key, scope, transform) {
 
 export function makeRowHook(domain, key, scope) {
   function useGeneratedRowHook(scopeId) {
-    const { records, ...rest } = useDomainData({ domain, system: 'core', [SCOPE_PARAM[scope]]: scopeId })
+    const { records, ...rest } = useDomainData({ domain, system: 'core', [SCOPE_PARAM[scope]]: scopeId, fetchAll: false })
     return { [key]: records[0] ?? null, ...rest }
   }
   return useGeneratedRowHook

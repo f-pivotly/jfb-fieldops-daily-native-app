@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Box, Text, Table, Group, Button, Checkbox, Modal, TextInput, Textarea, Select, Switch, Badge, SimpleGrid } from '@mantine/core'
-import { IconPlus, IconPencil, IconTrash, IconAlertTriangle, IconCheck, IconFlag } from '@tabler/icons-react'
+import { IconPlus, IconAlertTriangle, IconCheck, IconFlag } from '@tabler/icons-react'
 import { useEvents } from '../../../hooks/production/useEvents'
 import { useFieldOpsAction } from '../../../contexts/fieldOpsAccessContext'
 import { useOperators } from '../../../hooks/production/useOperators'
@@ -555,7 +555,7 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
             <Table.Th>Operator</Table.Th>
             <Table.Th>Notes</Table.Th>
             <Table.Th>Source</Table.Th>
-            <Table.Th style={{ width: 84 }} />
+            <Table.Th style={{ width: 140 }} />
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -597,13 +597,9 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
                 {e.is_deleted ? (
                   <Badge size="xs" color="gray">Deleted</Badge>
                 ) : (
-                  <Group gap={6} wrap="nowrap">
-                    <Box onClick={() => openEdit(e)} style={{ cursor: 'pointer', color: '#888', display: 'flex' }} title="Edit">
-                      <IconPencil size={13} />
-                    </Box>
-                    <Box onClick={() => setDeleteRow(e)} style={{ cursor: 'pointer', color: '#ef4444', display: 'flex' }} title="Delete">
-                      <IconTrash size={13} />
-                    </Box>
+                  <Group gap={10} wrap="nowrap">
+                    <Button size="xs" variant="subtle" onClick={() => openEdit(e)}>Edit</Button>
+                    <Button size="xs" variant="subtle" color="red" onClick={() => setDeleteRow(e)}>Delete</Button>
                   </Group>
                 )}
               </Table.Td>

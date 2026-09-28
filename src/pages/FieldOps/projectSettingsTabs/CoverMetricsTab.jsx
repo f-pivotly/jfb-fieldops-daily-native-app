@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { Box, Text, Group, Button, Modal, TextInput, NumberInput, Select, Switch, Table } from '@mantine/core'
-import { IconPlus, IconPencil, IconTrash, IconRefresh } from '@tabler/icons-react'
+import { Box, Text, Group, Button, Modal, TextInput, NumberInput, Select, Checkbox, Table } from '@mantine/core'
+import { IconPlus, IconRefresh } from '@tabler/icons-react'
 import { useMetrics } from '../../../hooks/metrics/useMetrics'
 import { useMetricSources } from '../../../hooks/metrics/useMetricSources'
 import { useMetricDefaults } from '../../../hooks/metrics/useMetricDefaults'
@@ -252,7 +252,7 @@ export default function CoverMetricsTab({ project }) {
               <Table.Th>Unit</Table.Th>
               <Table.Th>Order</Table.Th>
               <Table.Th>Active</Table.Th>
-              <Table.Th style={{ width: 64 }} />
+              <Table.Th style={{ width: 140 }} />
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -264,19 +264,21 @@ export default function CoverMetricsTab({ project }) {
                 <Table.Td c="dimmed">{row.unit ?? '—'}</Table.Td>
                 <Table.Td c="dimmed">{row.sort_order ?? '—'}</Table.Td>
                 <Table.Td>
-                  <Switch size="xs" checked={row.active !== false} onChange={() => toggleActive(row)} disabled={!canUpdate} />
+                  <Checkbox
+                    size="xs"
+                    checked={row.active !== false}
+                    label={row.active !== false ? 'Active' : 'Hidden'}
+                    onChange={() => toggleActive(row)}
+                    disabled={!canUpdate}
+                  />
                 </Table.Td>
                 <Table.Td>
-                  <Group gap={6} wrap="nowrap">
+                  <Group gap={10} wrap="nowrap">
                     {canUpdate && (
-                      <Box onClick={() => openEdit(row)} style={{ cursor: 'pointer', color: '#888', display: 'flex' }} title="Edit">
-                        <IconPencil size={13} />
-                      </Box>
+                      <Button size="xs" variant="subtle" onClick={() => openEdit(row)}>Edit</Button>
                     )}
                     {canDelete && (
-                      <Box onClick={() => handleDelete(row)} style={{ cursor: 'pointer', color: '#ef4444', display: 'flex' }} title="Delete">
-                        <IconTrash size={13} />
-                      </Box>
+                      <Button size="xs" variant="subtle" color="red" onClick={() => handleDelete(row)}>Delete</Button>
                     )}
                   </Group>
                 </Table.Td>
@@ -398,7 +400,7 @@ export default function CoverMetricsTab({ project }) {
                 onChange={(v) => setEditRow((r) => ({ ...r, sort_order: typeof v === 'number' ? v : 0 }))}
               />
             </Group>
-            <Switch
+            <Checkbox
               mb={10}
               checked={editRow.active}
               onChange={() => setEditRow((r) => ({ ...r, active: !r.active }))}

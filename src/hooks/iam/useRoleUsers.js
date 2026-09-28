@@ -6,7 +6,10 @@ export function useRoleUsers(roleId, { enabled = true } = {}) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const mountedRef = useRef(true)
-  useEffect(() => () => { mountedRef.current = false }, [])
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
 
   const load = useCallback(() => {
     if (!roleId || !enabled) {

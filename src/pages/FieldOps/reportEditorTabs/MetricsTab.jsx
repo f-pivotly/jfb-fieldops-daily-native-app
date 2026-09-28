@@ -75,7 +75,10 @@ function useSeededMetricRows({ metrics, metricDefaults, metricsLoading, defaults
   const [rows, setRows] = useState([])
   const seededRef = useRef(false)
   const mountedRef = useRef(true)
-  useEffect(() => () => { mountedRef.current = false }, [])
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
 
   const seed = useCallback(() => {
     if (seededRef.current || rows.length > 0 || metricsLoading || defaultsLoading) return

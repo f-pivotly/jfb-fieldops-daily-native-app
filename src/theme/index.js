@@ -1,4 +1,4 @@
-import { createTheme, Modal, Table, Tabs } from "@mantine/core";
+import { createTheme, Modal, MultiSelect, Select, Table, Tabs } from "@mantine/core";
 
 const brennanNavy = [
   "#EEF1F5",
@@ -68,6 +68,12 @@ export const theme = createTheme({
       styles: {
         tabLabel: { fontWeight: 700 },
       },
+    }),
+    Select: Select.extend({
+      defaultProps: { searchable: true, nothingFoundMessage: "No matches" },
+    }),
+    MultiSelect: MultiSelect.extend({
+      defaultProps: { searchable: true, nothingFoundMessage: "No matches" },
     }),
   },
 });

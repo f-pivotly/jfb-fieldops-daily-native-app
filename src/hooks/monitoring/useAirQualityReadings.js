@@ -11,7 +11,10 @@ export function useAirQualityReadings(config, dateISO) {
   const [fetched, setFetched] = useState({ key: null, readings: [], loading: false, error: null })
   const generationRef = useRef(0)
   const mountedRef = useRef(true)
-  useEffect(() => () => { mountedRef.current = false }, [])
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
 
   const projectId = config?.project_id
   const windowStart = config?.window_start

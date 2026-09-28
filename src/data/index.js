@@ -2,7 +2,7 @@ import axios from 'axios'
 import { requestNewToken, setAuthToken } from '../helpers/pivotlyHelpers'
 import { FETCH_PAGE_SIZE } from '../constants/pagination'
 
-const IS_LOCAL = true
+const IS_LOCAL = false
 
 function resolveApiBase() {
   const runtimeConfig = window.__PIVOTLY_RUNTIME_CONFIG__;
@@ -135,7 +135,7 @@ function onTruncation(detail) {
   if (truncationListener) truncationListener(detail)
 }
 
-export async function fetchDomainRecords({ domain, system, appSlug, limit = 25, offset = 0, filters, sortCol, sortDir, countMode, forceMeta, includeDeleted }) {
+export async function fetchDomainRecords({ domain, system, appSlug, limit = 25, offset = 0, filters, sortCol, sortDir, countMode, forceMeta, includeDeleted, paged = false }) {
   const { data } = await api.post('/core-data-read', {
     parameters: {
       domain, system, app_slug: appSlug, limit, offset,
@@ -148,7 +148,7 @@ export async function fetchDomainRecords({ domain, system, appSlug, limit = 25, 
     },
   })
 
-  if (data?.meta?.has_more === true && limit > 1) {
+  if (!paged && data?.meta?.has_more === true && limit > 1) {
     const message = `[core-data-read] TRUNCATED: ${domain} returned ${limit} rows at offset ${offset} and more exist — this caller is working from partial data.`
     console.warn(message, { domain, limit, offset, filters })
     onTruncation({ domain, limit, offset, filters, message })
@@ -161,11 +161,11 @@ export async function fetchAllDomainRecords({ domain, system, appSlug, filters, 
   for (let offset = 0; ; offset += pageSize) {
     const res = await fetchDomainRecords({
       domain, system, appSlug, filters, sortCol, sortDir, includeDeleted,
-      limit: pageSize, offset,
+      limit: pageSize, offset, paged: true,
     })
     const page = Array.isArray(res) ? res : (res?.data ?? [])
     all.push(...page)
-    if (page.length < pageSize) return all
+    if (page.length < pageSize || res?.meta?.has_more === false) return all
     if (all.length > MAX_PAGED_ROWS) {
       throw new Error(`${domain} exceeded ${MAX_PAGED_ROWS} rows while paging — refusing to keep loading.`)
     }

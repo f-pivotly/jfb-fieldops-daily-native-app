@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { Box, Text, Group, Button, Modal, TextInput, NumberInput, Select, Table } from '@mantine/core'
-import { IconPencil, IconTrash, IconRefresh } from '@tabler/icons-react'
+import { IconRefresh } from '@tabler/icons-react'
 import { useProjectSiteEquipment } from '../../../hooks/project/useProjectSiteEquipment'
 import { usePicklist } from '../../../hooks/core/usePicklist'
 import { useConfirmDialog } from '../../../hooks/ui/useConfirmDialog'
 import LoadingSpinner from '../../../components/LoadingSpinner'
 import SafeError from '../../../components/SafeError'
+import LoadMoreButton from '../../../components/LoadMoreButton'
+import { useShowMore } from '../../../hooks/ui/useShowMore'
 
 const emptyDraft = () => ({ category: 'brennan', company: '', description: '', mobilized_at: '', demobilized_at: '', sort_order: 10 })
 
@@ -298,7 +300,9 @@ export default function SiteEquipmentTab({ project, reportDate }) {
 }
 
 function EquipmentTable({ rows, categoryLabels, onEdit, onDelete, muted = false, showCategory = true }) {
+  const { visible, hasMore, showMore } = useShowMore(rows)
   return (
+    <>
     <Table withTableBorder verticalSpacing="xs" fz="sm" opacity={muted ? 0.6 : 1}>
       <Table.Thead>
         <Table.Tr>
@@ -307,11 +311,11 @@ function EquipmentTable({ rows, categoryLabels, onEdit, onDelete, muted = false,
           <Table.Th>Mobilized</Table.Th>
           <Table.Th>Demobilized</Table.Th>
           <Table.Th>Sort</Table.Th>
-          <Table.Th style={{ width: 64 }} />
+          <Table.Th style={{ width: 140 }} />
         </Table.Tr>
       </Table.Thead>
       <Table.Tbody>
-        {rows.map((row) => (
+        {visible.map((row) => (
           <Table.Tr key={row.id}>
             <Table.Td>{row.description}</Table.Td>
             {showCategory && (
@@ -321,18 +325,16 @@ function EquipmentTable({ rows, categoryLabels, onEdit, onDelete, muted = false,
             <Table.Td c="dimmed">{row.demobilized_at ?? '—'}</Table.Td>
             <Table.Td c="dimmed">{row.sort_order ?? '—'}</Table.Td>
             <Table.Td>
-              <Group gap={6} wrap="nowrap">
-                <Box onClick={() => onEdit(row)} style={{ cursor: 'pointer', color: '#888', display: 'flex' }} title="Edit">
-                  <IconPencil size={13} />
-                </Box>
-                <Box onClick={() => onDelete(row)} style={{ cursor: 'pointer', color: '#ef4444', display: 'flex' }} title="Delete">
-                  <IconTrash size={13} />
-                </Box>
+              <Group gap={10} wrap="nowrap">
+                <Button size="xs" variant="subtle" onClick={() => onEdit(row)}>Edit</Button>
+                <Button size="xs" variant="subtle" color="red" onClick={() => onDelete(row)}>Delete</Button>
               </Group>
             </Table.Td>
           </Table.Tr>
         ))}
       </Table.Tbody>
     </Table>
+    <LoadMoreButton count={visible.length} hasMore={hasMore} onClick={showMore} noun="item" />
+    </>
   )
 }

@@ -11,6 +11,7 @@ import { todayISO, addDaysISO, prettyDate } from './lib/realizedToDate'
 import { isoCalWeek, projectWeekNumber } from './lib/reportPdfData'
 import { WARNING_BG } from './reportEditorTabs/components/WarningBanner'
 import { setReportTimeZone } from '../../lib/reportTz'
+import LoadMoreButton from '../../components/LoadMoreButton'
 
 const DAY_LABEL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 const PAGE_SIZE = 5
@@ -233,15 +234,8 @@ export default function ReportListPage() {
         </Box>
       ))}
 
-      {!listLoading && rows.length > 0 && (
-        <Group justify="center" mt={4} mb={20} gap={12}>
-          <Text size="xs" c="dimmed">
-            {done ? `${rows.length} report${rows.length === 1 ? '' : 's'}` : `Showing ${rows.length}`}
-          </Text>
-          {!done && (
-            <Button size="xs" variant="default" onClick={loadMore}>Load more</Button>
-          )}
-        </Group>
+      {!listLoading && (
+        <LoadMoreButton count={rows.length} hasMore={!done} onClick={loadMore} noun="report" mt={4} mb={20} />
       )}
     </>
   )

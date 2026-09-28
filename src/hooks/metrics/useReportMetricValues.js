@@ -16,7 +16,10 @@ export function useReportMetricValues() {
   const [deleting, setDeleting] = useState(false)
   const generationRef = useRef(0)
   const mountedRef = useRef(true)
-  useEffect(() => () => { mountedRef.current = false }, [])
+  useEffect(() => {
+    mountedRef.current = true
+    return () => { mountedRef.current = false }
+  }, [])
 
   const load = useCallback(() => {
     const generation = ++generationRef.current

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import LoadMoreButton from "../../components/LoadMoreButton";
 import {
   Box,
   Text,
@@ -98,16 +99,20 @@ function toPayload(form) {
 
 export default function AdminProjectsSection({ onConfigure }) {
   const { canCreate: canCreateProject } = useDomainAccess("jfb_projects");
-  const { canCreate: canCreateAreaLevels, canUpdate: canUpdateAreaLevels } = useDomainAccess("jfb_project_area_levels");
+  const { canCreate: canCreateAreaLevels, canUpdate: canUpdateAreaLevels, canDelete: canDeleteAreaLevels } = useDomainAccess("jfb_project_area_levels");
   const canEditAreaLevels = canCreateAreaLevels || canUpdateAreaLevels;
-  const { records, loading, error, creating, updating, reload, create, update } = useDomainData({
+  const { records, loading, error, creating, updating, reload, create, update, hasMore, loadingMore, loadMore } = useDomainData({
     domain: "jfb_projects",
     system: "core",
+    loadMore: true,
+    sortCol: "name",
+    sortDir: "asc",
   });
   const {
     records: areaLevelRecords,
     create: createAreaLevel,
     update: updateAreaLevel,
+    remove: removeAreaLevel,
   } = useDomainData({ domain: "jfb_project_area_levels", system: "core" });
   const { records: workTypeRecords } = useDomainData({ domain: "jfb_work_types", system: "core" });
   const { values: primaryMeasureOptions, labels: primaryMeasureLabels } = usePicklist("pkl-jfb-primary-measure");
@@ -141,14 +146,18 @@ export default function AdminProjectsSection({ onConfigure }) {
 
   async function syncAreaLevels(projectId) {
     const existing = areaLevelRecords.filter((l) => l.project_id === projectId);
+    const lvl2 = form.area_lvl2_label.trim();
     const desired = [
       { depth: 1, label: form.area_lvl1_label.trim() || "Area" },
-      { depth: 2, label: form.area_lvl2_label.trim() },
-      { depth: 3, label: form.area_lvl3_label.trim() },
+      { depth: 2, label: lvl2 },
+      { depth: 3, label: lvl2 ? form.area_lvl3_label.trim() : "" },
     ];
     for (const d of desired) {
-      if (!d.label) continue;
       const match = existing.find((l) => l.depth === d.depth);
+      if (!d.label) {
+        if (match && canDeleteAreaLevels) await removeAreaLevel(match.id);
+        continue;
+      }
       if (!match) {
         await createAreaLevel({ project_id: projectId, depth: d.depth, label: d.label, sort_order: d.depth });
       } else if (match.label !== d.label) {
@@ -256,6 +265,7 @@ export default function AdminProjectsSection({ onConfigure }) {
                   ))}
                 </Table.Tbody>
               </Table>
+              <LoadMoreButton count={records.length} hasMore={hasMore} loading={loadingMore} onClick={loadMore} noun="project" />
             </Box>
           )}
         </Box>
@@ -303,7 +313,13 @@ export default function AdminProjectsSection({ onConfigure }) {
         <SimpleGrid cols={3} spacing="sm" mb={16}>
           <TextInput label="Level 1 Label" placeholder="e.g. Basin, Area, Cell" value={form.area_lvl1_label} onChange={(e) => setField("area_lvl1_label", e.currentTarget.value)} disabled={!canEditAreaLevels} />
           <TextInput label="Level 2 Label" placeholder="Optional" value={form.area_lvl2_label} onChange={(e) => setField("area_lvl2_label", e.currentTarget.value)} disabled={!canEditAreaLevels} />
-          <TextInput label="Level 3 Label" placeholder="Optional" value={form.area_lvl3_label} onChange={(e) => setField("area_lvl3_label", e.currentTarget.value)} disabled={!canEditAreaLevels} />
+          <TextInput
+            label="Level 3 Label"
+            placeholder={form.area_lvl2_label.trim() ? "Optional" : "Set Level 2 first"}
+            value={form.area_lvl2_label.trim() ? form.area_lvl3_label : ""}
+            onChange={(e) => setField("area_lvl3_label", e.currentTarget.value)}
+            disabled={!canEditAreaLevels || !form.area_lvl2_label.trim()}
+          />
         </SimpleGrid>
 
         <Text size="10px" fw={700} c="dimmed" mb={8} style={{ textTransform: "uppercase", letterSpacing: ".5px" }}>

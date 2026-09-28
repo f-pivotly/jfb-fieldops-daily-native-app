@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Box, Text, Group, Button, Modal, TextInput, NumberInput, Switch, Table } from '@mantine/core'
-import { IconPlus, IconPencil, IconTrash, IconRefresh } from '@tabler/icons-react'
+import { IconPlus, IconRefresh } from '@tabler/icons-react'
 import { useProjectAttachments } from '../../../hooks/project/useProjectAttachments'
 import { useConfirmDialog } from '../../../hooks/ui/useConfirmDialog'
 import LoadingSpinner from '../../../components/LoadingSpinner'
@@ -114,7 +114,7 @@ export default function AttachmentsTab({ project }) {
               <Table.Th>Name</Table.Th>
               <Table.Th>Sort Order</Table.Th>
               <Table.Th>Active</Table.Th>
-              <Table.Th style={{ width: 64 }} />
+              <Table.Th style={{ width: 140 }} />
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
@@ -126,13 +126,9 @@ export default function AttachmentsTab({ project }) {
                   <Switch size="xs" checked={row.active !== false} onChange={() => toggleActive(row)} />
                 </Table.Td>
                 <Table.Td>
-                  <Group gap={6} wrap="nowrap">
-                    <Box onClick={() => openEdit(row)} style={{ cursor: 'pointer', color: '#888', display: 'flex' }} title="Edit">
-                      <IconPencil size={13} />
-                    </Box>
-                    <Box onClick={() => handleDelete(row)} style={{ cursor: 'pointer', color: '#ef4444', display: 'flex' }} title="Delete">
-                      <IconTrash size={13} />
-                    </Box>
+                  <Group gap={10} wrap="nowrap">
+                    <Button size="xs" variant="subtle" onClick={() => openEdit(row)}>Edit</Button>
+                    <Button size="xs" variant="subtle" color="red" onClick={() => handleDelete(row)}>Delete</Button>
                   </Group>
                 </Table.Td>
               </Table.Tr>

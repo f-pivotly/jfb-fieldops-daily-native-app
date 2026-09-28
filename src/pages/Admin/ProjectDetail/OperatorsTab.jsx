@@ -5,6 +5,8 @@ import { useDomainData } from "../../../hooks/core/useDomainData";
 import { useConfirmDialog } from "../../../hooks/ui/useConfirmDialog";
 import { useDomainAccess } from "../../../contexts/adminAccessContext";
 import { readWrittenRecordId } from "../../../data";
+import { useShowMore } from "../../../hooks/ui/useShowMore";
+import LoadMoreButton from "../../../components/LoadMoreButton";
 
 function initials(fullName) {
   return (fullName || "")
@@ -51,6 +53,8 @@ export default function OperatorsTab({ project }) {
         .map((link) => ({ link, operator: operatorsById.get(link.operator_id) }))
         .filter((r) => r.operator)
     : [];
+
+  const { visible: visibleRows, hasMore, showMore } = useShowMore(rows);
 
   const linkedOperatorIds = new Set(links.filter((l) => l.is_active !== false).map((l) => l.operator_id));
   const availableOperators = allOperators.filter((o) => !linkedOperatorIds.has(o.id));
@@ -123,7 +127,7 @@ export default function OperatorsTab({ project }) {
         {!loading && !error && hasProject && rows.length === 0 && (
           <Text size="xs" c="dimmed" ta="center" py={16}>No operators assigned yet</Text>
         )}
-        {!loading && !error && rows.map(({ link, operator }) => (
+        {!loading && !error && visibleRows.map(({ link, operator }) => (
           <Group key={link.id} justify="space-between" p={8} mb={6} style={{ background: "#f5f6f8", border: "1px solid #ebebeb", borderRadius: 6, opacity: link.is_active === false ? 0.5 : 1 }}>
             <Group gap={10}>
               <Avatar size={26} radius="xl" style={{ background: "#0F2744", color: "#fff", fontSize: 10, fontWeight: 700 }}>
@@ -144,6 +148,7 @@ export default function OperatorsTab({ project }) {
             </Group>
           </Group>
         ))}
+        {!loading && !error && <LoadMoreButton count={visibleRows.length} hasMore={hasMore} onClick={showMore} noun="operator" />}
       </Box>
 
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">Add Operator</Text>} size="xs">
