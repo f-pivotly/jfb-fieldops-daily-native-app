@@ -140,6 +140,27 @@
     },
     {
       "pii": false,
+      "name": "rollup_type",
+      "slug": "rollup_type",
+      "type": "text",
+      "label": "Rollup Type",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "rollup_type",
+      "description": "How this metric's Week and Project Total roll up, from pkl-jfb-metric-rollup: 'sum' (running total -- volumes, areas, hours) or 'avg' (average of the days that carry a NON-ZERO reading -- turbidity NTU, flow rate). Blank means 'sum', so every existing metric keeps its behavior. Zeros are skipped under 'avg' because a day with no measurement must not pull the average down (Fountain Lake return-water flow read 0.78 instead of ~25 when phantom zero days were counted). Day is always that report's own value.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
       "name": "sort_order",
       "slug": "sort_order",
       "type": "integer",

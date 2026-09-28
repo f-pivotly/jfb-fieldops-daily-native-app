@@ -932,7 +932,10 @@ export async function buildCoverProductionTotalsParam({ appSlug, projectId, date
       const rows = await executeDataView('dvw-jfb-metric-manual-totals-v2', {
         p_project_id: projectId, p_start_date: from, p_end_date: to,
       }).catch(() => [])
-      manualByWindow[slot] = new Map((rows ?? []).map((r) => [r.metric_key, Number(r.total) || 0]))
+      manualByWindow[slot] = new Map((rows ?? []).map((r) => [r.metric_key, {
+        total: Number(r.total) || 0,
+        avg: r.avg_nonzero === null || r.avg_nonzero === undefined ? null : Number(r.avg_nonzero),
+      }]))
     }))
   }
 
@@ -943,8 +946,9 @@ export async function buildCoverProductionTotalsParam({ appSlug, projectId, date
       isAuto: m.source !== 'manual',
     }
     for (const [slot, from, to] of windows) {
+      const manual = m.source === 'manual' ? manualByWindow[slot]?.get(m.metric_key) : undefined
       const raw = m.source === 'manual'
-        ? (manualByWindow[slot]?.get(m.metric_key) ?? null)
+        ? (manual ? (m.rollup_type === 'avg' && slot !== 'day' ? manual.avg : manual.total) : null)
         : await autoTotal(m, from, to)
       out[slot] = fmtValue(m.unit, raw)
     }

@@ -16,7 +16,7 @@ import {
 import {
   buildCellFills,
   buildLiftPalette,
-  EXTENTS_SWATCH,
+  legendWithExtents,
   clippedSqFtForFills,
   liftsFromCoverage,
   materialsFromLifts,
@@ -157,11 +157,10 @@ export default function PlacementProgressTab({ project, report, reports, equipme
     ).map((d) => d.coverage)
   }, [grid, priorRows, activitiesByDate, layerNameById])
 
-  const chartLegend = useMemo(() => {
-    if (!assets?.designExtents?.rings?.length) return palette.legend
-    const base = palette.legend ?? []
-    return [...base, { key: 'extents', label: 'Stability Backfill Extents', color: EXTENTS_SWATCH }]
-  }, [palette, assets])
+  const chartLegend = useMemo(
+    () => legendWithExtents(palette.legend, assets?.designExtents),
+    [palette, assets],
+  )
 
   const lifts = useMemo(() => (coverage ? liftsFromCoverage(coverage, palette.order) : []), [coverage, palette])
   const materials = useMemo(() => materialsFromLifts(lifts), [lifts])
@@ -215,6 +214,7 @@ export default function PlacementProgressTab({ project, report, reports, equipme
         northImage: assets.northImage,
         legend: chartLegend,
         legendComplete: palette.legendComplete,
+        showCellGrid: palette.layerColors.size === 0,
         plant: assets.plant,
         plantPose: pose,
         materials,
@@ -524,12 +524,19 @@ export default function PlacementProgressTab({ project, report, reports, equipme
           />
           {!coverage && <Text size="xs" c="dimmed" py={24}>Upload the day&apos;s .bkt file and the chart appears here.</Text>}
         </Box>
-        {coverage && lifts.length === 0 && (
+        {coverage && lifts.length === 0 && (palette.layerColors.size > 0 ? (
+          <Text size="10px" c="#991B1B" px={10} py={6} mt={8} style={{ background: '#FEF2F2', borderRadius: 4 }}>
+            <b>No Layer is set on today&apos;s events, so today&apos;s coverage is not drawn.</b> This project
+            colours coverage by material and pass, and a cell whose layer is unknown is reported rather than
+            guessed at. Set the <b>Layer</b> on the day&apos;s events and the chart redraws here straight
+            away — no need to upload the file again.
+          </Text>
+        ) : (
           <Text size="10px" c="#92400E" px={10} py={6} mt={8} style={{ background: '#FFFBEB', borderRadius: 4 }}>
             Today&apos;s coverage draws in Daily Progress green either way. Set a <b>Layer</b> on the
             day&apos;s events so it takes its lift colour on tomorrow&apos;s chart.
           </Text>
-        )}
+        ))}
         {cellFills.unrecorded > 0 && (
           <Text size="10px" c="#92400E" px={10} py={6} mt={8} style={{ background: '#FFFBEB', borderRadius: 4 }}>
             <b>{cellFills.unrecorded} cell(s) from an earlier day have no recorded lift</b>, so they are left

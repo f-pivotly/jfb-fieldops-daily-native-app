@@ -5,6 +5,7 @@ import { useMetrics } from '../../../hooks/metrics/useMetrics'
 import { useMetricSources } from '../../../hooks/metrics/useMetricSources'
 import { useMetricDefaults } from '../../../hooks/metrics/useMetricDefaults'
 import { useEquipment } from '../../../hooks/project/useEquipment'
+import { usePicklist } from '../../../hooks/core/usePicklist'
 import { useConfirmDialog } from '../../../hooks/ui/useConfirmDialog'
 import { useFieldOpsDomainAccess, useFieldOpsAction } from '../../../contexts/fieldOpsAccessContext'
 import LoadingSpinner from '../../../components/LoadingSpinner'
@@ -46,7 +47,12 @@ function uniqueMetricKey(label, existingKeys) {
   return key
 }
 
-const emptyDraft = () => ({ metric_key: '', label: '', source: 'manual', equipment_id: null, unit: '', sort_order: 10 })
+const emptyDraft = () => ({ metric_key: '', label: '', source: 'manual', equipment_id: null, unit: '', rollup_type: 'sum', sort_order: 10 })
+
+const DEFAULT_ROLLUP_OPTIONS = [
+  { value: 'sum', label: 'Sum' },
+  { value: 'avg', label: 'Average (non-zero days)' },
+]
 
 export default function CoverMetricsTab({ project }) {
   const hasProject = !!project?.id
@@ -65,6 +71,10 @@ export default function CoverMetricsTab({ project }) {
     ...activeSources.filter((m) => m.value !== 'manual').map((m) => ({ value: m.value, label: m.label ?? m.value })),
   ]
   const sourceLabel = (v) => sourceOptions.find((o) => o.value === v)?.label ?? v ?? '—'
+  const { values: rollupValues, labels: rollupLabels } = usePicklist('pkl-jfb-metric-rollup')
+  const rollupOptions = rollupValues.length
+    ? rollupValues.map((v) => ({ value: v, label: rollupLabels[v] ?? v }))
+    : DEFAULT_ROLLUP_OPTIONS
   const equipmentOptions = [
     { value: '', label: 'All equipment' },
     ...equipment.map((eq) => ({ value: eq.id, label: eq.name })),
@@ -119,6 +129,7 @@ export default function CoverMetricsTab({ project }) {
         source: addForm.source,
         equipment_id: addForm.source === 'manual' ? null : addForm.equipment_id || null,
         unit: addForm.unit || null,
+        rollup_type: addForm.source === 'manual' && addForm.rollup_type === 'avg' ? 'avg' : 'sum',
         sort_order: addForm.sort_order ?? 0,
         active: true,
       })
@@ -136,6 +147,7 @@ export default function CoverMetricsTab({ project }) {
       source: row.source || 'manual',
       equipment_id: row.equipment_id || null,
       unit: row.unit || '',
+      rollup_type: row.rollup_type === 'avg' ? 'avg' : 'sum',
       sort_order: row.sort_order ?? 0,
       active: row.active !== false,
     })
@@ -153,6 +165,7 @@ export default function CoverMetricsTab({ project }) {
     const data = {
       label,
       unit: editRow.unit || null,
+      rollup_type: editRow.source === 'manual' && editRow.rollup_type === 'avg' ? 'avg' : 'sum',
       sort_order: editRow.sort_order ?? 0,
       active: editRow.active,
     }
@@ -335,6 +348,17 @@ export default function CoverMetricsTab({ project }) {
             mb={10}
           />
         )}
+        {addForm.source === 'manual' && (
+          <Select
+            label="Week / Total roll-up"
+            description="Sum for volumes, areas and hours. Average for readings such as turbidity or flow rate; days with no reading (blank or 0) are skipped."
+            data={rollupOptions}
+            value={addForm.rollup_type}
+            onChange={(v) => setAddForm((f) => ({ ...f, rollup_type: v ?? 'sum' }))}
+            allowDeselect={false}
+            mb={10}
+          />
+        )}
         <Group grow mb={10}>
           <TextInput
             label="Unit"
@@ -391,6 +415,17 @@ export default function CoverMetricsTab({ project }) {
                 data={equipmentOptions}
                 value={editRow.equipment_id ?? ''}
                 onChange={(v) => setEditRow((r) => ({ ...r, equipment_id: v || null }))}
+                mb={10}
+              />
+            )}
+            {editRow.source === 'manual' && (
+              <Select
+                label="Week / Total roll-up"
+                description="Sum for volumes, areas and hours. Average for readings such as turbidity or flow rate; days with no reading (blank or 0) are skipped."
+                data={rollupOptions}
+                value={editRow.rollup_type}
+                onChange={(v) => setEditRow((r) => ({ ...r, rollup_type: v ?? 'sum' }))}
+                allowDeselect={false}
                 mb={10}
               />
             )}

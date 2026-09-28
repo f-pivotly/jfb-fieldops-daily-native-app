@@ -7,7 +7,7 @@ import { uploadWarning } from '../../../hooks/ui/uploadWarning'
 import { readWrittenRecordId } from '../../../data'
 import { loadAttachmentImage, loadPublicImage } from '../../../lib/dredge/imageLoaders'
 import { prepareGrid, validatePlacementGrid } from '../../../lib/placement/grid'
-import { buildLiftPalette, renderPlacementChart } from '../../../lib/placement/chart'
+import { buildLiftPalette, legendWithExtents, renderPlacementChart } from '../../../lib/placement/chart'
 import { loadDesignExtents, loadPlacementGrid, loadPlacementReferenceLines } from '../../../lib/placement/loaders'
 import { useStagedFiles } from '../../../hooks/ui/useStagedFiles'
 import './chartSettings.css'
@@ -144,8 +144,9 @@ function PlacementChartTabForm({ project, existingConfig, createConfig, updateCo
         aerialGeoref: existingConfig.aerial_georef ?? null,
         logoImage,
         northImage,
-        legend: palette.legend,
+        legend: legendWithExtents(palette.legend, designExtents),
         legendComplete: palette.legendComplete,
+        showCellGrid: palette.layerColors.size === 0,
         materials: [],
       })
       setPreviewGenerated(true)
@@ -214,11 +215,11 @@ function PlacementChartTabForm({ project, existingConfig, createConfig, updateCo
         </Field>
 
         <Field
-          label="Design extents (optional, JSON rings)"
-          help="The design region the work is being placed into, drawn as a pale filled area with a dashed outline UNDER the coverage, so the day's progress reads against what the design calls for. Also adds a Stability Backfill Extents swatch to the legend."
+          label="Design extents (optional, DXF or JSON rings)"
+          help="The design region the work is being placed into, drawn as a pale filled area with a dashed outline UNDER the coverage, so the day's progress reads against what the design calls for. Also adds a Stability Backfill Extents swatch to the legend. A DXF is read directly: only closed LWPOLYLINE shapes count, and any HATCH of the same area is ignored so the region is not counted twice. A pre-extracted JSON of {rings, sqFt} also works."
         >
           <FileControl
-            accept=".json,application/json"
+            accept=".dxf,application/dxf,.json,application/json"
             uploaded={!!existingConfig?.design_extents_path}
             staged={!!stagedFiles.design_extents_path}
             onChange={(file) => file && stageFile('design_extents_path', file)}

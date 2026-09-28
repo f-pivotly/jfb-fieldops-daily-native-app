@@ -1,9 +1,9 @@
 {
   "slug": "dvw-jfb-metric-manual-totals-v2",
-  "description": "Sums the PE-entered values of every MANUAL cover metric for a project over a date range, one row per metric_key. The daily report's cover Project Production Table needs Day, Week and Project Total for each configured metric; the auto ones already have a dvw-jfb-metric-* view each, and this is the manual counterpart. A view rather than a client-side read because jfb_report_metric_value carries only report_id -- no project_id -- so scoping it in the browser would mean fetching every metric value in the tenant and filtering locally, which is unbounded by construction. Returns nothing for a project whose metrics are all auto.",
+  "description": "Sums the PE-entered values of every MANUAL cover metric for a project over a date range, one row per metric_key. The daily report's cover Project Production Table needs Day, Week and Project Total for each configured metric; the auto ones already have a dvw-jfb-metric-* view each, and this is the manual counterpart. A view rather than a client-side read because jfb_report_metric_value carries only report_id -- no project_id -- so scoping it in the browser would mean fetching every metric value in the tenant and filtering locally, which is unbounded by construction. Returns nothing for a project whose metrics are all auto. Each row carries both roll-ups: total (sum) and avg_nonzero (average of non-zero readings); the caller picks one per metric from jfb_metrics.rollup_type.",
   "authoring_mode": "direct_sql",
   "implementation": "function",
-  "direct_sql": "SELECT v.metric_key AS metric_key, COALESCE(SUM(v.value), 0) AS total FROM usdf.jfb_report_metric_value v JOIN usdf.jfb_reports r ON r.id = v.report_id WHERE r.project_id = p_project_id AND r.report_date BETWEEN p_start_date AND p_end_date GROUP BY v.metric_key",
+  "direct_sql": "SELECT v.metric_key AS metric_key, COALESCE(SUM(v.value), 0) AS total, AVG(v.value) FILTER (WHERE v.value IS NOT NULL AND v.value <> 0) AS avg_nonzero FROM usdf.jfb_report_metric_value v JOIN usdf.jfb_reports r ON r.id = v.report_id WHERE r.project_id = p_project_id AND r.report_date BETWEEN p_start_date AND p_end_date GROUP BY v.metric_key",
   "parameters": [
     {
       "name": "p_project_id",
@@ -34,6 +34,11 @@
       "name": "total",
       "type": "numeric",
       "description": "Sum of the PE-entered values across the window. A metric with no entries in the window is simply absent, which the caller renders as zero."
+    },
+    {
+      "name": "avg_nonzero",
+      "type": "numeric",
+      "description": "Average of the window's NON-ZERO, non-null values; NULL when the window has none. Used instead of total for metrics whose jfb_metrics.rollup_type is 'avg' (turbidity, flow rate), so a day with no reading does not pull the average down."
     }
   ]
 }

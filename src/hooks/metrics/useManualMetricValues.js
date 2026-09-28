@@ -26,6 +26,10 @@ export function useManualMetricValues({ project, report, reports, metrics, repor
     () => Object.fromEntries((metrics ?? []).map((m) => [m.id, m.metric_key])),
     [metrics],
   )
+  const rollupByKey = useMemo(
+    () => Object.fromEntries((metrics ?? []).map((m) => [m.metric_key, m.rollup_type === 'avg' ? 'avg' : 'sum'])),
+    [metrics],
+  )
   const latestRef = useRef({ report, reportMetricValues, metricKeyById })
   useEffect(() => {
     latestRef.current = { report, reportMetricValues, metricKeyById }
@@ -90,19 +94,24 @@ export function useManualMetricValues({ project, report, reports, metrics, repor
 
   function valuesFor(metricKey) {
     if (!endDate || !metricKey) return { day: null, week: 0, total: 0 }
-    let day = null, week = 0, total = 0
+    const avg = rollupByKey[metricKey] === 'avg'
+    let day = null, week = 0, total = 0, weekN = 0, totalN = 0
     for (const v of reportMetricValues) {
       if (metricValueKey(v, metricKeyById) !== metricKey) continue
       const date = reportDateById[v.report_id]
       if (!date) continue
+      if (v.value === null || v.value === undefined || v.value === '') continue
       const num = Number(v.value)
       if (!Number.isFinite(num)) continue
       if (v.report_id === report.id) day = num
+      if (avg && num === 0) continue
       if (date >= totalStartDate && date <= endDate) {
         total += num
-        if (weekStart && date >= weekStart) week += num
+        totalN += 1
+        if (weekStart && date >= weekStart) { week += num; weekN += 1 }
       }
     }
+    if (avg) return { day, week: weekN ? week / weekN : null, total: totalN ? total / totalN : null }
     return { day, week, total }
   }
 

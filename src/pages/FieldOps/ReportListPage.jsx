@@ -12,9 +12,10 @@ import { isoCalWeek, projectWeekNumber } from './lib/reportPdfData'
 import { WARNING_BG } from './reportEditorTabs/components/WarningBanner'
 import { setReportTimeZone } from '../../lib/reportTz'
 import PaginationBar from '../../components/PaginationBar'
+import { FETCH_PAGE_SIZE } from '../../constants/pagination'
 
 const DAY_LABEL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-const PAGE_SIZE = 5
+const PAGE_SIZE = FETCH_PAGE_SIZE
 
 function isSaturday(dateISO) {
   const [y, m, d] = String(dateISO).split('-').map(Number)

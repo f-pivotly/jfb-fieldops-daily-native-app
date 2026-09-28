@@ -17,10 +17,10 @@ import { hhmm24 as hhmm } from '../../../lib/reportDates'
 import { browserTimeZone } from '../../../lib/reportTz'
 import { computeAreaFillTargets } from '../../../lib/eventAreaFill'
 import { WARNING_BG } from './components/WarningBanner'
+import { FETCH_PAGE_SIZE } from '../../../constants/pagination'
 
-const PAGE_SIZE = 5
+const PAGE_SIZE = FETCH_PAGE_SIZE
 
-const SAMPLE = '(sampleData)'
 
 function resolveDelayCode(delayCodeId, projectDelayCodeById, masterDelayCodeById) {
   if (!delayCodeId) return null
@@ -592,7 +592,7 @@ export default function EventLogTab({ project, report, equipment = [], selectedE
               <Table.Td>{tscaLabel(e.tsca)}</Table.Td>
               <Table.Td>{operators.find((o) => o.id === e.operator_id)?.name ?? '—'}</Table.Td>
               <Table.Td>{e.notes || '—'}</Table.Td>
-              <Table.Td c="dimmed">{SAMPLE}</Table.Td>
+              
               <Table.Td>
                 {e.is_deleted ? (
                   <Badge size="xs" color="gray">Deleted</Badge>

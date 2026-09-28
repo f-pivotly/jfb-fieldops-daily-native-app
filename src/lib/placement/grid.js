@@ -34,6 +34,19 @@ export function prepareGrid(grid) {
     ]
   }
 
+  const cellShapes = (col, row) => {
+    const p = grid.partials?.[cellKey(col, row)]
+    if (!p || p.rings.length === 0) return [cellPolygon(col, row)]
+    const cu = originU + col * cellFt
+    const cv = originV + row * cellFt
+    return p.rings.map((r) => r.map(([du, dv]) => toWorld(cu + du, cv + dv)))
+  }
+
+  const cellTrimmedSqFt = (col, row) => {
+    const p = grid.partials?.[cellKey(col, row)]
+    return p ? Math.max(0, cellFt * cellFt - p.sf) : 0
+  }
+
   const offsetFromCentre = (x, y) => {
     const { col, row } = cellAt(x, y)
     const [cx, cy] = cellCentre(col, row)
@@ -45,6 +58,8 @@ export function prepareGrid(grid) {
     has: (col, row) => present.has(cellKey(col, row)),
     cellAt,
     cellPolygon,
+    cellShapes,
+    cellTrimmedSqFt,
     cellCentre,
     offsetFromCentre,
     cellCount: grid.cells.length,

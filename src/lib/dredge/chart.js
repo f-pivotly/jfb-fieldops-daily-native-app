@@ -763,6 +763,51 @@ export function renderChart(canvas, input) {
   g.restore()
   g.strokeStyle = '#000'; g.lineWidth = 2; g.strokeRect(ox, oy, mapW, mapH)
 
+  {
+    const frames = []
+    if (config.bgGeoref) frames.push(config.bgGeoref)
+    if (config.isopachTiles?.length) frames.push(...config.isopachTiles.map((t) => t.georef))
+    if (config.aerialGeoref) frames.push(config.aerialGeoref)
+    if (config.aerialTiles?.length) frames.push(...config.aerialTiles.map((t) => t.georef))
+    if (frames.length) {
+      let sL = Infinity, sR = -Infinity, sB = Infinity, sT = -Infinity
+      for (const f of frames) { sL = Math.min(sL, f.wL, f.wR); sR = Math.max(sR, f.wL, f.wR); sB = Math.min(sB, f.wB, f.wT); sT = Math.max(sT, f.wB, f.wT) }
+      const IN_MAX = 230, asp = (sR - sL) / (sT - sB)
+      let iw = IN_MAX, ih = Math.round(IN_MAX / asp); if (ih > IN_MAX) { ih = IN_MAX; iw = Math.round(IN_MAX * asp) }
+      const bx = ox + 10, by = oy + 22 + 10
+      const isc = iw / (sR - sL)
+      const gxx = (x) => bx + (x - sL) * isc, gyy = (y) => by + ih - (y - sB) * isc
+      g.save(); g.beginPath(); g.rect(bx, by, iw, ih); g.clip()
+      g.fillStyle = '#dfe6ea'; g.fillRect(bx, by, iw, ih)
+      const drawIm = (im, gr) => { if (im) g.drawImage(im, gxx(gr.wL), gyy(gr.wT), (gr.wR - gr.wL) * isc, (gr.wT - gr.wB) * isc) }
+      if (config.aerialTiles?.length) { for (const t of config.aerialTiles) drawIm(t.image, t.georef) }
+      else if (config.aerialImage && config.aerialGeoref) drawIm(config.aerialImage, config.aerialGeoref)
+      if (config.isopachTiles?.length) { for (const t of config.isopachTiles) drawIm(t.image, t.georef) }
+      else if (config.bgImage && config.bgGeoref) drawIm(config.bgImage, config.bgGeoref)
+      const ifill = (rings, col) => {
+        if (!rings.length) return; g.fillStyle = col; g.beginPath()
+        for (const r of rings) { if (r.length < 3) continue; g.moveTo(gxx(r[0][0]), gyy(r[0][1])); for (const v of r.slice(1)) g.lineTo(gxx(v[0]), gyy(v[1])); g.closePath() }
+        g.fill('evenodd')
+      }
+      const IN_CELL_FT = 8
+      const insetGrid = makeGrid(sL, sB, sR, sT, IN_CELL_FT)
+      const insetPriorMask = rasterizePolys(priorRings, insetGrid)
+      const insetProgressPolys = maskToPolys(insetPriorMask, insetGrid)
+      if (insetProgressPolys.length === 0 && priorRings.length > 0) {
+        console.warn('[dredge chart inset] mask/polys empty despite priorRings — falling back to raw ring draw')
+        ifill(priorRings, COL.progress)
+      } else {
+        ifill(insetProgressPolys, COL.progress)
+      }
+      ifill([...todayPolys, ...highlightPolys], COL.pass1)
+      if (secondPolys.length) ifill(secondPolys, COL.pass2)
+      if (residualPolys.length) ifill(residualPolys, COL.residual)
+      g.strokeStyle = '#d22'; g.lineWidth = 1.5; g.strokeRect(gxx(minX), gyy(maxY), (maxX - minX) * isc, (maxY - minY) * isc)
+      g.restore()
+      g.strokeStyle = '#222'; g.lineWidth = 1.5; g.strokeRect(bx, by, iw, ih)
+    }
+  }
+
   const bar = config.colorbarImage ?? null
   if (bar) {
     const bh = Math.min(260, mapH - 30), bw = bh * bar.width / bar.height, bx2 = ox + 10, by2 = oy + mapH - bh - 12

@@ -145,7 +145,11 @@ export default function SpreaderProgressTab({ project, report, reports, equipmen
       layerOrder,
       projectTitle: project?.name ?? '',
       projectNumber: String(project?.project_code ?? ''),
-      areaLabel: (config.boundaries ?? []).map((b) => b.area).join(' / '),
+      areaLabel: (() => {
+        const all = (config.boundaries ?? []).map((b) => b.area)
+        const worked = all.filter((a) => todayCoverage.some((c) => c.area === a && c.sqFt > 0))
+        return (worked.length ? worked : all).join(' / ')
+      })(),
       spreaderName: config.spreader_name ?? selected?.name ?? '',
       layerTitle: config.layer_title ?? '',
       notes: '',

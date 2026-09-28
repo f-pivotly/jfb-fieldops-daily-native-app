@@ -141,6 +141,11 @@ export function legendForLayers(layers) {
 
 export const MATERIAL_LEGEND = MATERIAL_COLORS.map((m) => ({ key: m.label, label: m.label, color: m.color }))
 
+export function legendWithExtents(legend, designExtents) {
+  if (!legend || !designExtents?.rings?.length) return legend
+  return [...legend, { key: 'extents', label: 'Stability Backfill Extents', color: EXTENTS_SWATCH }]
+}
+
 export function buildLiftPalette(layers) {
   const ranked = (layers ?? [])
     .filter((l) => l && l.id && l.active !== false)
@@ -320,14 +325,17 @@ function keptFraction(poly, boundary) {
 
 export function clippedSqFtForFills(grid, cellFills) {
   const boundary = grid?.grid?.boundary
-  if (!boundary || !cellFills?.size) return 0
+  if (!cellFills?.size) return 0
   const cellSf = grid.grid.cellFt * grid.grid.cellFt
   let trimmed = 0
   for (const key of cellFills.keys()) {
     const [c, r] = key.split(',').map(Number)
-    const poly = grid.cellPolygon(c, r)
-    if (poly.every(([x, y]) => pointInPoly(x, y, boundary))) continue
-    trimmed += cellSf * (1 - keptFraction(poly, boundary))
+    let cut = 0
+    if (boundary) {
+      const poly = grid.cellPolygon(c, r)
+      if (!poly.every(([x, y]) => pointInPoly(x, y, boundary))) cut = cellSf * (1 - keptFraction(poly, boundary))
+    }
+    trimmed += cut || grid.cellTrimmedSqFt(c, r)
   }
   return Math.round(trimmed)
 }
@@ -453,8 +461,10 @@ export function renderPlacementChart(canvas, input) {
       g.clip()
     }
     g.beginPath()
-    poly.forEach(([x, y], i) => (i ? g.lineTo(sx(x), sy(y)) : g.moveTo(sx(x), sy(y))))
-    g.closePath()
+    for (const shape of grid.cellShapes(col, row)) {
+      shape.forEach(([x, y], i) => (i ? g.lineTo(sx(x), sy(y)) : g.moveTo(sx(x), sy(y))))
+      g.closePath()
+    }
     if (fill) {
       g.fillStyle = fill
       g.fill()
@@ -465,14 +475,18 @@ export function renderPlacementChart(canvas, input) {
     if (!allIn && boundary) g.restore()
   }
 
+  const showGrid = input.showCellGrid !== false
   const covered = input.cellFills
-  for (const [c, r] of grid.grid.cells) {
-    if (!covered.has(cellKey(c, r))) drawCell(c, r, null, GRID_EDGE, 0.4)
+  if (showGrid) {
+    for (const [c, r] of grid.grid.cells) {
+      if (!covered.has(cellKey(c, r))) drawCell(c, r, null, GRID_EDGE, 0.4)
+    }
   }
 
   for (const [key, col] of covered) {
     const [c, r] = key.split(',').map(Number)
-    drawCell(c, r, col, col === DAILY ? DAILY_EDGE : CELL_EDGE, 0.5)
+    const edge = showGrid ? (col === DAILY ? DAILY_EDGE : CELL_EDGE) : col
+    drawCell(c, r, col, edge, showGrid ? 0.5 : 1)
   }
 
   const ref = input.referenceLines

@@ -1,0 +1,15 @@
+{
+  "source": {
+    "type": "static",
+    "values": [
+      {
+        "label": "Sum",
+        "value": "sum"
+      },
+      {
+        "label": "Average (non-zero days)",
+        "value": "avg"
+      }
+    ]
+  }
+}

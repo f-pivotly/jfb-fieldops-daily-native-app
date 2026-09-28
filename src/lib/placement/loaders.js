@@ -1,6 +1,7 @@
 import { downloadAttachment } from '../../data'
 import { parseReferenceLines } from '../dredge/chart'
 import { prepareGrid, validatePlacementGrid } from './grid'
+import { parseExtentsDxf } from './extents'
 
 export async function loadPlacementGrid(fileId, gridRef) {
   if (!fileId) return null
@@ -43,8 +44,13 @@ export async function loadDesignExtents(fileId, extRef) {
   if (extRef?.current?.path === fileId) return extRef.current.extents
   let extents
   try {
-    const j = JSON.parse(await (await downloadAttachment(fileId)).text())
-    extents = j?.rings?.length ? { rings: j.rings, sqFt: j.sqFt } : null
+    const text = await (await downloadAttachment(fileId)).text()
+    if (text.trimStart().startsWith('{')) {
+      const j = JSON.parse(text)
+      extents = j?.rings?.length ? { rings: j.rings, sqFt: j.sqFt } : null
+    } else {
+      extents = parseExtentsDxf(text)
+    }
   } catch {
     extents = null
   }
