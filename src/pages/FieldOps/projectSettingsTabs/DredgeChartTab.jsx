@@ -22,6 +22,7 @@ import { makeZip } from '../../../lib/zip'
 import { useStagedFiles } from '../../../hooks/ui/useStagedFiles'
 import UploadedFile from './components/UploadedFile'
 import StagedFilePreview from './components/StagedFilePreview'
+import FileControl from './components/ChartFileControl'
 import './chartSettings.css'
 
 const DATA_SOURCES = [
@@ -55,6 +56,7 @@ function fieldsToGeoref(f) {
 
 const DREDGE_CONFIG_DOMAIN = 'jfb_dredge_config'
 const EQUIPMENT_CONFIG_DOMAIN = 'jfb_dredge_equipment_config'
+const PROGRESS_DOMAIN = 'jfb_dredge_progress'
 
 const FILE_KINDS = {
   bg_path: 'isopach',
@@ -110,7 +112,7 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
   const equipmentConfigByEquipmentId = new Map((equipmentConfigs ?? []).map((c) => [c.equipment_id, c]))
   const { reports, ensureReport } = useReports(project.id)
   const { records: progressRecords, create: createProgress, update: updateProgress } =
-    useDomainData({ domain: 'jfb_dredge_progress', system: 'core', projectId: project.id })
+    useDomainData({ domain: PROGRESS_DOMAIN, system: 'core', projectId: project.id })
 
   const [title, setTitle] = useState(existingConfig?.chart_title_override ?? '')
   const [areaId, setAreaId] = useState(existingConfig?.default_area_id ?? '')
@@ -143,13 +145,20 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
   const { busy: savingAll, message: saveMsg, warning: saveWarning, error: saveError, run: runSaveAll } = useAsyncAction()
   const { busy: refUploading, message: refMsg, error: refError, run: runRefUpload, markSuccess: markRefProgress } = useAsyncAction()
   const { busy: aerialFetching, message: aerialFetchMsg, error: aerialFetchError, run: runAerialFetch, markError: markAerialError } = useAsyncAction()
-  const { busy: priorBusy, message: priorMsg, error: priorError, run: runPrior, markError: markPriorError } = useAsyncAction()
+  const { busy: priorBusy, message: priorMsg, warning: priorWarning, error: priorError, run: runPrior, markError: markPriorError } = useAsyncAction()
   const { busy: previewBusy, message: previewMsg, error: previewError, run: runPreview, markError: markPreviewError } = useAsyncAction()
   const { busy: dxfBusy, message: dxfMsg, error: dxfError, run: runDxf } = useAsyncAction()
 
   const { stagedFiles, stagedTiles, stageFile, unstageFile, stageTiles, flushFiles, flushTiles } = useStagedFiles()
   const { confirm, modal: confirmModal } = useConfirmDialog()
   const [removingField, setRemovingField] = useState(null)
+  const baselineUpload = useAttachmentUpload()
+  const reportDateById = new Map((reports ?? []).map((r) => [r.id, r.report_date]))
+  const equipmentNameById = new Map((equipment ?? []).map((e) => [e.id, e.name]))
+  const savedBaselines = (progressRecords ?? [])
+    .filter((r) => r.baseline_path)
+    .map((r) => ({ ...r, report_date: reportDateById.get(r.report_id) ?? '' }))
+    .sort((a, b) => a.report_date.localeCompare(b.report_date))
 
   const showVolumeRecovery = volumeMode !== '' || dataSource === 'earthworks'
 
@@ -344,17 +353,37 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
       if (!reportId) throw new Error('Could not resolve the report for that baseline date.')
       const sqft = Math.round(rings.reduce((s, r) => s + Math.abs(ringArea(r)), 0))
       const existingRow = (progressRecords ?? []).find((r) => r.report_id === reportId && r.equipment_id === priorEqId)
+      let rowId = existingRow?.id ?? null
       if (existingRow) {
         await updateProgress(existingRow.id, { coverage_rings: rings, footprint_rings: rings })
       } else {
-        await createProgress({
+        rowId = readWrittenRecordId(await createProgress({
           project_id: project.id, report_id: reportId, equipment_id: priorEqId,
           chart_path: null, coverage_rings: rings, footprint_rings: rings,
           today_sqft: sqft, cumulative_sqft: sqft,
+        }))
+      }
+      const imported = `Imported ${rings.length} polygon(s) as the ${priorDate} baseline.`
+      if (!rowId) return warn(`${imported} The DXF itself could not be attached: the saved progress row could not be resolved.`)
+      const eq = equipment.find((e) => e.id === priorEqId)
+      const storedName = dredgeFileName({ project, kind: 'prior-baseline', dateISO: priorDate, equipment: eq, ext: fileExtension(priorFile.name) })
+      try {
+        await baselineUpload.upload({
+          recordId: rowId,
+          domain: PROGRESS_DOMAIN,
+          field: 'baseline_path',
+          file: renameFile(priorFile, storedName),
+          originalName: priorFile.name,
+          previousFileId: existingRow?.baseline_path ?? null,
+          metadataPrefix: 'baseline',
+          update: (id, patch) => updateProgress(id, patch),
+          quiet: true,
         })
+      } catch (err) {
+        return warn(`${imported} The DXF itself did not upload: ${err.message}`)
       }
       setPriorFile(null)
-      return `Imported ${rings.length} polygon(s) as the ${priorDate} baseline.`
+      return `${imported} The DXF is saved in Pivotly files.`
     })
   }
 
@@ -427,8 +456,6 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
 
   async function handleDownloadAllDxfs() {
     await runDxf(async () => {
-      const reportDateById = new Map(reports.map((r) => [r.id, r.report_date]))
-      const equipmentNameById = new Map(equipment.map((e) => [e.id, e.name]))
       const safe = (s) => s.replace(/[^A-Za-z0-9._-]+/g, '_')
       const files = []
       for (const row of progressRecords ?? []) {
@@ -745,12 +772,31 @@ function DredgeChartTabForm({ project, existingConfig, createDredgeConfig, updat
             w={200}
           />
           <TextInput label="Baseline date (day before you start)" type="date" value={priorDate} onChange={(e) => setPriorDate(e.currentTarget.value)} />
-          <FileControl accept=".dxf,application/dxf" label="As-built border DXF" onChange={setPriorFile} />
+          <FileControl
+            accept=".dxf,application/dxf"
+            label="As-built border DXF"
+            staged={priorFile ? { file: priorFile, originalName: priorFile.name } : null}
+            onChange={(file) => file && setPriorFile(file)}
+            onUnstage={() => setPriorFile(null)}
+          />
           <Button size="xs" variant="default" loading={priorBusy} onClick={importPriorBaseline}>Import baseline</Button>
         </Group>
-        {priorFile && <Text size="10px" c="dimmed" mt={4}>Chosen: {priorFile.name}</Text>}
         {priorMsg && <Text size="10px" c="teal" mt={4}>{priorMsg}</Text>}
+        {priorWarning && <Text size="10px" c="#b45309" mt={4}>{priorWarning}</Text>}
         {priorError && <Text size="10px" c="red" mt={4}>{priorError}</Text>}
+        {savedBaselines.length > 0 && (
+          <Stack gap={6} mt={8}>
+            <Text size="xs" fw={600}>Imported baselines</Text>
+            {savedBaselines.map((row) => (
+              <Box key={row.id} p={6} style={{ background: 'var(--mantine-color-gray-0)', borderRadius: 4 }}>
+                <Text size="10px" c="dimmed" mb={2}>
+                  {row.report_date || 'Unknown date'} · {equipmentNameById.get(row.equipment_id) ?? 'Unknown dredge'}
+                </Text>
+                <UploadedFile key={row.baseline_path} fileId={row.baseline_path} fileName={row.baseline_original_name} />
+              </Box>
+            ))}
+          </Stack>
+        )}
       </Section>
 
       <Section
@@ -859,22 +905,20 @@ function TileManager({ label, help, tiles, stagedTiles, renameTile, onStagedTile
       {(savedCount > 0 || stagedCount > 0) && (
         <Stack gap={6} mb={10}>
           {(tiles ?? []).map((t, idx) => (
-            <Group key={t.file_id ?? idx} justify="space-between" wrap="nowrap" p={6} style={{ background: 'var(--mantine-color-gray-0)', borderRadius: 4 }}>
-              <Group gap={10} wrap="nowrap" style={{ minWidth: 0 }}>
-                <Text size="10px" c="dimmed" style={{ whiteSpace: 'nowrap' }}>Tile {idx + 1}</Text>
+            <Group key={t.file_id ?? idx} justify="space-between" align="flex-start" wrap="nowrap" p={6} style={{ background: 'var(--mantine-color-gray-0)', borderRadius: 4 }}>
+              <Stack gap={4} style={{ minWidth: 0 }}>
+                <Text size="10px" c="dimmed">Tile {idx + 1} · {corners(t.georef)}</Text>
                 {t.file_id && <UploadedFile key={t.file_id} fileId={t.file_id} fileName={t.original_name} />}
-                <Text size="10px" c="dimmed" style={{ whiteSpace: 'nowrap' }}>{corners(t.georef)}</Text>
-              </Group>
+              </Stack>
               <Button size="xs" variant="subtle" color="red" loading={removingIdx === idx} onClick={() => handleRemoveSavedTile(idx)}>Remove</Button>
             </Group>
           ))}
           {(stagedTiles ?? []).map((t, idx) => (
-            <Group key={`staged-${idx}`} justify="space-between" wrap="nowrap" p={6} style={{ background: 'var(--mantine-color-orange-0)', borderRadius: 4 }}>
-              <Group gap={10} wrap="nowrap" style={{ minWidth: 0 }}>
-                <Text size="10px" c="orange" style={{ whiteSpace: 'nowrap' }}>Tile {savedCount + idx + 1}</Text>
+            <Group key={`staged-${idx}`} justify="space-between" align="flex-start" wrap="nowrap" p={6} style={{ background: 'var(--mantine-color-orange-0)', borderRadius: 4 }}>
+              <Stack gap={4} style={{ minWidth: 0 }}>
+                <Text size="10px" c="orange">Tile {savedCount + idx + 1} · {corners(t.georef)}</Text>
                 <StagedFilePreview file={t.file} name={t.originalName} />
-                <Text size="10px" c="orange" style={{ whiteSpace: 'nowrap' }}>{corners(t.georef)}</Text>
-              </Group>
+              </Stack>
               <Button size="xs" variant="subtle" color="red" onClick={() => handleRemoveStagedTile(idx)}>Remove</Button>
             </Group>
           ))}
@@ -894,30 +938,6 @@ function TileManager({ label, help, tiles, stagedTiles, renameTile, onStagedTile
   )
 }
 
-function FileControl({ accept, label, onChange, uploading, fileId, fileName, staged, error, onUnstage, onRemove, removing }) {
-  const showSaved = !!fileId && !uploading && !staged
-  const showStaged = !!staged && !uploading
-  return (
-    <Box>
-      {label && <Text size="xs" c="black" fw={700} mb={4}>{label}</Text>}
-      <Group gap={8} align="center">
-        <FileButton onChange={onChange ?? (() => {})} accept={accept}>
-          {(props) => <Button {...props} variant="default" size="xs" loading={uploading}>Choose File</Button>}
-        </FileButton>
-        {showSaved && <UploadedFile key={fileId} fileId={fileId} fileName={fileName} />}
-        {showSaved && onRemove && (
-          <Button size="xs" variant="subtle" color="red" loading={removing} onClick={onRemove}>Remove</Button>
-        )}
-        {showStaged && <StagedFilePreview file={staged.file} name={staged.originalName} />}
-        {showStaged && onUnstage && (
-          <Button size="xs" variant="subtle" color="gray" onClick={onUnstage}>Undo</Button>
-        )}
-      </Group>
-      {error && <Text size="10px" c="red" mt={2}>{error}</Text>}
-    </Box>
-  )
-}
-
 function GeoreferenceGrid({ value, onChange }) {
   const set = (field) => (e) => onChange({ ...value, [field]: e.currentTarget.value })
   return (
@@ -931,7 +951,7 @@ function GeoreferenceGrid({ value, onChange }) {
 }
 
 function EquipmentShapeRow({ equipment, project, existingEquipmentConfig, createEquipmentConfig, updateEquipmentConfig, confirm }) {
-  const [label, setLabel] = useState(existingEquipmentConfig?.chart_label_override ?? equipment.name ?? '')
+  const [label, setLabel] = useState(existingEquipmentConfig?.label ?? equipment.name ?? '')
   const [stagedShape, setStagedShape] = useState(null)
   const { busy: saving, message: saveMsg, error: saveError, run: runSave } = useAsyncAction()
   const { busy: removing, error: removeError, run: runRemove } = useAsyncAction()
@@ -942,7 +962,7 @@ function EquipmentShapeRow({ equipment, project, existingEquipmentConfig, create
       const recordData = {
         project_id: project.id,
         equipment_id: equipment.id,
-        chart_label_override: label.trim() || null,
+        label: label.trim() || null,
       }
       let rowId = existingEquipmentConfig?.id ?? null
       if (existingEquipmentConfig) {

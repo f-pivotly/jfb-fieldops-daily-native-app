@@ -245,8 +245,7 @@ export async function renderWeeklyProgressCharts({ appSlug, projectId, weekStart
     loadCellsFor(cfg.cells_path),
   ])
 
-  const labelFor = (equipmentId) => equipmentConfigByEqId.get(equipmentId)?.chart_label_override
-    || equipmentConfigByEqId.get(equipmentId)?.label
+  const labelFor = (equipmentId) => equipmentConfigByEqId.get(equipmentId)?.label
     || equipmentById.get(equipmentId)?.name
     || 'Dredge'
   const configFor = (equipmentId) => ({

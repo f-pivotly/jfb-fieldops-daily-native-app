@@ -1,15 +1,17 @@
 import { useRef, useState } from 'react'
-import { Box, Button, Checkbox, FileButton, Group, Select, Stack, Text, TextInput } from '@mantine/core'
+import { Box, Button, Checkbox, Group, Select, Stack, Text, TextInput } from '@mantine/core'
 import { usePlacementConfig } from '../../../hooks/placement/usePlacementConfig'
 import { useProjectLayers } from '../../../hooks/capping/useProjectLayers'
 import { useAsyncAction, warn } from '../../../hooks/ui/useAsyncAction'
 import { uploadWarning } from '../../../hooks/ui/uploadWarning'
-import { readWrittenRecordId } from '../../../data'
+import { deleteAttachment, readWrittenRecordId } from '../../../data'
 import { loadAttachmentImage, loadPublicImage } from '../../../lib/dredge/imageLoaders'
 import { prepareGrid, validatePlacementGrid } from '../../../lib/placement/grid'
 import { buildLiftPalette, legendWithExtents, renderPlacementChart } from '../../../lib/placement/chart'
 import { loadDesignExtents, loadPlacementGrid, loadPlacementReferenceLines } from '../../../lib/placement/loaders'
 import { useStagedFiles } from '../../../hooks/ui/useStagedFiles'
+import { useConfirmDialog } from '../../../hooks/ui/useConfirmDialog'
+import FileControl from './components/ChartFileControl'
 import './chartSettings.css'
 
 const PLACEMENT_CONFIG_DOMAIN = 'jfb_placement_config'
@@ -64,7 +66,57 @@ function PlacementChartTabForm({ project, existingConfig, createConfig, updateCo
   const { busy: gridBusy, error: gridError, run: runGrid } = useAsyncAction()
   const { busy: previewBusy, message: previewMsg, error: previewError, run: runPreview, markError: markPreviewError } = useAsyncAction()
 
-  const { stagedFiles, stageFile, flushFiles } = useStagedFiles()
+  const { stagedFiles, stageFile, unstageFile, flushFiles } = useStagedFiles()
+  const { confirm, modal: confirmModal } = useConfirmDialog()
+  const [removingField, setRemovingField] = useState(null)
+  const [fileErrors, setFileErrors] = useState({})
+
+  function fileControlProps(field) {
+    const prefix = field.replace(/_path$/, '')
+    return {
+      fileId: existingConfig?.[field],
+      fileName: existingConfig?.[`${prefix}_original_name`],
+      staged: stagedFiles[field],
+      error: fileErrors[field],
+      onUnstage: () => {
+        unstageFile(field)
+        if (field === 'grid_path') setGridSummary(null)
+      },
+      onRemove: () => handleRemoveFile(field),
+      removing: removingField === field,
+    }
+  }
+
+  function stagePicked(field) {
+    return (file) => {
+      if (!file) return
+      setFileErrors((e) => ({ ...e, [field]: '' }))
+      stageFile(field, file)
+    }
+  }
+
+  async function handleRemoveFile(field) {
+    const fileId = existingConfig?.[field]
+    if (!existingConfig || !fileId) return
+    const prefix = field.replace(/_path$/, '')
+    const name = existingConfig[`${prefix}_original_name`] || 'this file'
+    if (!(await confirm(`Remove ${name}? The stored file will be deleted.`))) return
+    setRemovingField(field)
+    setFileErrors((e) => ({ ...e, [field]: '' }))
+    try {
+      await updateConfig(existingConfig.id, {
+        [field]: null,
+        [`${prefix}_original_name`]: null,
+        [`${prefix}_storage_path`]: null,
+      })
+      await deleteAttachment({ fileId, domain: PLACEMENT_CONFIG_DOMAIN, coreRecordId: existingConfig.id })
+        .catch((err) => console.error('Could not delete the removed file:', err.message))
+    } catch (err) {
+      setFileErrors((e) => ({ ...e, [field]: err.message }))
+    } finally {
+      setRemovingField(null)
+    }
+  }
 
   async function handleGridFile(file) {
     if (!file) return
@@ -166,6 +218,7 @@ function PlacementChartTabForm({ project, existingConfig, createConfig, updateCo
 
   return (
     <Stack gap="lg" className="chart-settings">
+      {confirmModal}
       <Section
         title="Bucket grid & labels"
         help="The bucket grid is the accounting unit for placement coverage: every bucket in the day's .bkt file is indexed onto it, and a touched cell counts as its FULL area. Without a grid the Placement Progress tab stays hidden."
@@ -182,15 +235,11 @@ function PlacementChartTabForm({ project, existingConfig, createConfig, updateCo
         >
           <FileControl
             accept=".json,application/json"
+            {...fileControlProps('grid_path')}
             uploading={gridBusy}
-            uploaded={!!existingConfig?.grid_path}
-            staged={!!stagedFiles.grid_path}
-            error={gridError}
+            error={gridError || fileErrors.grid_path}
             onChange={handleGridFile}
           />
-          {existingConfig?.grid_original_name && !stagedFiles.grid_path && (
-            <Text size="10px" c="dimmed" mt={2}>Uploaded: {existingConfig.grid_original_name}</Text>
-          )}
           {gridSummary && (
             <Text size="10px" c="teal" mt={2}>
               Read “{gridSummary.label}” — {gridSummary.cells.toLocaleString()} cells,{' '}
@@ -208,9 +257,8 @@ function PlacementChartTabForm({ project, existingConfig, createConfig, updateCo
         >
           <FileControl
             accept=".dxf,application/dxf,.json,application/json"
-            uploaded={!!existingConfig?.reference_lines_path}
-            staged={!!stagedFiles.reference_lines_path}
-            onChange={(file) => file && stageFile('reference_lines_path', file)}
+            {...fileControlProps('reference_lines_path')}
+            onChange={stagePicked('reference_lines_path')}
           />
         </Field>
 
@@ -220,13 +268,9 @@ function PlacementChartTabForm({ project, existingConfig, createConfig, updateCo
         >
           <FileControl
             accept=".dxf,application/dxf,.json,application/json"
-            uploaded={!!existingConfig?.design_extents_path}
-            staged={!!stagedFiles.design_extents_path}
-            onChange={(file) => file && stageFile('design_extents_path', file)}
+            {...fileControlProps('design_extents_path')}
+            onChange={stagePicked('design_extents_path')}
           />
-          {existingConfig?.design_extents_original_name && !stagedFiles.design_extents_path && (
-            <Text size="10px" c="dimmed" mt={2}>Uploaded: {existingConfig.design_extents_original_name}</Text>
-          )}
         </Field>
 
         <Field
@@ -235,13 +279,9 @@ function PlacementChartTabForm({ project, existingConfig, createConfig, updateCo
         >
           <FileControl
             accept=".json,application/json"
-            uploaded={!!existingConfig?.plant_path}
-            staged={!!stagedFiles.plant_path}
-            onChange={(file) => file && stageFile('plant_path', file)}
+            {...fileControlProps('plant_path')}
+            onChange={stagePicked('plant_path')}
           />
-          {existingConfig?.plant_original_name && !stagedFiles.plant_path && (
-            <Text size="10px" c="dimmed" mt={2}>Uploaded: {existingConfig.plant_original_name}</Text>
-          )}
         </Field>
 
         <Field
@@ -267,9 +307,8 @@ function PlacementChartTabForm({ project, existingConfig, createConfig, updateCo
             <Field label="Aerial image (PNG/JPG, clipped to the work area)">
               <FileControl
                 accept="image/png,image/jpeg,image/webp"
-                uploaded={!!existingConfig?.aerial_path}
-                staged={!!stagedFiles.aerial_path}
-                onChange={(file) => file && stageFile('aerial_path', file)}
+                {...fileControlProps('aerial_path')}
+                onChange={stagePicked('aerial_path')}
               />
             </Field>
             <Text size="xs" c="dimmed">
@@ -358,22 +397,6 @@ function Field({ label, help, children }) {
       <Text size="xs" c="black" fw={700} mb={4}>{label}</Text>
       {children}
       {help && <Text size="10px" c="dimmed" mt={4}>{help}</Text>}
-    </Box>
-  )
-}
-
-function FileControl({ accept, label, onChange, uploading, uploaded, staged, error }) {
-  return (
-    <Box>
-      {label && <Text size="xs" c="black" fw={700} mb={4}>{label}</Text>}
-      <Group gap={8} align="center">
-        <FileButton onChange={onChange ?? (() => {})} accept={accept}>
-          {(props) => <Button {...props} variant="default" size="xs" loading={uploading}>Choose File</Button>}
-        </FileButton>
-        {uploaded && !uploading && !staged && <Text size="xs" c="teal">Uploaded</Text>}
-        {staged && !uploading && <Text size="xs" c="orange">Staged — will upload on Save</Text>}
-      </Group>
-      {error && <Text size="10px" c="red" mt={2}>{error}</Text>}
     </Box>
   )
 }

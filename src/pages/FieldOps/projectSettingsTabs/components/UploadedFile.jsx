@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Group, Image, Text } from '@mantine/core'
+import { Anchor, Box, Group, Image, Text } from '@mantine/core'
 import { fetchFileById, downloadAttachment } from '../../../../data'
 
 const IMAGE_EXT = /\.(png|jpe?g|webp|gif)$/i
@@ -11,9 +11,10 @@ function isImage(meta) {
   return IMAGE_EXT.test(meta?.logicalName ?? '')
 }
 
-export default function UploadedFile({ fileId, fileName }) {
+export default function UploadedFile({ fileId, fileName, size = 'large' }) {
   const [fetchedName, setFetchedName] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
+  const [downloading, setDownloading] = useState(false)
 
   useEffect(() => {
     if (!fileId) return
@@ -48,22 +49,71 @@ export default function UploadedFile({ fileId, fileName }) {
 
   const displayName = fileName ?? fetchedName
 
-  return (
-    <Group gap={6} align="center" wrap="nowrap">
-      {previewUrl && (
-        <Image
-          src={previewUrl}
-          alt={displayName ?? 'Uploaded image'}
-          h={36}
-          w="auto"
-          fit="contain"
-          radius={2}
-          style={{ border: '1px solid var(--mantine-color-gray-3)' }}
-        />
-      )}
+  async function handleDownload() {
+    setDownloading(true)
+    try {
+      const blob = await downloadAttachment(fileId)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = displayName || 'file'
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      console.error('Could not download the file:', err.message)
+    } finally {
+      setDownloading(false)
+    }
+  }
+
+  const nameRow = (
+    <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
       <Text size="xs" c="teal" lineClamp={1} title={displayName ?? undefined}>
         {displayName ?? 'Uploaded'}
       </Text>
+      <Anchor component="button" type="button" size="xs" onClick={handleDownload} disabled={downloading} style={{ whiteSpace: 'nowrap' }}>
+        {downloading ? 'Downloading…' : 'Download'}
+      </Anchor>
     </Group>
+  )
+
+  if (size === 'thumb') {
+    return (
+      <Group gap={6} align="center" wrap="nowrap" style={{ minWidth: 0 }}>
+        {previewUrl && (
+          <Image
+            src={previewUrl}
+            alt={displayName ?? 'Uploaded image'}
+            h={36}
+            w="auto"
+            fit="contain"
+            radius={2}
+            style={{ border: '1px solid var(--mantine-color-gray-3)' }}
+          />
+        )}
+        {nameRow}
+      </Group>
+    )
+  }
+
+  return (
+    <Box style={{ minWidth: 0 }}>
+      {nameRow}
+      {previewUrl && (
+        <Anchor href={previewUrl} target="_blank" rel="noreferrer" title="Open full size">
+          <Image
+            src={previewUrl}
+            alt={displayName ?? 'Uploaded image'}
+            mah={180}
+            maw="100%"
+            w="auto"
+            fit="contain"
+            radius={4}
+            mt={6}
+            style={{ border: '1px solid var(--mantine-color-gray-3)', background: '#fff' }}
+          />
+        </Anchor>
+      )}
+    </Box>
   )
 }

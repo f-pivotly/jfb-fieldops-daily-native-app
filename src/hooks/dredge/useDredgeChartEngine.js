@@ -96,7 +96,7 @@ export function useDredgeChartEngine({
         stationText: cfg.require_stations && stationFrom.trim() && stationTo.trim()
           ? `${stationFrom.trim()} to ${stationTo.trim()}` : undefined,
         materials: displayedMaterialText,
-        dredgeLabel: equipmentConfig?.chart_label_override || selected?.name || 'Dredge',
+        dredgeLabel: equipmentConfig?.label || selected?.name || 'Dredge',
         cellsReferenceOnly: !!cfg.cells_reference_only,
         ...imagesRef.current,
       },

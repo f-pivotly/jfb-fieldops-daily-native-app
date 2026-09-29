@@ -10,8 +10,9 @@ import { isDirectImageUrl } from '../../../lib/imageSource'
 import { hhmm, utcDayRange } from '../../../lib/reportDates'
 import { airWindowUtc, buildAirDay } from '../../../lib/airQuality/data'
 import { buildAirChartSpecs, renderAirChart } from '../../../lib/airQuality/chart'
-import { reportWindowUtc, buildTurbidityDay } from '../../../lib/waterQuality/data'
-import { renderTurbidityChart } from '../../../lib/waterQuality/chart'
+import { reportWindowUtc, buildTurbidityDay, buildTidalTurbidityDay, isTidalConfig, tidalLimits } from '../../../lib/waterQuality/data'
+import { renderTurbidityChart, renderTidalTurbidityChart } from '../../../lib/waterQuality/chart'
+import { fetchTidePredictions, fetchTideHiLo, PENOBSCOT_TIDE_STATION, PENOBSCOT_TIDE_STATION_NAME } from '../../../lib/waterQuality/noaaTide'
 
 function isCappingEquipment(project, equipment, dateISO) {
   return equipmentWorkType(project, equipment, dateISO).toLowerCase().includes('cap')
@@ -1356,7 +1357,7 @@ export async function buildAirQualityParam({ appSlug, projectId, reportId, dateI
   const [readings, dailyRes] = await Promise.all([
     fetchMonitoringReadings({
       domain: 'jfb_air_quality_readings', appSlug, projectId,
-      startUtc: startUtc.toISOString(), endUtc: endUtc.toISOString(),
+      startUtc: startUtc.toISOString(), endUtc: new Date(endUtc.getTime() + 1).toISOString(),
     }),
     fetchDomainRecords({
       domain: 'jfb_air_monitoring_daily', system: 'core', appSlug,
@@ -1398,13 +1399,13 @@ export async function buildWaterQualityParam({ appSlug, projectId, reportId, dat
     filters: { project_id: projectId }, limit: 1,
   })
   const config = (Array.isArray(cfgRes) ? cfgRes : (cfgRes?.data ?? []))[0]
-  if (!config) return null
+  if (!config || config.active === false) return null
 
   const { startUtc, endUtc } = reportWindowUtc(config, dateISO)
   const [readings, notesRes] = await Promise.all([
     fetchMonitoringReadings({
       domain: 'jfb_water_quality_readings', appSlug, projectId,
-      startUtc: startUtc.toISOString(), endUtc: endUtc.toISOString(),
+      startUtc: startUtc.toISOString(), endUtc: new Date(endUtc.getTime() + 1).toISOString(),
     }),
     fetchDomainRecords({
       domain: 'jfb_water_monitoring_notes', system: 'core', appSlug,
@@ -1412,6 +1413,16 @@ export async function buildWaterQualityParam({ appSlug, projectId, reportId, dat
     }),
   ])
   const notesRow = (Array.isArray(notesRes) ? notesRes : (notesRes?.data ?? []))[0] ?? null
+  const refNtu = notesRow?.reference_ntu ?? null
+  const locations = (config.locations ?? []).map((l) => ({
+    label: l.label ?? l.role ?? '',
+    coords: l.display_coords ?? '',
+    depth: l.depth_ft != null ? `${l.depth_ft} FT` : '',
+  }))
+
+  if (isTidalConfig(config)) {
+    return buildTidalWaterQualityParam({ config, readings, dateISO, notesRow, refNtu, locations })
+  }
 
   const day = buildTurbidityDay(config, readings, dateISO)
   if (day.populatedCount === 0) return null
@@ -1423,68 +1434,115 @@ export async function buildWaterQualityParam({ appSlug, projectId, reportId, dat
     chartDataUri = null
   }
 
-  const refNtu = notesRow?.reference_ntu ?? null
-  const ewDelta = config.thresholds?.early_warning_delta_ntu ?? null
-  const compDelta = config.thresholds?.compliance_delta_ntu ?? null
-
   return {
+    isTidal: false,
     slots: day.slots.map((s) => ({
       timeLabel: s.timeLabel,
-      background: fmtNtu(s.background),
-      earlyWarning: fmtNtu(s.earlyWarning),
-      compliance: fmtNtu(s.compliance),
-      delta: fmtNtu(s.delta),
+      background: fmtNtu1(s.background),
+      earlyWarning: fmtNtu1(s.earlyWarning),
+      compliance: fmtNtu1(s.compliance),
+      delta: fmtNtu1(s.delta),
     })),
-    avgDelta: fmtNtu(day.avgDelta),
+    avgDelta: fmtNtu1(day.avgDelta),
     hasAvgDelta: day.avgDelta !== null,
-    locations: (config.locations ?? []).map((l) => ({
-      label: l.label ?? l.role ?? '',
-      coords: l.display_coords ?? '',
-    })),
+    locations,
     notes: notesRow?.notes ?? null,
-    ...turbidityLimits(config, refNtu, ewDelta, compDelta),
-    aerialDataUri: await monitoringImageDataUri(config.aerial_path),
-    chartDataUri,
+    showLimits: false,
+    chartFootnoteItems: fixedChartFootnoteItems(config.thresholds),
+    ...(await monitoringBottomRow(config.aerial_path, chartDataUri)),
   }
 }
 
-/** The limits block, which differs by site type exactly as the reference app's
- *  WaterQualityPage does. A tidal two-monitor site (WQData LIVE / Penobscot)
- *  works off the engineer's daily reference plus fixed deltas; a fixed-role
- *  HydroVu site works off flat thresholds held in the config. The native app
- *  used to render the tidal block for everyone, so Torch Lake 152601 -- HydroVu,
- *  with early_warning_ntu 13 / compliance_1hr_ntu 50 / compliance_4hr_ntu 26
- *  sitting in its config -- printed em dashes and "no daily reference entered".
- */
-function turbidityLimits(config, refNtu, ewDelta, compDelta) {
-  const t = config.thresholds ?? {}
-  if (config.provider === 'wqdatalive') {
-    return {
-      limitRows: [
-        { label: 'Reference (continuous 90th percentile)', value: fmtNtu(refNtu) },
-        { label: `Response Action Alarm (Reference + ${ewDelta ?? '\u2014'})`,
-          value: fmtNtu(refNtu != null && ewDelta != null ? refNtu + ewDelta : null) },
-        { label: `Not-to-Exceed (Reference + ${compDelta ?? '\u2014'})`,
-          value: fmtNtu(refNtu != null && compDelta != null ? refNtu + compDelta : null) },
-      ],
-      hasLimits: refNtu != null,
-      limitsWarning: 'No daily reference entered \u2014 enter it on the Water Quality tab to activate the limit lines.',
-    }
+async function buildTidalWaterQualityParam({ config, readings, dateISO, notesRow, refNtu, locations }) {
+  const isCompliance = config.mode === 'compliance'
+  const [tideByMs, hiLo] = await Promise.all([fetchTidePredictions(dateISO), fetchTideHiLo(dateISO)])
+  const day = buildTidalTurbidityDay(
+    config,
+    readings,
+    dateISO,
+    tideByMs,
+    isCompliance
+      ? { compliance: true, thresholds: config.thresholds, tideOffsetMin: config.tide_offset_minutes ?? 0, referenceNtu: refNtu }
+      : undefined,
+  )
+  if (day.populatedCount === 0) return null
+
+  let chartDataUri
+  try {
+    chartDataUri = renderTidalTurbidityChart(day, { width: 1580, height: 640, compliance: isCompliance }).dataUrl
+  } catch {
+    chartDataUri = null
   }
-  const rows = [
-    ['Early Warning Level', t.early_warning_ntu],
-    ['Compliance Level (1-HR)', t.compliance_1hr_ntu],
-    ['Compliance Level (4-HR)', t.compliance_4hr_ntu],
-    ['Early-Warning Criterion (Background + %)', t.early_warning_delta_ntu],
-    ['Compliance Criterion (Background + %)', t.compliance_delta_ntu],
-  ]
-    .filter(([, v]) => v != null)
-    .map(([label, v]) => ({ label: label.replace('%', String(v)), value: `${v}` }))
+
+  const { ewDelta, compDelta, responseActionNtu, notToExceedNtu } = tidalLimits(config.thresholds, refNtu)
+  const exceedanceCount = day.slots.filter((s) => s.exceedance).length
+  const fmtCond = (v) => (v === null || v === undefined ? '—' : Number(v).toLocaleString('en-US'))
+  const chartFootnoteItems = isCompliance
+    ? [
+        refNtu != null ? `Reference = ${refNtu.toFixed(2)} NTU` : '*No daily reference entered',
+        notToExceedNtu != null ? `Not-to-Exceed = Reference + ${compDelta} = ${notToExceedNtu.toFixed(2)} NTU` : null,
+        responseActionNtu != null ? `Response Action = Reference + ${ewDelta} = ${responseActionNtu.toFixed(2)} NTU` : null,
+        'Red dot = exceedance',
+      ].filter(Boolean)
+    : ['*Background monitoring \u2014 baseline collection. Compliance criterion lines activate when the project switches to compliance monitoring.']
+
   return {
-    limitRows: rows,
-    hasLimits: rows.length > 0,
-    limitsWarning: 'No turbidity limits configured for this project.',
+    isTidal: true,
+    isCompliance,
+    tidalSlots: day.slots.map((s) => ({
+      timeLabel: s.timeLabel,
+      upstream: fmtNtu1(s.upstream),
+      upstreamCond: fmtCond(s.upstreamCond),
+      downstream: fmtNtu1(s.downstream),
+      downstreamCond: fmtCond(s.downstreamCond),
+      tide: fmtNtu1(s.tideFt),
+      exceedance: isCompliance && !!s.exceedance,
+    })),
+    hiLo: hiLo.map((e) => ({ timeLabel: e.timeLabel, height: e.heightFt.toFixed(2), type: e.type })),
+    hasHiLo: hiLo.length > 0,
+    tideStationLabel: `${PENOBSCOT_TIDE_STATION} (${PENOBSCOT_TIDE_STATION_NAME})`,
+    locations,
+    notes: notesRow?.notes ?? null,
+    hasAvgDelta: false,
+    showLimits: isCompliance,
+    ...tidalLimitRows(refNtu, ewDelta, compDelta, responseActionNtu, notToExceedNtu),
+    exceedanceCount,
+    hasExceedance: exceedanceCount > 0,
+    chartFootnoteItems,
+    ...(await monitoringBottomRow(config.aerial_path, chartDataUri)),
   }
+}
+
+function tidalLimitRows(refNtu, ewDelta, compDelta, responseActionNtu, notToExceedNtu) {
+  return {
+    limitRows: [
+      { label: 'Reference (continuous 90th percentile)', value: fmtNtu(refNtu) },
+      { label: `Response Action Alarm (Reference + ${ewDelta ?? '\u2014'})`, value: fmtNtu(responseActionNtu) },
+      { label: `Not-to-Exceed (Reference + ${compDelta ?? '\u2014'})`, value: fmtNtu(notToExceedNtu) },
+    ],
+    hasLimits: refNtu != null,
+    limitsWarning: 'No daily reference entered \u2014 enter it on the Water Quality tab to activate the limit lines.',
+  }
+}
+
+function fixedChartFootnoteItems(thresholds) {
+  const t = thresholds ?? {}
+  return [
+    t.early_warning_ntu != null ? `*Early Warning Level = ${t.early_warning_ntu} NTU` : null,
+    t.compliance_1hr_ntu != null ? `*Compliance Level (1-HR) = ${t.compliance_1hr_ntu} NTU` : null,
+    t.compliance_4hr_ntu != null ? `*Compliance Level (4-HR) = ${t.compliance_4hr_ntu} NTU` : null,
+    t.early_warning_delta_ntu != null ? `*Early-Warning Criterion = Background + ${t.early_warning_delta_ntu} NTU` : null,
+    t.compliance_delta_ntu != null ? `*Compliance Criterion = Background + ${t.compliance_delta_ntu} NTU` : null,
+  ].filter(Boolean)
+}
+
+async function monitoringBottomRow(aerialPath, chartDataUri) {
+  const aerialDataUri = await monitoringImageDataUri(aerialPath)
+  return { aerialDataUri, chartDataUri, hasBottomRow: !!(aerialDataUri || chartDataUri) }
+}
+
+function fmtNtu1(v) {
+  return v === null || v === undefined ? '—' : Number(v).toFixed(1)
 }
 
 function fmtNtu(v) {

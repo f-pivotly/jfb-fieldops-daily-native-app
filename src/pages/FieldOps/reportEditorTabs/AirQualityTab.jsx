@@ -11,7 +11,7 @@ import { buildAirChartSpecs, renderAirChart } from '../../../lib/airQuality/char
 
 import { isDirectImageUrl } from '../../../lib/imageSource'
 
-const SLOT_PAGE = 5
+const SLOT_PAGE = 50
 
 function useAttachmentImageUrl(fileId) {
   const [resolved, setResolved] = useState({ fileId: null, url: null })

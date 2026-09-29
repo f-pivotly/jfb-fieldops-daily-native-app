@@ -189,8 +189,8 @@ export default function ReportEditorPage() {
         buildProductionComboTotalsByEquipmentParam({ appSlug: config.appSlug, projectId, project, reportId, dateISO: date, equipment }),
         buildCoverProductionTotalsParam({ appSlug: config.appSlug, projectId, project, dateISO: date }),
         buildFlowAndPipeByEquipmentParam({ appSlug: config.appSlug, projectId, project, equipment, dateISO: date }),
-        buildWaterQualityParam({ appSlug: config.appSlug, projectId, reportId, dateISO: date }),
-        buildAirQualityParam({ appSlug: config.appSlug, projectId, reportId, dateISO: date }),
+        buildWaterQualityParam({ appSlug: config.appSlug, projectId, reportId, dateISO: date }).catch(() => null),
+        buildAirQualityParam({ appSlug: config.appSlug, projectId, reportId, dateISO: date }).catch(() => null),
       ])
       const { activitiesByEquipment: dailyActivityByEquipment, delaySummaryByEquipment, opSummaryByEquipment } = dailyActivityData
       const { flowStatsByEquipment, pipeSegments, pipeTotalLength, showFlowAndPipeByEquipment } = flowAndPipe

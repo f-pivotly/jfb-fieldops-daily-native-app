@@ -2,7 +2,7 @@ import axios from 'axios'
 import { requestNewToken, setAuthToken } from '../helpers/pivotlyHelpers'
 import { FETCH_PAGE_SIZE } from '../constants/pagination'
 
-const IS_LOCAL = true
+const IS_LOCAL = false
 
 function resolveApiBase() {
   const runtimeConfig = window.__PIVOTLY_RUNTIME_CONFIG__;
