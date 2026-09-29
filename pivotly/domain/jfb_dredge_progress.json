@@ -522,6 +522,69 @@
                 "code": "lww"
             },
             "triggers_version_change": true
+        },
+        {
+            "pii": false,
+            "name": "baseline_path",
+            "slug": "baseline_path",
+            "type": "text",
+            "label": "Prior Baseline DXF Path",
+            "unique": false,
+            "indexed": false,
+            "masking": {
+                "masked": false
+            },
+            "nullable": true,
+            "required": false,
+            "data_type": "text",
+            "column_name": "baseline_path",
+            "description": "Pivotly file id of the as-built border DXF imported as this row's prior coverage baseline, from Project Settings > Dredge Chart > Prior coverage baseline. The DXF is parsed into coverage_rings / footprint_rings at import time; the file is kept so the imported geometry can always be traced back to what the team supplied. Null on every normal daily row.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
+            "name": "baseline_original_name",
+            "slug": "baseline_original_name",
+            "type": "text",
+            "label": "Prior Baseline Original Filename",
+            "unique": false,
+            "indexed": false,
+            "masking": {
+                "masked": false
+            },
+            "nullable": true,
+            "required": false,
+            "data_type": "text",
+            "column_name": "baseline_original_name",
+            "description": "Filename the PM picked for the prior-baseline DXF. The upload endpoint suffixes a random id for uniqueness, so this keeps the name they recognize.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
+            "name": "baseline_storage_path",
+            "slug": "baseline_storage_path",
+            "type": "text",
+            "label": "Prior Baseline Storage Path",
+            "unique": false,
+            "indexed": false,
+            "masking": {
+                "masked": false
+            },
+            "nullable": true,
+            "required": false,
+            "data_type": "text",
+            "column_name": "baseline_storage_path",
+            "description": "Server-assigned storage path of the prior-baseline DXF, read back after upload. Metadata only -- the file is always fetched by the id in baseline_path.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
         }
     ],
     "archive": true,

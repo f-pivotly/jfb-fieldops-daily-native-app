@@ -73,12 +73,14 @@ TABLE
 | equipment_id | uuid, FK → jfb_equipments.id |
 | operator_id | uuid, FK → jfb_operators.id |
 | start_date_time | timestamp with time zone |
+| report_date | date |
 | end_date_time | timestamp with time zone |
 | timezone | text |
 | session_id | text |
 | pass_type | text |
 | attachment_id | uuid, FK → jfb_project_attachments.id |
 | area | jsonb |
+| area_source | text |
 | notes | text |
 | tsca | boolean |
 | delay_code_id | uuid, FK → jfb_project_delay_codes.id |
@@ -136,6 +138,7 @@ TABLE
 | require_stations | boolean |
 | reference_lines_path | text |
 | alignment_path | text |
+| boundary_path | text |
 | reference_surface_path | text |
 | split_gap_ft | integer |
 | isopach_tiles | jsonb |
@@ -162,6 +165,8 @@ TABLE
 | reference_lines_storage_path | text |
 | alignment_original_name | text |
 | alignment_storage_path | text |
+| boundary_original_name | text |
+| boundary_storage_path | text |
 | reference_surface_original_name | text |
 | reference_surface_storage_path | text |
 
@@ -173,6 +178,8 @@ TABLE
 | equipment_id | uuid, FK → jfb_equipments.id |
 | project_id | uuid, FK → jfb_projects.id |
 | shape_path | text |
+| shape_original_name | text |
+| shape_storage_path | text |
 | label | text |
 
 ## jfb_dredge_progress
@@ -204,6 +211,9 @@ TABLE
 | source_batch_path | text |
 | source_batch_info | jsonb |
 | source_batch_history | jsonb |
+| baseline_path | text |
+| baseline_original_name | text |
+| baseline_storage_path | text |
 
 ## jfb_equipments
 TABLE
@@ -297,6 +307,7 @@ TABLE
 | source | text |
 | equipment_id | uuid, FK → jfb_equipments.id |
 | unit | text |
+| rollup_type | text |
 | sort_order | integer |
 | active | boolean |
 
@@ -335,6 +346,13 @@ TABLE
 | reference_lines_path | text |
 | reference_lines_original_name | text |
 | reference_lines_storage_path | text |
+| design_extents_path | text |
+| design_extents_original_name | text |
+| design_extents_storage_path | text |
+| plant_path | text |
+| plant_original_name | text |
+| plant_storage_path | text |
+| chart_framing | text |
 | active | boolean |
 
 ## jfb_placement_progress
@@ -355,6 +373,7 @@ TABLE
 | today_sqft | numeric |
 | problems | jsonb |
 | chart_path | text |
+| plant_pose | jsonb |
 | generated_by_user_id | uuid |
 
 ## jfb_production_stats
@@ -486,6 +505,10 @@ TABLE
 | layer_report_name | text |
 | sort_order | integer |
 | active | boolean |
+| chart_color | text |
+| chart_color_2nd | text |
+| pay_group | text |
+| pay_unit | text |
 
 ## jfb_project_material_components
 TABLE
@@ -548,6 +571,7 @@ TABLE
 |---|---|
 | project_id | uuid, FK → jfb_projects.id |
 | category | text |
+| company | text |
 | description | text |
 | sort_order | integer |
 | mobilized_at | date |
@@ -569,6 +593,7 @@ TABLE
 | primary_measure | text |
 | site_city | text |
 | site_state | text |
+| report_timezone | text |
 | is_tsca_zone_tracking | boolean |
 | is_soil_type | boolean |
 | is_pipe_tracking | boolean |
@@ -595,6 +620,27 @@ TABLE
 | project_id | uuid, FK → jfb_projects.id |
 | exclude_date | date |
 | reason | text |
+
+## jfb_realized_scopes
+TABLE
+
+| Field | Type |
+|---|---|
+| project_id | uuid, FK → jfb_projects.id |
+| label | text |
+| sort_order | integer |
+| start_date | date |
+| end_date | date |
+| baseline_cy | numeric |
+| goal | numeric |
+| cy_goh_goal | numeric |
+| expected_goh_per_day | numeric |
+| production_days_per_week | integer |
+| include_area_ids | jsonb |
+| exclude_area_ids | jsonb |
+| chart_region | text |
+| notes | text |
+| active | boolean |
 
 ## jfb_report_crew_summary_v2
 TABLE
@@ -763,6 +809,7 @@ TABLE
 | locations | jsonb |
 | thresholds | jsonb |
 | mode | text |
+| compliance_started_at | timestamp with time zone |
 | aerial_path | text |
 | active | boolean |
 

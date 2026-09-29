@@ -197,6 +197,27 @@
     },
     {
       "pii": false,
+      "name": "compliance_started_at",
+      "slug": "compliance_started_at",
+      "type": "timestamp with time zone",
+      "label": "Compliance Started At",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "timestamp with time zone",
+      "column_name": "compliance_started_at",
+      "description": "When this project's water monitoring was last switched INTO compliance mode (mode = 'compliance'); cleared (NULL) when switched back to 'background'. Audit trail only -- no report or chart logic reads it. Written by the Water Quality tab's background/compliance toggle alongside mode. Carried over from the original app, where Penobscot went to compliance on 2026-08-20.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
+    },
+    {
+      "pii": false,
       "name": "aerial_path",
       "slug": "aerial_path",
       "type": "text",

@@ -78,6 +78,48 @@
         },
         {
             "pii": false,
+            "name": "shape_original_name",
+            "slug": "shape_original_name",
+            "type": "text",
+            "label": "Shape Original Filename",
+            "unique": false,
+            "indexed": false,
+            "masking": {
+                "masked": false
+            },
+            "nullable": true,
+            "required": false,
+            "data_type": "text",
+            "column_name": "shape_original_name",
+            "description": "Original filename of the uploaded dredge-shape DXF, as picked by the user (shape_path stores the Pivotly file id, and the upload endpoint suffixes a random id for uniqueness, so this keeps the name the PM recognizes).",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
+            "name": "shape_storage_path",
+            "slug": "shape_storage_path",
+            "type": "text",
+            "label": "Shape Storage Path",
+            "unique": false,
+            "indexed": false,
+            "masking": {
+                "masked": false
+            },
+            "nullable": true,
+            "required": false,
+            "data_type": "text",
+            "column_name": "shape_storage_path",
+            "description": "Server-assigned storage path of the uploaded dredge-shape DXF, read back after upload. Metadata only -- the file is always fetched by the id in shape_path.",
+            "conflict_resolution": {
+                "code": "lww"
+            },
+            "triggers_version_change": true
+        },
+        {
+            "pii": false,
             "name": "label",
             "slug": "label",
             "type": "text",
