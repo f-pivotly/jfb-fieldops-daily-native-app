@@ -168,9 +168,9 @@
     {
       "pii": false,
       "name": "area_goal_sf",
-      "slug": "volume_goal_sf",
+      "slug": "area_goal_sf",
       "type": "numeric",
-      "label": "Volume Goal Sf",
+      "label": "Area Goal Sf",
       "unique": false,
       "indexed": false,
       "masking": {

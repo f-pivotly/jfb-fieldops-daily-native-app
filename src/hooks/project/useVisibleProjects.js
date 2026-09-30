@@ -4,14 +4,15 @@ import { useFieldOpsAction, useFieldOpsAccessLoading } from '../../contexts/fiel
 import { useDomainData } from '../core/useDomainData'
 import { executeDataView } from '../../data'
 
-export function useVisibleProjects() {
+export function useVisibleProjects({ loadAll = true } = {}) {
   const { config } = useAppConfig()
   const isCrossProject = useFieldOpsAction('manage_team')
   const accessLoading = useFieldOpsAccessLoading()
   const myEmail = (config.user?.email || '').trim().toLowerCase()
 
+  const needAll = !accessLoading && isCrossProject && loadAll
   const { records: allProjects, loading: projectsLoading, error: projectsError, reload: reloadProjects } =
-    useDomainData({ domain: 'jfb_projects', system: 'core' })
+    useDomainData({ domain: needAll ? 'jfb_projects' : null, system: 'core' })
 
   const [myProjects, setMyProjects] = useState([])
   const [myProjectsLoading, setMyProjectsLoading] = useState(true)
@@ -36,12 +37,12 @@ export function useVisibleProjects() {
     return () => { cancelled = true }
   }, [accessLoading, isCrossProject, myEmail, reloadTick])
 
-  const loading = accessLoading || projectsLoading || (!isCrossProject && myProjectsLoading)
-  const error = projectsError || (!isCrossProject ? myProjectsError : null)
+  const loading = accessLoading || (needAll && projectsLoading) || (!isCrossProject && myProjectsLoading)
+  const error = (needAll ? projectsError : null) || (!isCrossProject ? myProjectsError : null)
 
   let visibleProjects = []
   if (!loading) {
-    visibleProjects = isCrossProject ? allProjects : myProjects
+    visibleProjects = isCrossProject ? (needAll ? allProjects : []) : myProjects
   }
 
   function reload() {

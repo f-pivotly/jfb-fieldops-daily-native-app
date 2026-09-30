@@ -1,21 +1,16 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Box, Text, Group, Button, Modal, TextInput, Select, NumberInput, Switch, Stack, UnstyledButton } from "@mantine/core";
 import { IconPlus } from "@tabler/icons-react";
 import { useCrudModal } from "../../../hooks/ui/useCrudModal";
 import { useDomainData } from "../../../hooks/core/useDomainData";
-import { useProjectAreas } from "../../../hooks/project/useProjectAreas";
-import { useAreaLevels } from "../../../hooks/project/useAreaLevels";
-import { useProjectLayers } from "../../../hooks/capping/useProjectLayers";
-import { useProjectMaterials } from "../../../hooks/capping/useProjectMaterials";
-import { useProjectComponents } from "../../../hooks/capping/useProjectComponents";
-import { useProjectAreaLayers } from "../../../hooks/project/useProjectAreaLayers";
-import { useProjectLayerMaterials } from "../../../hooks/capping/useProjectLayerMaterials";
-import { useProjectMaterialComponents } from "../../../hooks/capping/useProjectMaterialComponents";
+import { useAppConfig } from "../../../contexts/appConfigContext";
+import {
+  createDomainRecord, deleteDomainRecord, fetchFirstRecord, fetchRecordPage, fetchRecordsByField, likeFilter, updateDomainRecord,
+} from "../../../data";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import SafeError from "../../../components/SafeError";
 import PaginationBar from "../../../components/PaginationBar";
-import { usePagedRows } from "../../../hooks/ui/usePagedRows";
-import PagedSelect from "../../../components/PagedSelect";
+import ServerPagedSelect from "../../../components/ServerPagedSelect";
 
 const UOM_OPTIONS = ["", "Tons", "CY", "Qty"];
 
@@ -36,18 +31,119 @@ const MAPPING_TABS = [
   { value: "material-component", label: "Materials → Components" },
 ];
 
-function areaPath(areaId, areas) {
-  const byId = Object.fromEntries(areas.map((a) => [a.id, a]));
-  const parts = [];
-  let current = byId[areaId];
-  while (current) {
-    parts.unshift(current.name);
-    current = current.parent_id ? byId[current.parent_id] : null;
+async function deleteWhere(appSlug, cascades, id) {
+  for (const { domain, field } of cascades) {
+    const rows = await fetchRecordsByField({ domain, appSlug, field, values: [id] });
+    await Promise.all(rows.map((r) => deleteDomainRecord({ domain, system: "core", appSlug, recordId: r.id })));
   }
-  return parts.join(" → ");
 }
 
-const bySortOrder = (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0);
+async function loadAreaPaths(appSlug, areas) {
+  const byId = Object.fromEntries(areas.map((a) => [a.id, a]));
+  let missing = areas.map((a) => a.parent_id).filter((id) => id && !byId[id]);
+  while (missing.length) {
+    const rows = await fetchRecordsByField({ domain: "jfb_project_areas", appSlug, values: missing });
+    for (const r of rows) byId[r.id] = r;
+    missing = [...new Set(rows.map((r) => r.parent_id).filter((id) => id && !byId[id]))];
+  }
+  return Object.fromEntries(areas.map((a) => {
+    const parts = [];
+    let current = a;
+    while (current) {
+      parts.unshift(current.name);
+      current = current.parent_id ? byId[current.parent_id] : null;
+    }
+    return [a.id, parts.join(" → ")];
+  }));
+}
+
+function childOptionsFetcher({ appSlug, projectId, childDomain, nameField, mapDomain, parentField, childField, parentId, currentChildId }) {
+  return async ({ search, page, pageSize }) => {
+    const nameFilter = likeFilter(search);
+    const { rows, hasNext } = await fetchRecordPage({
+      domain: childDomain, appSlug, page, pageSize, sortCol: "sort_order", sortDir: "asc",
+      filters: { project_id: projectId, ...(nameFilter ? { [nameField]: nameFilter } : {}) },
+    });
+    const existing = parentId
+      ? await fetchRecordsByField({ domain: mapDomain, appSlug, field: childField, values: rows.map((r) => r.id), filters: { [parentField]: parentId } })
+      : [];
+    const taken = new Set(existing.map((m) => m[childField]));
+    return {
+      items: rows.map((r) => {
+        const isTaken = taken.has(r.id) && r.id !== currentChildId;
+        return { value: r.id, label: r[nameField], disabled: isTaken, note: isTaken ? "already mapped" : null };
+      }),
+      hasNext,
+    };
+  };
+}
+
+function useMappingGroups({ project, parentDomain, mapDomain, parentField, childDomain, childField }) {
+  const { config } = useAppConfig();
+  const appSlug = config.appSlug;
+  const parents = useDomainData({ domain: parentDomain, system: "core", projectId: project.id, paginate: true, sortCol: "sort_order", sortDir: "asc" });
+  const [version, setVersion] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const parentIdsKey = parents.records.map((p) => p.id).join(",");
+  const key = `${parentIdsKey}|${version}`;
+  const [state, setState] = useState({ key: null, maps: [], children: [], error: null });
+  const childKey = `${project.id}|${version}`;
+  const [childExists, setChildExists] = useState({ key: null, exists: true });
+
+  useEffect(() => {
+    if (!parentIdsKey || !appSlug) return;
+    let cancelled = false;
+    (async () => {
+      const maps = await fetchRecordsByField({ domain: mapDomain, appSlug, field: parentField, values: parentIdsKey.split(",") });
+      const children = await fetchRecordsByField({ domain: childDomain, appSlug, values: maps.map((m) => m[childField]) });
+      return { maps, children };
+    })()
+      .then(({ maps, children }) => { if (!cancelled) setState({ key, maps, children, error: null }); })
+      .catch((err) => { if (!cancelled) setState({ key, maps: [], children: [], error: err.message }); });
+    return () => { cancelled = true; };
+  }, [appSlug, parentIdsKey, key, mapDomain, parentField, childDomain, childField]);
+
+  useEffect(() => {
+    if (!appSlug) return;
+    let cancelled = false;
+    fetchFirstRecord({ domain: childDomain, appSlug, filters: { project_id: project.id } })
+      .then((row) => { if (!cancelled) setChildExists({ key: childKey, exists: !!row }); })
+      .catch(() => { if (!cancelled) setChildExists({ key: childKey, exists: true }); });
+    return () => { cancelled = true; };
+  }, [appSlug, childDomain, project.id, childKey]);
+
+  async function mutate(fn) {
+    setSaving(true);
+    try {
+      await fn();
+      setVersion((v) => v + 1);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return {
+    appSlug,
+    parents,
+    maps: state.maps,
+    childById: Object.fromEntries(state.children.map((c) => [c.id, c])),
+    refreshing: !!parentIdsKey && state.key !== key,
+    loading: parents.loading || (!!parentIdsKey && state.key === null),
+    error: parents.error || state.error,
+    hasParents: parents.records.length > 0 || parents.page > 1,
+    hasChildren: childExists.exists,
+    saving,
+    onCreate: (payload) => mutate(() => createDomainRecord({ domain: mapDomain, system: "core", appSlug, recordData: { project_id: project.id, ...payload } })),
+    onUpdate: (recordId, recordData) => mutate(() => updateDomainRecord({ domain: mapDomain, system: "core", appSlug, recordId, recordData })),
+    onDelete: (recordId) => mutate(() => deleteDomainRecord({ domain: mapDomain, system: "core", appSlug, recordId })),
+  };
+}
+
+function MappingPager({ parents, noun }) {
+  return (
+    <PaginationBar page={parents.page} pageSize={parents.pageSize} count={parents.records.length} total={parents.total} hasNext={parents.hasNext} onChange={parents.setPage} disabled={parents.pageLoading} noun={noun} />
+  );
+}
 
 // Bid tonnage for a placement project paid by the ton. Summed across the
 // project's active materials, these give the Realized To-Date report its goal
@@ -82,82 +178,8 @@ export default function CappingSetupTab({ project }) {
   const { records: componentTypeRef, loading: componentTypesLoading, error: componentTypesError } =
     useDomainData({ domain: "jfb_component_types", system: "core" });
 
-  const { areas, loading: areasLoading, error: areasError } = useProjectAreas(project?.id);
-  const { areaLevels, loading: areaLevelsLoading, error: areaLevelsError } = useAreaLevels(project?.id);
-
-  const {
-    layers, loading: layersLoading, error: layersError,
-    creating: creatingLayer, updating: updatingLayer,
-    create: createLayer, update: updateLayer, remove: removeLayer,
-  } = useProjectLayers(project?.id);
-
-  const {
-    materials, loading: materialsLoading, error: materialsError,
-    creating: creatingMaterial, updating: updatingMaterial,
-    create: createMaterial, update: updateMaterial, remove: removeMaterial,
-  } = useProjectMaterials(project?.id);
-
-  const {
-    components, loading: componentsLoading, error: componentsError,
-    creating: creatingComponent, updating: updatingComponent,
-    create: createComponent, update: updateComponent, remove: removeComponent,
-  } = useProjectComponents(project?.id);
-
-  const {
-    areaLayers, loading: areaLayersLoading, error: areaLayersError,
-    creating: creatingAreaLayer, updating: updatingAreaLayer,
-    create: createAreaLayer, update: updateAreaLayer, remove: removeAreaLayer,
-  } = useProjectAreaLayers(project?.id);
-
-  const {
-    layerMaterials, loading: layerMaterialsLoading, error: layerMaterialsError,
-    creating: creatingLayerMaterial, updating: updatingLayerMaterial,
-    create: createLayerMaterial, update: updateLayerMaterial, remove: removeLayerMaterial,
-  } = useProjectLayerMaterials(project?.id);
-
-  const {
-    materialComponents, loading: materialComponentsLoading, error: materialComponentsError,
-    creating: creatingMaterialComponent, updating: updatingMaterialComponent,
-    create: createMaterialComponent, update: updateMaterialComponent, remove: removeMaterialComponent,
-  } = useProjectMaterialComponents(project?.id);
-
-  const loading = layerTypesLoading || materialTypesLoading || componentTypesLoading || areasLoading || areaLevelsLoading ||
-    layersLoading || materialsLoading || componentsLoading ||
-    areaLayersLoading || layerMaterialsLoading || materialComponentsLoading;
-  const error = layerTypesError || materialTypesError || componentTypesError || areasError || areaLevelsError ||
-    layersError || materialsError || componentsError ||
-    areaLayersError || layerMaterialsError || materialComponentsError;
-
-  const sortedLayers = layers.slice().sort(bySortOrder);
-  const sortedMaterials = materials.slice().sort(bySortOrder);
-  const sortedComponents = components.slice().sort(bySortOrder);
-  const depthByLevelId = Object.fromEntries(areaLevels.map((l) => [l.id, l.depth]));
-  const sortedAreas = areas
-    .slice()
-    .sort((a, b) => (depthByLevelId[a.area_level_id] ?? 0) - (depthByLevelId[b.area_level_id] ?? 0) || bySortOrder(a, b));
-
-  async function deleteLayerCascade(id) {
-    await Promise.all([
-      ...areaLayers.filter((r) => r.layer_id === id).map((r) => removeAreaLayer(r.id)),
-      ...layerMaterials.filter((r) => r.layer_id === id).map((r) => removeLayerMaterial(r.id)),
-    ]);
-    await removeLayer(id);
-  }
-
-  async function deleteMaterialCascade(id) {
-    await Promise.all([
-      ...layerMaterials.filter((r) => r.material_id === id).map((r) => removeLayerMaterial(r.id)),
-      ...materialComponents.filter((r) => r.material_id === id).map((r) => removeMaterialComponent(r.id)),
-    ]);
-    await removeMaterial(id);
-  }
-
-  async function deleteComponentCascade(id) {
-    await Promise.all(
-      materialComponents.filter((r) => r.component_id === id).map((r) => removeMaterialComponent(r.id))
-    );
-    await removeComponent(id);
-  }
+  const loading = layerTypesLoading || materialTypesLoading || componentTypesLoading;
+  const error = layerTypesError || materialTypesError || componentTypesError;
 
   return (
     <Box>
@@ -173,7 +195,10 @@ export default function CappingSetupTab({ project }) {
 
           {tab === "layers" && (
             <NamedTypeList
-              rows={sortedLayers}
+              key={`layers|${project.id}`}
+              project={project}
+              domain="jfb_project_layers"
+              cascades={[{ domain: "jfb_project_area_layers", field: "layer_id" }, { domain: "jfb_project_layer_materials", field: "layer_id" }]}
               typeRef={layerTypeRef}
               nameField="layer_name"
               typeField="layer_type_id"
@@ -184,15 +209,14 @@ export default function CappingSetupTab({ project }) {
               icon="🧱"
               emptyText="No layers yet. Add the cap lifts/layers for this project."
               extraFields={LAYER_PAY_FIELDS}
-              saving={creatingLayer || updatingLayer}
-              onCreate={(payload) => createLayer({ project_id: project.id, ...payload })}
-              onUpdate={updateLayer}
-              onDelete={deleteLayerCascade}
             />
           )}
           {tab === "materials" && (
             <NamedTypeList
-              rows={sortedMaterials}
+              key={`materials|${project.id}`}
+              project={project}
+              domain="jfb_project_materials"
+              cascades={[{ domain: "jfb_project_layer_materials", field: "material_id" }, { domain: "jfb_project_material_components", field: "material_id" }]}
               typeRef={materialTypeRef}
               nameField="material_name"
               typeField="material_type_id"
@@ -203,21 +227,10 @@ export default function CappingSetupTab({ project }) {
               icon="⛏️"
               emptyText="No materials yet."
               extraFields={MATERIAL_TONNAGE_FIELDS}
-              saving={creatingMaterial || updatingMaterial}
-              onCreate={(payload) => createMaterial({ project_id: project.id, ...payload })}
-              onUpdate={updateMaterial}
-              onDelete={deleteMaterialCascade}
             />
           )}
           {tab === "components" && (
-            <ComponentsList
-              rows={sortedComponents}
-              typeRef={componentTypeRef}
-              saving={creatingComponent || updatingComponent}
-              onCreate={(payload) => createComponent({ project_id: project.id, ...payload })}
-              onUpdate={updateComponent}
-              onDelete={deleteComponentCascade}
-            />
+            <ComponentsList key={`components|${project.id}`} project={project} typeRef={componentTypeRef} />
           )}
           {tab === "mappings" && (
             <Box>
@@ -226,39 +239,9 @@ export default function CappingSetupTab({ project }) {
                 subtitle="Connect Areas → Layers (with goals + thickness), Layers → Materials, and Materials → Components. These drive the filtered dropdowns in the daily report."
               />
               <PillTabs tabs={MAPPING_TABS} value={mappingsTab} onChange={setMappingsTab} mt={4} />
-              {mappingsTab === "area-layer" && (
-                <AreaLayerMappings
-                  areas={sortedAreas}
-                  layers={sortedLayers}
-                  map={areaLayers}
-                  saving={creatingAreaLayer || updatingAreaLayer}
-                  onCreate={(payload) => createAreaLayer({ project_id: project.id, ...payload })}
-                  onUpdate={updateAreaLayer}
-                  onDelete={removeAreaLayer}
-                />
-              )}
-              {mappingsTab === "layer-material" && (
-                <LayerMaterialMappings
-                  layers={sortedLayers}
-                  materials={sortedMaterials}
-                  map={layerMaterials}
-                  saving={creatingLayerMaterial || updatingLayerMaterial}
-                  onCreate={(payload) => createLayerMaterial({ project_id: project.id, ...payload })}
-                  onUpdate={updateLayerMaterial}
-                  onDelete={removeLayerMaterial}
-                />
-              )}
-              {mappingsTab === "material-component" && (
-                <MaterialComponentMappings
-                  materials={sortedMaterials}
-                  components={sortedComponents}
-                  map={materialComponents}
-                  saving={creatingMaterialComponent || updatingMaterialComponent}
-                  onCreate={(payload) => createMaterialComponent({ project_id: project.id, ...payload })}
-                  onUpdate={updateMaterialComponent}
-                  onDelete={removeMaterialComponent}
-                />
-              )}
+              {mappingsTab === "area-layer" && <AreaLayerMappings key={project.id} project={project} />}
+              {mappingsTab === "layer-material" && <LayerMaterialMappings key={project.id} project={project} />}
+              {mappingsTab === "material-component" && <MaterialComponentMappings key={project.id} project={project} />}
             </Box>
           )}
         </>
@@ -379,9 +362,34 @@ function MapEmptyRow({ text }) {
   );
 }
 
-function NamedTypeList({ rows, typeRef, nameField, typeField, reportNameField, entityLabel, title, subtitle, icon, emptyText, extraFields = [], saving, onCreate, onUpdate, onDelete }) {
+function useProjectEntityList(project, domain, cascades) {
+  const { config } = useAppConfig();
+  const list = useDomainData({ domain, system: "core", projectId: project.id, paginate: true, sortCol: "sort_order", sortDir: "asc" });
+  const knownCount = list.total ?? (list.page - 1) * list.pageSize + list.records.length;
+  async function onDelete(id) {
+    await deleteWhere(config.appSlug, cascades, id);
+    await list.remove(id);
+  }
+  return {
+    ...list,
+    knownCount,
+    saving: list.creating || list.updating,
+    onCreate: (payload) => list.create({ project_id: project.id, ...payload }),
+    onUpdate: list.update,
+    onDelete,
+  };
+}
+
+function EntityListStatus({ list }) {
+  if (list.loading) return <LoadingSpinner py={16} />;
+  return <SafeError message={list.error} />;
+}
+
+function NamedTypeList({ project, domain, cascades, typeRef, nameField, typeField, reportNameField, entityLabel, title, subtitle, icon, emptyText, extraFields = [] }) {
+  const list = useProjectEntityList(project, domain, cascades);
+  const { records: rows, saving, onCreate, onUpdate, onDelete } = list;
   const { modalOpen, setModalOpen, editRow, form, setFormField, openAdd, openEdit, save, remove, confirmModal } = useCrudModal({
-    emptyForm: () => ({ name: "", type: typeRef[0]?.id ?? "", reportName: "", sortOrder: rows.length + 1,
+    emptyForm: () => ({ name: "", type: typeRef[0]?.id ?? "", reportName: "", sortOrder: list.knownCount + 1,
                         ...Object.fromEntries(extraFields.map((f) => [f.column, ""])) }),
     toForm: (row) => ({ name: row[nameField], type: row[typeField], reportName: row[reportNameField] ?? "", sortOrder: row.sort_order,
                         ...Object.fromEntries(extraFields.map((f) => [f.column, row[f.column] ?? ""])) }),
@@ -402,18 +410,18 @@ function NamedTypeList({ rows, typeRef, nameField, typeField, reportNameField, e
     confirmMessage: (row) => `Delete "${row[nameField]}"? Any mappings that use it will also be removed.`,
   });
 
-  const { pageRows: pagedPageRows, page: pagedPage, setPage: setPagedPage, total: pagedTotal, pageSize: pagedPageSize } = usePagedRows(rows);
   const typeName = (id) => typeRef.find((t) => t.id === id)?.name ?? null;
 
   return (
     <Box>
       <SectionHeader title={title} subtitle={subtitle} action={<AddButton label={`Add ${entityLabel}`} onClick={() => openAdd()} />} />
 
-      {rows.length === 0 ? (
+      <EntityListStatus list={list} />
+      {!list.loading && !list.error && (rows.length === 0 && list.page === 1 ? (
         <EmptyState icon={icon} text={emptyText} />
       ) : (
-        <Stack gap={8}>
-          {pagedPageRows.map((r) => (
+        <Stack gap={8} style={{ opacity: list.pageLoading ? 0.5 : 1 }}>
+          {rows.map((r) => (
             <ListItem
               key={r.id}
               icon={icon}
@@ -434,8 +442,8 @@ function NamedTypeList({ rows, typeRef, nameField, typeField, reportNameField, e
             />
           ))}
         </Stack>
-      )}
-      {rows.length > 0 && <PaginationBar page={pagedPage} pageSize={pagedPageSize} count={pagedPageRows.length} total={pagedTotal} onChange={setPagedPage} noun={entityLabel.toLowerCase()} />}
+      ))}
+      {!list.loading && !list.error && <PaginationBar page={list.page} pageSize={list.pageSize} count={rows.length} total={list.total} hasNext={list.hasNext} onChange={list.setPage} disabled={list.pageLoading} noun={entityLabel.toLowerCase()} />}
 
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit" : "Add"} {entityLabel}</Text>} size="sm">
         <TextInput label={`${entityLabel} Name`} required value={form.name} onChange={(e) => setFormField("name", e.currentTarget.value)} mb={10} autoFocus />
@@ -493,9 +501,11 @@ function NamedTypeList({ rows, typeRef, nameField, typeField, reportNameField, e
   );
 }
 
-function ComponentsList({ rows, typeRef, saving, onCreate, onUpdate, onDelete }) {
+function ComponentsList({ project, typeRef }) {
+  const list = useProjectEntityList(project, "jfb_project_components", [{ domain: "jfb_project_material_components", field: "component_id" }]);
+  const { records: rows, saving, onCreate, onUpdate, onDelete } = list;
   const { modalOpen, setModalOpen, editRow, form, setFormField, openAdd, openEdit, save, remove, confirmModal } = useCrudModal({
-    emptyForm: () => ({ name: "", type: typeRef[0]?.id ?? "", reportName: "", reportUom: "", invUom: "", sortOrder: rows.length + 1 }),
+    emptyForm: () => ({ name: "", type: typeRef[0]?.id ?? "", reportName: "", reportUom: "", invUom: "", sortOrder: list.knownCount + 1 }),
     toForm: (row) => ({
       name: row.component_name,
       type: row.component_type_id,
@@ -522,7 +532,6 @@ function ComponentsList({ rows, typeRef, saving, onCreate, onUpdate, onDelete })
     confirmMessage: (row) => `Delete "${row.component_name}"? Any mappings that use it will also be removed.`,
   });
 
-  const { pageRows: pagedPageRows, page: pagedPage, setPage: setPagedPage, total: pagedTotal, pageSize: pagedPageSize } = usePagedRows(rows);
   const typeName = (id) => typeRef.find((t) => t.id === id)?.name ?? null;
 
   return (
@@ -533,11 +542,12 @@ function ComponentsList({ rows, typeRef, saving, onCreate, onUpdate, onDelete })
         action={<AddButton label="Add Component" onClick={() => openAdd()} />}
       />
 
-      {rows.length === 0 ? (
+      <EntityListStatus list={list} />
+      {!list.loading && !list.error && (rows.length === 0 && list.page === 1 ? (
         <EmptyState icon="🧪" text="No components yet. Only needed when a material is a blend (e.g. amended sand)." />
       ) : (
-        <Stack gap={8}>
-          {pagedPageRows.map((r) => (
+        <Stack gap={8} style={{ opacity: list.pageLoading ? 0.5 : 1 }}>
+          {rows.map((r) => (
             <ListItem
               key={r.id}
               icon="🧪"
@@ -551,8 +561,8 @@ function ComponentsList({ rows, typeRef, saving, onCreate, onUpdate, onDelete })
             />
           ))}
         </Stack>
-      )}
-      {rows.length > 0 && <PaginationBar page={pagedPage} pageSize={pagedPageSize} count={pagedPageRows.length} total={pagedTotal} onChange={setPagedPage} noun="component" />}
+      ))}
+      {!list.loading && !list.error && <PaginationBar page={list.page} pageSize={list.pageSize} count={rows.length} total={list.total} hasNext={list.hasNext} onChange={list.setPage} disabled={list.pageLoading} noun="component" />}
 
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit" : "Add"} Component</Text>} size="sm">
         <TextInput label="Component Name" required value={form.name} onChange={(e) => setFormField("name", e.currentTarget.value)} mb={10} autoFocus />
@@ -574,7 +584,12 @@ function ComponentsList({ rows, typeRef, saving, onCreate, onUpdate, onDelete })
   );
 }
 
-function AreaLayerMappings({ areas, layers, map, saving, onCreate, onUpdate, onDelete }) {
+function AreaLayerMappings({ project }) {
+  const groups = useMappingGroups({
+    project, parentDomain: "jfb_project_areas", mapDomain: "jfb_project_area_layers", parentField: "area_id", childDomain: "jfb_project_layers", childField: "layer_id",
+  });
+  const { parents, maps: map, childById: layerById, saving, onCreate, onUpdate, onDelete } = groups;
+  const areas = parents.records;
   const {
     modalOpen, setModalOpen, editRow, form, setFormField, context: areaId, openAdd, openEdit, save, remove, confirmModal,
   } = useCrudModal({
@@ -608,21 +623,37 @@ function AreaLayerMappings({ areas, layers, map, saving, onCreate, onUpdate, onD
     onDelete,
     confirmMessage: () => "Remove this layer from the area?",
   });
+  const [pickedLabel, setPickedLabel] = useState(null);
 
-  const layerById = Object.fromEntries(layers.map((l) => [l.id, l]));
+  const areaIdsKey = JSON.stringify(areas.map((a) => ({ id: a.id, parent_id: a.parent_id ?? null, name: a.name })));
+  const [paths, setPaths] = useState({ key: null, byId: {} });
+  useEffect(() => {
+    const pageAreas = JSON.parse(areaIdsKey);
+    if (!pageAreas.length || !groups.appSlug) return;
+    let cancelled = false;
+    loadAreaPaths(groups.appSlug, pageAreas)
+      .then((byId) => { if (!cancelled) setPaths({ key: areaIdsKey, byId }); })
+      .catch(() => { if (!cancelled) setPaths({ key: areaIdsKey, byId: {} }); });
+    return () => { cancelled = true; };
+  }, [groups.appSlug, areaIdsKey]);
+  const pathFor = (area) => (paths.key === areaIdsKey ? paths.byId[area.id] : null) ?? area.name;
 
-  const availableLayers = (id, excludeRowId) => layers.filter((l) => !map.some((m) => m.area_id === id && m.layer_id === l.id && m.id !== excludeRowId));
+  const fetchLayerOptions = childOptionsFetcher({
+    appSlug: groups.appSlug, projectId: project.id, childDomain: "jfb_project_layers", nameField: "layer_name",
+    mapDomain: "jfb_project_area_layers", parentField: "area_id", childField: "layer_id", parentId: areaId, currentChildId: editRow?.layer_id,
+  });
 
-  const { pageRows: pagedPageRows, page: pagedPage, setPage: setPagedPage, total: pagedTotal, pageSize: pagedPageSize } = usePagedRows(areas);
-  if (areas.length === 0) return <EmptyState icon="📍" text="No areas yet — add areas on the Areas tab first." />;
-  if (layers.length === 0) return <EmptyState icon="🧱" text="No layers yet — add layers first." />;
+  if (groups.loading) return <LoadingSpinner py={16} />;
+  if (groups.error) return <SafeError message={groups.error} />;
+  if (!groups.hasParents) return <EmptyState icon="📍" text="No areas yet — add areas on the Areas tab first." />;
+  if (!groups.hasChildren) return <EmptyState icon="🧱" text="No layers yet — add layers first." />;
 
   return (
-    <Box>
-      {pagedPageRows.map((area) => {
+    <Box style={{ opacity: groups.refreshing || parents.pageLoading ? 0.5 : 1 }}>
+      {areas.map((area) => {
         const rows = map.filter((m) => m.area_id === area.id);
         return (
-          <MapGroup key={area.id} icon="📍" title={areaPath(area.id, areas)} addLabel="Add Layer" onAdd={() => openAdd(area.id)}>
+          <MapGroup key={area.id} icon="📍" title={pathFor(area)} addLabel="Add Layer" onAdd={() => { setPickedLabel(null); openAdd(area.id); }}>
             {rows.length === 0 && <MapEmptyRow text="No layers mapped to this area yet." />}
             {rows.map((m, i) => {
               const goal = [
@@ -643,18 +674,29 @@ function AreaLayerMappings({ areas, layers, map, saving, onCreate, onUpdate, onD
                   chip={goal || null}
                   note={thickness || null}
                   isLast={i === rows.length - 1}
-                  onEdit={() => openEdit(m)}
+                  onEdit={() => { setPickedLabel(null); openEdit(m); }}
                   onRemove={() => remove(m)}
                 />
               );
             })}
-      <PaginationBar page={pagedPage} pageSize={pagedPageSize} count={pagedPageRows.length} total={pagedTotal} onChange={setPagedPage} noun="area" />
           </MapGroup>
         );
       })}
+      <MappingPager parents={parents} noun="area" />
 
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit Area Layer" : "Add Layer to Area"}</Text>} size="sm">
-        <PagedSelect label="Layer" required noun="layer" nothingFoundMessage="No matching layers" data={availableLayers(areaId, editRow?.id).map((l) => ({ value: l.id, label: l.layer_name }))} value={form.layerId} onChange={(v) => setFormField("layerId", v ?? "")} mb={10} />
+        <ServerPagedSelect
+          label="Layer"
+          required
+          noun="layer"
+          nothingFoundMessage="No matching layers"
+          fetchPage={fetchLayerOptions}
+          reloadKey={`${areaId ?? ""}|${editRow?.id ?? ""}`}
+          value={form.layerId || null}
+          selectedLabel={pickedLabel ?? layerById[form.layerId]?.layer_name ?? null}
+          onChange={(v, item) => { setFormField("layerId", v ?? ""); setPickedLabel(item?.label ?? null); }}
+          mb={10}
+        />
         <Group grow mb={10}>
           <NumberInput label='Min Thickness (in)' hideControls value={form.minThickness} onChange={(v) => setFormField("minThickness", v)} />
           <NumberInput label='Target Thickness (in)' hideControls value={form.targetThickness} onChange={(v) => setFormField("targetThickness", v)} />
@@ -676,7 +718,12 @@ function AreaLayerMappings({ areas, layers, map, saving, onCreate, onUpdate, onD
   );
 }
 
-function LayerMaterialMappings({ layers, materials, map, saving, onCreate, onUpdate, onDelete }) {
+function LayerMaterialMappings({ project }) {
+  const groups = useMappingGroups({
+    project, parentDomain: "jfb_project_layers", mapDomain: "jfb_project_layer_materials", parentField: "layer_id", childDomain: "jfb_project_materials", childField: "material_id",
+  });
+  const { parents, maps: map, childById: materialById, saving, onCreate, onUpdate, onDelete } = groups;
+  const layers = parents.records;
   const {
     modalOpen, setModalOpen, editRow, form, setFormField, context: layerId, openAdd, openEdit, save, remove, confirmModal,
   } = useCrudModal({
@@ -701,20 +748,24 @@ function LayerMaterialMappings({ layers, materials, map, saving, onCreate, onUpd
     onDelete,
     confirmMessage: () => "Remove this material from the layer?",
   });
-  const materialById = Object.fromEntries(materials.map((m) => [m.id, m]));
+  const [pickedLabel, setPickedLabel] = useState(null);
 
-  const availableMaterials = (id, excludeRowId) => materials.filter((m) => !map.some((x) => x.layer_id === id && x.material_id === m.id && x.id !== excludeRowId));
+  const fetchMaterialOptions = childOptionsFetcher({
+    appSlug: groups.appSlug, projectId: project.id, childDomain: "jfb_project_materials", nameField: "material_name",
+    mapDomain: "jfb_project_layer_materials", parentField: "layer_id", childField: "material_id", parentId: layerId, currentChildId: editRow?.material_id,
+  });
 
-  const { pageRows: pagedPageRows, page: pagedPage, setPage: setPagedPage, total: pagedTotal, pageSize: pagedPageSize } = usePagedRows(layers);
-  if (layers.length === 0) return <EmptyState icon="🧱" text="No layers yet." />;
-  if (materials.length === 0) return <EmptyState icon="⛏️" text="No materials yet." />;
+  if (groups.loading) return <LoadingSpinner py={16} />;
+  if (groups.error) return <SafeError message={groups.error} />;
+  if (!groups.hasParents) return <EmptyState icon="🧱" text="No layers yet." />;
+  if (!groups.hasChildren) return <EmptyState icon="⛏️" text="No materials yet." />;
 
   return (
-    <Box>
-      {pagedPageRows.map((layer) => {
+    <Box style={{ opacity: groups.refreshing || parents.pageLoading ? 0.5 : 1 }}>
+      {layers.map((layer) => {
         const rows = map.filter((m) => m.layer_id === layer.id);
         return (
-          <MapGroup key={layer.id} icon="🧱" title={layer.layer_name} addLabel="Add Material" onAdd={() => openAdd(layer.id)}>
+          <MapGroup key={layer.id} icon="🧱" title={layer.layer_name} addLabel="Add Material" onAdd={() => { setPickedLabel(null); openAdd(layer.id); }}>
             {rows.length === 0 && <MapEmptyRow text="No materials mapped to this layer yet." />}
             {rows.map((m, i) => (
               <MapRow
@@ -724,17 +775,28 @@ function LayerMaterialMappings({ layers, materials, map, saving, onCreate, onUpd
                 chip={m.loading_rate ? `${m.loading_rate} t/hr` : null}
                 note={m.layer_material_report_name ? `“${m.layer_material_report_name}”` : null}
                 isLast={i === rows.length - 1}
-                onEdit={() => openEdit(m)}
+                onEdit={() => { setPickedLabel(null); openEdit(m); }}
                 onRemove={() => remove(m)}
               />
             ))}
           </MapGroup>
         );
       })}
-      <PaginationBar page={pagedPage} pageSize={pagedPageSize} count={pagedPageRows.length} total={pagedTotal} onChange={setPagedPage} noun="layer" />
+      <MappingPager parents={parents} noun="layer" />
 
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit Layer Material" : "Add Material to Layer"}</Text>} size="sm">
-        <PagedSelect label="Material" required noun="material" nothingFoundMessage="No matching materials" data={availableMaterials(layerId, editRow?.id).map((m) => ({ value: m.id, label: m.material_name }))} value={form.materialId} onChange={(v) => setFormField("materialId", v ?? "")} mb={10} />
+        <ServerPagedSelect
+          label="Material"
+          required
+          noun="material"
+          nothingFoundMessage="No matching materials"
+          fetchPage={fetchMaterialOptions}
+          reloadKey={`${layerId ?? ""}|${editRow?.id ?? ""}`}
+          value={form.materialId || null}
+          selectedLabel={pickedLabel ?? materialById[form.materialId]?.material_name ?? null}
+          onChange={(v, item) => { setFormField("materialId", v ?? ""); setPickedLabel(item?.label ?? null); }}
+          mb={10}
+        />
         <NumberInput label="Loading Rate (tons/hr, optional)" hideControls value={form.loadingRate} onChange={(v) => setFormField("loadingRate", v)} mb={10} />
         <TextInput label="Report Name Override (optional)" value={form.reportName} onChange={(e) => setFormField("reportName", e.currentTarget.value)} mb={16} />
         <Group justify="flex-end">
@@ -748,7 +810,12 @@ function LayerMaterialMappings({ layers, materials, map, saving, onCreate, onUpd
   );
 }
 
-function MaterialComponentMappings({ materials, components, map, saving, onCreate, onUpdate, onDelete }) {
+function MaterialComponentMappings({ project }) {
+  const groups = useMappingGroups({
+    project, parentDomain: "jfb_project_materials", mapDomain: "jfb_project_material_components", parentField: "material_id", childDomain: "jfb_project_components", childField: "component_id",
+  });
+  const { parents, maps: map, childById: componentById, saving, onCreate, onUpdate, onDelete } = groups;
+  const materials = parents.records;
   const {
     modalOpen, setModalOpen, editRow, form, setFormField, context: materialId, openAdd, openEdit, save, remove, confirmModal,
   } = useCrudModal({
@@ -771,17 +838,21 @@ function MaterialComponentMappings({ materials, components, map, saving, onCreat
     onDelete,
     confirmMessage: () => "Remove this component from the material?",
   });
-  const componentById = Object.fromEntries(components.map((c) => [c.id, c]));
+  const [pickedLabel, setPickedLabel] = useState(null);
 
-  const availableComponents = (id, excludeRowId) => components.filter((c) => !map.some((x) => x.material_id === id && x.component_id === c.id && x.id !== excludeRowId));
+  const fetchComponentOptions = childOptionsFetcher({
+    appSlug: groups.appSlug, projectId: project.id, childDomain: "jfb_project_components", nameField: "component_name",
+    mapDomain: "jfb_project_material_components", parentField: "material_id", childField: "component_id", parentId: materialId, currentChildId: editRow?.component_id,
+  });
 
-  const { pageRows: pagedPageRows, page: pagedPage, setPage: setPagedPage, total: pagedTotal, pageSize: pagedPageSize } = usePagedRows(materials);
-  if (materials.length === 0) return <EmptyState icon="⛏️" text="No materials yet." />;
-  if (components.length === 0) return <EmptyState icon="🧪" text="No components yet. Add components first (only needed for blended materials)." />;
+  if (groups.loading) return <LoadingSpinner py={16} />;
+  if (groups.error) return <SafeError message={groups.error} />;
+  if (!groups.hasParents) return <EmptyState icon="⛏️" text="No materials yet." />;
+  if (!groups.hasChildren) return <EmptyState icon="🧪" text="No components yet. Add components first (only needed for blended materials)." />;
 
   return (
-    <Box>
-      {pagedPageRows.map((material) => {
+    <Box style={{ opacity: groups.refreshing || parents.pageLoading ? 0.5 : 1 }}>
+      {materials.map((material) => {
         const rows = map.filter((m) => m.material_id === material.id);
         const sumPct = rows.reduce((sum, r) => sum + (Number(r.component_percent_of_material) || 0), 0);
         return (
@@ -791,7 +862,7 @@ function MaterialComponentMappings({ materials, components, map, saving, onCreat
             title={material.material_name}
             extra={rows.length > 0 && <Text span size="10px" c={Math.abs(sumPct - 100) < 0.01 ? "#1B6B3A" : MUTED}>Σ {sumPct}%</Text>}
             addLabel="Add Component"
-            onAdd={() => openAdd(material.id)}
+            onAdd={() => { setPickedLabel(null); openAdd(material.id); }}
           >
             {rows.length === 0 && <MapEmptyRow text="No components — this material is placed as-is." />}
             {rows.map((m, i) => (
@@ -801,17 +872,28 @@ function MaterialComponentMappings({ materials, components, map, saving, onCreat
                 name={componentById[m.component_id]?.component_name ?? "?"}
                 chip={m.component_percent_of_material != null ? `${m.component_percent_of_material}%` : null}
                 isLast={i === rows.length - 1}
-                onEdit={() => openEdit(m)}
+                onEdit={() => { setPickedLabel(null); openEdit(m); }}
                 onRemove={() => remove(m)}
               />
             ))}
           </MapGroup>
         );
       })}
-      <PaginationBar page={pagedPage} pageSize={pagedPageSize} count={pagedPageRows.length} total={pagedTotal} onChange={setPagedPage} noun="material" />
+      <MappingPager parents={parents} noun="material" />
 
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">{editRow ? "Edit Material Component" : "Add Component to Material"}</Text>} size="sm">
-        <PagedSelect label="Component" required noun="component" nothingFoundMessage="No matching components" data={availableComponents(materialId, editRow?.id).map((c) => ({ value: c.id, label: c.component_name }))} value={form.componentId} onChange={(v) => setFormField("componentId", v ?? "")} mb={10} />
+        <ServerPagedSelect
+          label="Component"
+          required
+          noun="component"
+          nothingFoundMessage="No matching components"
+          fetchPage={fetchComponentOptions}
+          reloadKey={`${materialId ?? ""}|${editRow?.id ?? ""}`}
+          value={form.componentId || null}
+          selectedLabel={pickedLabel ?? componentById[form.componentId]?.component_name ?? null}
+          onChange={(v, item) => { setFormField("componentId", v ?? ""); setPickedLabel(item?.label ?? null); }}
+          mb={10}
+        />
         <NumberInput label="% of Material (optional)" hideControls min={0} max={100} value={form.percent} onChange={(v) => setFormField("percent", v)} mb={16} />
         <Group justify="flex-end">
           <Button variant="default" size="xs" onClick={() => setModalOpen(false)}>Cancel</Button>

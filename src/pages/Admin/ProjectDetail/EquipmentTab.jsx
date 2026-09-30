@@ -1,15 +1,16 @@
 import { useState } from "react";
 import { Box, Text, Group, Button, Modal, TextInput, Select, NumberInput, Switch } from "@mantine/core";
 import { IconAnchor } from "@tabler/icons-react";
-import { useEquipment } from "../../../hooks/project/useEquipment";
 import { useConfirmDialog } from "../../../hooks/ui/useConfirmDialog";
 import { useDomainData } from "../../../hooks/core/useDomainData";
+import { useAppConfig } from "../../../contexts/appConfigContext";
+import { fetchNextSortOrder } from "../../../data";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import SafeError from "../../../components/SafeError";
 import TabToolbar from "./TabToolbar";
 import PaginationBar from "../../../components/PaginationBar";
-import { usePagedRows } from "../../../hooks/ui/usePagedRows";
-import { compareEquipmentSortOrder } from "../../FieldOps/lib/workType";
+
+const DOMAIN = "jfb_equipments";
 
 function toDateInputValue(iso) {
   return iso ? String(iso).slice(0, 10) : "";
@@ -18,12 +19,18 @@ function toDateInputValue(iso) {
 export default function EquipmentTab({ project }) {
   const hasProject = !!project?.id;
   const { confirm, modal: confirmModal } = useConfirmDialog();
-  const { equipment: equipmentRecords, loading, error, creating, updating, reload, create, update, remove } = useEquipment(project?.id);
+  const { config } = useAppConfig();
+  const { records: equipment, loading, error, creating, updating, reload, create, update, remove, page, setPage, total, hasNext, pageLoading, pageSize } = useDomainData({
+    domain: DOMAIN,
+    system: "core",
+    projectId: project?.id,
+    paginate: true,
+    sortCol: "sort_order",
+    sortDir: "asc",
+  });
   const { records: workTypeRecords } = useDomainData({ domain: "jfb_work_types", system: "core" });
   const workTypeData = workTypeRecords.map((r) => ({ value: r.name, label: r.name }));
 
-  const equipment = hasProject ? [...equipmentRecords].sort(compareEquipmentSortOrder) : [];
-  const { pageRows: pagedEquipment, page, setPage, total, pageSize } = usePagedRows(equipment);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editRow, setEditRow] = useState(null);
@@ -35,15 +42,17 @@ export default function EquipmentTab({ project }) {
   const [demobilizedOn, setDemobilizedOn] = useState("");
   const datesInvalid = !!mobilizedOn && !!demobilizedOn && demobilizedOn < mobilizedOn;
 
-  function openAdd() {
+  async function openAdd() {
     setEditRow(null);
     setName("");
     setWorkType("");
     setWorkTypeFrom("");
-    setSortOrder(equipment.length + 1);
+    setSortOrder("");
     setMobilizedOn("");
     setDemobilizedOn("");
     setModalOpen(true);
+    const nextSort = await fetchNextSortOrder({ domain: DOMAIN, appSlug: config.appSlug, filters: { project_id: project.id }, step: 1 }).catch(() => null);
+    if (nextSort != null) setSortOrder((current) => (current === "" ? nextSort : current));
   }
 
   function openEdit(row) {
@@ -104,11 +113,11 @@ export default function EquipmentTab({ project }) {
             Select a project to manage its equipment.
           </Text>
         )}
-        {!loading && !error && hasProject && equipment.length === 0 && (
+        {!loading && !error && hasProject && equipment.length === 0 && page === 1 && (
           <Text size="xs" c="dimmed" ta="center" py={16}>No equipment configured</Text>
         )}
-        {!loading && !error && pagedEquipment.map((row) => (
-          <Group key={row.id} justify="space-between" p={8} mb={6} style={{ background: "#f5f6f8", border: "1px solid #ebebeb", borderRadius: 6 }}>
+        {!loading && !error && equipment.map((row) => (
+          <Group key={row.id} justify="space-between" p={8} mb={6} style={{ background: "#f5f6f8", border: "1px solid #ebebeb", borderRadius: 6, opacity: pageLoading ? 0.5 : 1 }}>
             <Group gap={8} style={{ opacity: row.is_active === false ? 0.55 : 1 }}>
               <IconAnchor size={14} color="#0F2744" />
               <Text size="xs" fw={600}>{row.name}</Text>
@@ -140,7 +149,7 @@ export default function EquipmentTab({ project }) {
           </Group>
         ))}
         {!loading && !error && (
-          <PaginationBar page={page} pageSize={pageSize} count={pagedEquipment.length} total={total} onChange={setPage} noun="equipment" plural="equipment" />
+          <PaginationBar page={page} pageSize={pageSize} count={equipment.length} total={total} hasNext={hasNext} onChange={setPage} disabled={pageLoading} noun="equipment" plural="equipment" />
         )}
       </Box>
 

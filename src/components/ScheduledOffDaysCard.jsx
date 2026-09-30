@@ -1,10 +1,38 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Box, Text, Group, Button, TextInput, UnstyledButton } from '@mantine/core'
 import { addDaysISO, daysBetween, prettyDate } from '../pages/FieldOps/lib/realizedToDate'
 import PaginationBar from './PaginationBar'
-import { usePagedRows } from '../hooks/ui/usePagedRows'
+import { useDomainData } from '../hooks/core/useDomainData'
+import { saveExcludedDays } from '../hooks/project/useRealizedExcludedDays'
+import { useAppConfig } from '../contexts/appConfigContext'
 
-export default function ScheduledOffDaysCard({ projectId, excludedDays, today, onCreate, onRemove, onError }) {
+const DOMAIN = 'jfb_realized_excluded_days'
+
+export default function ScheduledOffDaysCard({ projectId, today, refreshKey, onChanged, onError }) {
+  const { config } = useAppConfig()
+  const future = useDomainData({
+    domain: DOMAIN, system: 'core', projectId, filters: { exclude_date: { gte: today } },
+    paginate: true, sortCol: 'exclude_date', sortDir: 'asc',
+  })
+  const past = useDomainData({
+    domain: DOMAIN, system: 'core', projectId, filters: { exclude_date: { lt: today } },
+    paginate: true, sortCol: 'exclude_date', sortDir: 'desc',
+  })
+  const reloadFuture = future.reload
+  const reloadPast = past.reload
+  const lastRefreshKey = useRef(refreshKey)
+
+  useEffect(() => {
+    if (lastRefreshKey.current === refreshKey) return
+    lastRefreshKey.current = refreshKey
+    reloadFuture()
+    reloadPast()
+  }, [refreshKey, reloadFuture, reloadPast])
+
+  async function afterChange() {
+    await Promise.all([reloadFuture(), reloadPast()])
+    await onChanged?.()
+  }
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
   const [reason, setReason] = useState('Scheduled time off')
@@ -21,9 +49,8 @@ export default function ScheduledOffDaysCard({ projectId, excludedDays, today, o
     try {
       const dates = []
       for (let d = startDate; d <= end; d = addDaysISO(d, 1)) dates.push(d)
-      for (const date of dates) {
-        await onCreate({ project_id: projectId, exclude_date: date, reason: reason.trim() })
-      }
+      await saveExcludedDays({ appSlug: config.appSlug, projectId, dates, reason: reason.trim() })
+      await afterChange()
       setStartDate('')
       setEndDate('')
     } catch (e) {
@@ -34,18 +61,17 @@ export default function ScheduledOffDaysCard({ projectId, excludedDays, today, o
     }
   }
 
-  async function handleRemove(date) {
-    const row = excludedDays.find((d) => d.exclude_date === date)
-    if (!row) return
+  async function handleRemove(list, id) {
     try {
-      await onRemove(row.id)
+      await list.remove(id)
+      await afterChange()
     } catch (e) {
       onError?.(e.message)
     }
   }
 
-  const future = excludedDays.filter((d) => d.exclude_date >= today).sort((a, b) => a.exclude_date.localeCompare(b.exclude_date))
-  const past = excludedDays.filter((d) => d.exclude_date < today).sort((a, b) => b.exclude_date.localeCompare(a.exclude_date))
+  const hasFuture = future.records.length > 0 || future.page > 1
+  const hasPast = past.records.length > 0 || past.page > 1
 
   return (
     <Box style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }} p={16}>
@@ -75,41 +101,41 @@ export default function ScheduledOffDaysCard({ projectId, excludedDays, today, o
       )}
       {localError && <Text size="10px" c="red" mb={8}>{localError}</Text>}
 
-      {future.length > 0 && (
+      {hasFuture && (
         <Box mt={12}>
-          <Text size="10px" fw={700} tt="uppercase" c="dimmed" mb={4}>Upcoming ({future.length})</Text>
-          <DayList items={future} onRemove={handleRemove} highlight />
+          <Text size="10px" fw={700} tt="uppercase" c="dimmed" mb={4}>Upcoming{future.total != null ? ` (${future.total})` : ''}</Text>
+          <DayList list={future} onRemove={(id) => handleRemove(future, id)} highlight />
         </Box>
       )}
-      {past.length > 0 && (
+      {hasPast && (
         <Box mt={12}>
-          <Text size="10px" fw={700} tt="uppercase" c="dimmed" mb={4}>Past ({past.length})</Text>
-          <DayList items={past} onRemove={handleRemove} />
+          <Text size="10px" fw={700} tt="uppercase" c="dimmed" mb={4}>Past{past.total != null ? ` (${past.total})` : ''}</Text>
+          <DayList list={past} onRemove={(id) => handleRemove(past, id)} />
         </Box>
       )}
-      {excludedDays.length === 0 && <Text size="10px" c="dimmed" fs="italic" mt={8}>No off-days scheduled yet.</Text>}
+      {!future.loading && !past.loading && !hasFuture && !hasPast && <Text size="10px" c="dimmed" fs="italic" mt={8}>No off-days scheduled yet.</Text>}
     </Box>
   )
 }
 
-function DayList({ items, onRemove, highlight }) {
-  const { pageRows, page, setPage, total, pageSize } = usePagedRows(items)
+function DayList({ list, onRemove, highlight }) {
+  const { records: pageRows, page, setPage, total, hasNext, pageLoading, pageSize } = list
   return (
     <>
-    <Box style={{ border: `1px solid ${highlight ? '#fde68a' : 'var(--mantine-color-gray-3)'}`, borderRadius: 6, background: highlight ? '#fffbeb' : undefined }}>
+    <Box style={{ border: `1px solid ${highlight ? '#fde68a' : 'var(--mantine-color-gray-3)'}`, borderRadius: 6, background: highlight ? '#fffbeb' : undefined, opacity: pageLoading ? 0.5 : 1 }}>
       {pageRows.map((d, i) => (
-        <Group key={d.exclude_date} justify="space-between" px={8} py={4} style={{ borderBottom: i < pageRows.length - 1 ? '1px solid var(--mantine-color-gray-1)' : 'none' }}>
+        <Group key={d.id} justify="space-between" px={8} py={4} style={{ borderBottom: i < pageRows.length - 1 ? '1px solid var(--mantine-color-gray-1)' : 'none' }}>
           <Group gap={8}>
             <Text size="xs" fw={600}>{prettyDate(d.exclude_date)}</Text>
             <Text size="xs" c="dimmed">{d.reason}</Text>
           </Group>
-          <UnstyledButton onClick={() => onRemove(d.exclude_date)} title="Remove">
+          <UnstyledButton onClick={() => onRemove(d.id)} title="Remove">
             <Text size="xs" c="dimmed">×</Text>
           </UnstyledButton>
         </Group>
       ))}
     </Box>
-    <PaginationBar page={page} pageSize={pageSize} count={pageRows.length} total={total} onChange={setPage} noun="day" mt={8} />
+    <PaginationBar page={page} pageSize={pageSize} count={pageRows.length} total={total} hasNext={hasNext} onChange={setPage} disabled={pageLoading} noun="day" mt={8} />
     </>
   )
 }

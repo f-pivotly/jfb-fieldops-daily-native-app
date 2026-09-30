@@ -38,7 +38,7 @@ function fmt(v) {
 
 export default function AirQualityTab({ project, report }) {
   const { config, loading: configLoading, error: configError } = useAirMonitoringConfig(project?.id)
-  const { readings, error: readingsError } = useAirQualityReadings(config, report?.report_date)
+  const { readings, loading: readingsLoading, error: readingsError } = useAirQualityReadings(config, report?.report_date)
   const dailyHook = useAirMonitoringDaily(report?.id)
   const form = useAirMonitoringDailyForm({
     projectId: project?.id,
@@ -81,6 +81,12 @@ export default function AirQualityTab({ project, report }) {
     }
   }, [day, config])
 
+  const loadKey = `${project?.id ?? ''}|${report?.id ?? ''}|${report?.report_date ?? ''}`
+  const stillLoading = configLoading || readingsLoading || (!!report?.id && dailyHook.loading)
+  const [readyKey, setReadyKey] = useState(null)
+  if (readyKey !== loadKey && !stillLoading) setReadyKey(loadKey)
+  const showLoading = readyKey !== loadKey && stillLoading
+
   const allSlots = day?.slots ?? []
   const [shown, setShown] = useState(SLOT_PAGE)
   const visibleSlots = allSlots.slice(0, shown)
@@ -92,7 +98,7 @@ export default function AirQualityTab({ project, report }) {
     setShown(SLOT_PAGE)
   }
 
-  if (configLoading) return <Text size="sm" c="dimmed">Loading air quality data...</Text>
+  if (showLoading) return <Text size="sm" c="dimmed">Loading air quality data...</Text>
   if (!config) return <Text size="sm" c="dimmed">No air monitoring configured for this project.</Text>
 
   async function flush() {
@@ -176,7 +182,7 @@ export default function AirQualityTab({ project, report }) {
       <Box style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 6, overflow: 'hidden' }}>
         <Box style={{ maxHeight: 480, overflowY: 'auto' }}>
           <Table withTableBorder={false} verticalSpacing={4} fz="xs" stickyHeader>
-            <Table.Thead bg="gray.0">
+            <Table.Thead>
               <Table.Tr>
                 <Table.Th>Time</Table.Th>
                 {config.stations.map((s) => (

@@ -1,4 +1,5 @@
-import { isOperationalCategory, normalizedCategory, TRANSITION_CATEGORY } from '../../../lib/operationalCategory'
+import { isOperationalCategory } from '../../../lib/operationalCategory'
+import { isTransition } from '../../../lib/transitionState'
 
 function dayOf(dateLike) {
   if (!dateLike) return null
@@ -63,5 +64,5 @@ export function isProductiveActivity(a) {
 }
 
 export function isTransitionActivity(a) {
-  return normalizedCategory(a?.category) === TRANSITION_CATEGORY
+  return isTransition(a)
 }

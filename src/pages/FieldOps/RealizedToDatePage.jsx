@@ -4,7 +4,7 @@ import { Box, Grid, Text, Table, Group, Button, Select, Stack, TextInput, Unstyl
 import { executeDataView, executeReport } from '../../data'
 import { useAppConfig } from '../../contexts/appConfigContext'
 import { useProject } from '../../hooks/project/useProject'
-import { useRealizedExcludedDays } from '../../hooks/project/useRealizedExcludedDays'
+import { useRealizedExcludedDays, saveExcludedDays } from '../../hooks/project/useRealizedExcludedDays'
 import { useProjectMaterials } from '../../hooks/capping/useProjectMaterials'
 import { useRealizedScopes } from '../../hooks/project/useRealizedScopes'
 import { useProductionWeekBreaks } from '../../hooks/project/useProductionWeekBreaks'
@@ -29,7 +29,7 @@ export default function RealizedToDatePage() {
   const { config } = useAppConfig()
   const { project, loading: projectLoading } = useProject(projectId)
   const {
-    excludedDays, create: createExcluded, remove: removeExcluded,
+    excludedDays, remove: removeExcluded, reload: reloadExcluded,
   } = useRealizedExcludedDays(projectId)
   const {
     breaks, creating: addingBreak, create: createBreak, remove: removeBreak,
@@ -163,9 +163,8 @@ export default function RealizedToDatePage() {
     if (!projectId || !excludeTarget) return
     setSavingExclude(true)
     try {
-      await createExcluded({
-        project_id: projectId, exclude_date: excludeTarget, reason,
-      })
+      await saveExcludedDays({ appSlug: config.appSlug, projectId, dates: [excludeTarget], reason })
+      await reloadExcluded()
       setExcludeTarget(null)
     } catch (e) {
       setActionError(e.message)
@@ -175,10 +174,10 @@ export default function RealizedToDatePage() {
   }
 
   async function includeDay(date) {
-    const row = excludedDays.find((e) => e.exclude_date === date)
-    if (!row) return
+    const rows = excludedDays.filter((e) => e.exclude_date === date)
+    if (!rows.length) return
     try {
-      await removeExcluded(row.id)
+      for (const row of rows) await removeExcluded(row.id)
     } catch (e) {
       setActionError(e.message)
     }
@@ -280,10 +279,9 @@ export default function RealizedToDatePage() {
               <Box mt="md">
                 <ScheduledOffDaysCard
                   projectId={projectId}
-                  excludedDays={excludedDays}
                   today={today}
-                  onCreate={createExcluded}
-                  onRemove={removeExcluded}
+                  refreshKey={excludedDays.map((e) => e.id).join(',')}
+                  onChanged={reloadExcluded}
                   onError={setActionError}
                 />
               </Box>

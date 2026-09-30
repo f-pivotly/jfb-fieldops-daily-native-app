@@ -2,9 +2,10 @@ import { List, Text } from '@mantine/core'
 import WarningBanner, { WARNING_TEXT } from '../components/WarningBanner'
 import { hoursBetween } from '../../lib/eventTotals'
 import { hhmm } from '../../../../lib/reportDates'
+import { isTransition, withTransitionState } from '../../../../lib/transitionState'
 
 export default function UnassignedBanner({ activities }) {
-  const untagged = (activities ?? []).filter((a) => !a.area?.area_id)
+  const untagged = withTransitionState(activities).filter((a) => !isTransition(a) && !a.area?.area_id)
   const hours = untagged.reduce((sum, a) => sum + hoursBetween(a.start_date_time, a.end_date_time), 0)
   if (untagged.length === 0 || hours <= 0.001) return null
 

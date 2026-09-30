@@ -476,6 +476,27 @@
         "code": "lww"
       },
       "triggers_version_change": true
+    },
+    {
+      "pii": false,
+      "name": "deletion_reason",
+      "slug": "deletion_reason",
+      "type": "text",
+      "label": "Deletion Reason",
+      "unique": false,
+      "indexed": false,
+      "masking": {
+        "masked": false
+      },
+      "nullable": true,
+      "required": false,
+      "data_type": "text",
+      "column_name": "deletion_reason",
+      "description": "Why a PE/PM deleted this activity from the Event Log. Written just before the soft delete; the platform's own deleted_at and modified_by record when and who. Matches the non-native app's event_deletions.reason. Null on live rows.",
+      "conflict_resolution": {
+        "code": "lww"
+      },
+      "triggers_version_change": true
     }
   ],
   "archive": true,

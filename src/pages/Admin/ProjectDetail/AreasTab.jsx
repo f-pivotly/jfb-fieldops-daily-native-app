@@ -1,38 +1,109 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Box, Text, Group, Button, Modal, TextInput, NumberInput, Textarea, Checkbox, Stack } from "@mantine/core";
 import { IconPlus, IconFolder, IconRefresh } from "@tabler/icons-react";
 import { useConfirmDialog } from "../../../hooks/ui/useConfirmDialog";
-import { useProjectAreas } from "../../../hooks/project/useProjectAreas";
 import { useAreaLevels } from "../../../hooks/project/useAreaLevels";
+import { useDomainData } from "../../../hooks/core/useDomainData";
+import { useAppConfig } from "../../../contexts/appConfigContext";
+import { deleteDomainRecord, fetchRecordsByField, iterateDomainRecords } from "../../../data";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import SafeError from "../../../components/SafeError";
 import PaginationBar from "../../../components/PaginationBar";
-import { usePagedRows } from "../../../hooks/ui/usePagedRows";
 
+const DOMAIN = "jfb_project_areas";
 const EMPTY_FORM = { name: "", volume_goal_cy: "", area_goal_sf: "", notes: "", sort_order: 0 };
+
+async function loadDescendants(appSlug, rootIds, maxLevels) {
+  const all = [];
+  let parentIds = rootIds;
+  for (let level = 0; level < maxLevels && parentIds.length; level++) {
+    const rows = await fetchRecordsByField({ domain: DOMAIN, appSlug, field: "parent_id", values: parentIds });
+    all.push(...rows);
+    parentIds = rows.map((r) => r.id);
+  }
+  return all;
+}
+
+async function loadGoalTotals(appSlug, projectId) {
+  let anyGoalSet = false;
+  let sumCy = 0;
+  for await (const rows of iterateDomainRecords({
+    domain: DOMAIN, system: "core", appSlug, filters: { project_id: projectId },
+    selectCols: ["volume_goal_cy", "area_goal_sf"], pageSize: 1000,
+  })) {
+    for (const a of rows) {
+      if (a.volume_goal_cy || a.area_goal_sf) anyGoalSet = true;
+      sumCy += Number(a.volume_goal_cy) || 0;
+    }
+  }
+  return { anyGoalSet, sumCy };
+}
 
 export default function AreasTab({ project }) {
   const hasProject = !!project?.id;
+  const { config } = useAppConfig();
   const { confirm, modal: confirmModal } = useConfirmDialog();
   const { areaLevels, loading: levelsLoading, error: levelsError } = useAreaLevels(project?.id);
+
+  const levelByDepth = new Map(areaLevels.map((l) => [l.depth, l]));
+  const depthByLevelId = new Map(areaLevels.map((l) => [l.id, l.depth]));
+  const maxDepth = areaLevels.reduce((m, l) => Math.max(m, l.depth), 0);
+  const l1 = levelByDepth.get(1);
+
   const {
-    areas, loading: areasLoading, error: areasError,
-    creating, updating, reload, create, update, remove,
-  } = useProjectAreas(project?.id);
+    records: level1Records, loading: level1Loading, error: level1Error,
+    creating, updating, reload: reloadLevel1, create, update,
+    page, setPage, total, hasNext, pageLoading, pageSize,
+  } = useDomainData({
+    domain: l1 ? DOMAIN : null,
+    system: "core",
+    projectId: project?.id,
+    filters: { area_level_id: l1?.id ?? null },
+    paginate: true,
+    sortCol: "sort_order",
+    sortDir: "asc",
+  });
+
+  const [version, setVersion] = useState(0);
+  const level1Ids = level1Records.map((a) => a.id).join(",");
+  const treeKey = `${level1Ids}|${maxDepth}|${version}`;
+  const [tree, setTree] = useState({ key: null, rows: [], error: null });
+  const totalsKey = `${project?.id ?? ""}|${version}`;
+  const [totals, setTotals] = useState({ key: null, anyGoalSet: false, sumCy: 0 });
+
+  useEffect(() => {
+    if (!level1Ids || !config.appSlug) return;
+    let cancelled = false;
+    loadDescendants(config.appSlug, level1Ids.split(","), Math.max(0, maxDepth - 1))
+      .then((rows) => { if (!cancelled) setTree({ key: treeKey, rows, error: null }); })
+      .catch((err) => { if (!cancelled) setTree({ key: treeKey, rows: [], error: err.message }); });
+    return () => { cancelled = true; };
+  }, [config.appSlug, level1Ids, maxDepth, treeKey]);
+
+  useEffect(() => {
+    if (!project?.id || !config.appSlug) return;
+    let cancelled = false;
+    loadGoalTotals(config.appSlug, project.id)
+      .then((t) => { if (!cancelled) setTotals({ key: totalsKey, ...t }); })
+      .catch(() => { if (!cancelled) setTotals({ key: totalsKey, anyGoalSet: false, sumCy: 0 }); });
+    return () => { cancelled = true; };
+  }, [config.appSlug, project?.id, totalsKey]);
+
+  const descendants = level1Ids && tree.key === treeKey ? tree.rows : [];
+  const areasWithDepth = [...level1Records, ...descendants].map((a) => ({ ...a, depth: depthByLevelId.get(a.area_level_id) ?? null }));
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editRow, setEditRow] = useState(null);
   const [parentContext, setParentContext] = useState({ parentId: null, depth: 1 });
   const [form, setForm] = useState(EMPTY_FORM);
 
-  const levelByDepth = new Map(areaLevels.map((l) => [l.depth, l]));
-  const depthByLevelId = new Map(areaLevels.map((l) => [l.id, l.depth]));
-  const maxDepth = areaLevels.reduce((m, l) => Math.max(m, l.depth), 0);
-  const areasWithDepth = areas.map((a) => ({ ...a, depth: depthByLevelId.get(a.area_level_id) ?? null }));
-  const l1 = levelByDepth.get(1);
-
   function labelFor(depth) {
     return levelByDepth.get(depth)?.label || `Level ${depth}`;
+  }
+
+  function reload() {
+    reloadLevel1();
+    setVersion((v) => v + 1);
   }
 
   function openAdd(parentId, depth) {
@@ -81,40 +152,32 @@ export default function AreasTab({ project }) {
         is_active: true,
       });
     }
+    setVersion((v) => v + 1);
     setModalOpen(false);
   }
 
   async function toggleActive(row) {
     await update(row.id, { is_active: !row.is_active });
+    setVersion((v) => v + 1);
   }
 
   async function removeArea(row) {
     if (!(await confirm(`Delete "${row.name}"? This also removes its children.`))) return;
-    const idsToRemove = new Set([row.id]);
-    let changed = true;
-    while (changed) {
-      changed = false;
-      for (const a of areasWithDepth) {
-        if (a.parent_id && idsToRemove.has(a.parent_id) && !idsToRemove.has(a.id)) {
-          idsToRemove.add(a.id);
-          changed = true;
-        }
-      }
+    const descendantRows = await loadDescendants(config.appSlug, [row.id], Math.max(1, maxDepth));
+    for (const child of descendantRows.reverse()) {
+      await deleteDomainRecord({ domain: DOMAIN, system: "core", appSlug: config.appSlug, recordId: child.id });
     }
-    for (const id of idsToRemove) {
-      await remove(id);
-    }
+    await deleteDomainRecord({ domain: DOMAIN, system: "core", appSlug: config.appSlug, recordId: row.id });
+    reload();
   }
 
-  const level1Areas = areasWithDepth.filter((a) => a.depth === 1).sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-  const { pageRows: level1AreasPageRows, page: level1AreasPage, setPage: setLevel1AreasPage, total: level1AreasTotal, pageSize: level1AreasPageSize } = usePagedRows(level1Areas);
-  const anyGoalSet = areasWithDepth.some((a) => a.volume_goal_cy || a.area_goal_sf);
-  const sumCy = areasWithDepth.reduce((sum, a) => sum + (a.volume_goal_cy || 0), 0);
+  const anyGoalSet = totals.key === totalsKey && totals.anyGoalSet;
+  const sumCy = totals.key === totalsKey ? totals.sumCy : 0;
   const projectGoal = project?.volume_goal ? Number(project.volume_goal) : null;
   const reconciles = projectGoal != null && Math.abs(projectGoal - sumCy) <= 100;
 
-  const loading = levelsLoading || areasLoading;
-  const error = levelsError || areasError;
+  const loading = levelsLoading || (!!l1 && level1Loading);
+  const error = levelsError || (l1 ? level1Error : null) || tree.error;
 
   return (
     <Box>
@@ -173,11 +236,11 @@ export default function AreasTab({ project }) {
           )}
 
           <Box style={{ background: "#fff", border: "1px solid #ebebeb", borderRadius: 6, padding: 12, overflow: "hidden" }}>
-            {level1Areas.length === 0 && (
+            {level1Records.length === 0 && page === 1 && (
               <Text size="xs" c="dimmed" ta="center" py={16}>No {l1.label.toLowerCase()}s yet</Text>
             )}
-            <Stack gap={8}>
-              {level1AreasPageRows.map((a1) => (
+            <Stack gap={8} style={{ opacity: pageLoading ? 0.5 : 1 }}>
+              {areasWithDepth.filter((a) => a.depth === 1).map((a1) => (
                 <AreaNode
                   key={a1.id}
                   area={a1}
@@ -192,7 +255,7 @@ export default function AreasTab({ project }) {
                 />
               ))}
             </Stack>
-            <PaginationBar page={level1AreasPage} pageSize={level1AreasPageSize} count={level1AreasPageRows.length} total={level1AreasTotal} onChange={setLevel1AreasPage} noun={l1.label.toLowerCase()} />
+            <PaginationBar page={page} pageSize={pageSize} count={level1Records.length} total={total} hasNext={hasNext} onChange={setPage} disabled={pageLoading} noun={l1.label.toLowerCase()} />
           </Box>
         </>
       )}

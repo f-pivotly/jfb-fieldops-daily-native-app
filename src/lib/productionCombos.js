@@ -1,4 +1,5 @@
 import { isOperationalCategory } from './operationalCategory'
+import { isTransition, withTransitionState } from './transitionState'
 const UNASSIGNED_KEY = '__unassigned'
 
 export function comboKey(c) {
@@ -23,7 +24,7 @@ function durationHours(startISO, endISO) {
 
 export function buildCombosFromActivities(activities, { passKeyOf }) {
   const combos = new Map()
-  for (const a of activities) {
+  for (const a of withTransitionState(activities)) {
     const area = a.area ?? {}
     const c = {
       areaId: area.area_id ?? null,
@@ -39,6 +40,7 @@ export function buildCombosFromActivities(activities, { passKeyOf }) {
       row = { key, ...c, timeHours: 0, contributing: [] }
       combos.set(key, row)
     }
+    if (isTransition(a)) continue
     const hours = durationHours(a.start_date_time, a.end_date_time)
     row.timeHours += hours
     row.contributing.push({ id: a.id, category: a.category ?? null, delay_code_id: a.delay_code_id ?? null, durationHours: hours })

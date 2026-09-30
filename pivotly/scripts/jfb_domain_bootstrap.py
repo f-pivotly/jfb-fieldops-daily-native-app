@@ -35,7 +35,7 @@ except ModuleNotFoundError:
         raise RuntimeError("Pivotly runner secret helper is unavailable outside Pivotly.")
 
 
-SCRIPT_VERSION = "v4-jfb-domain-sync-58-r5"
+SCRIPT_VERSION = "v4-jfb-domain-sync-58-r7"
 
 SCRIPT_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "pivotly:jfb:config-bootstrap:v2")
 
@@ -1574,6 +1574,27 @@ _RAW_DOMAINS_JSON = r'''
           "pii": false,
           "required": false,
           "slug": "device_id",
+          "triggers_version_change": true,
+          "type": "text",
+          "unique": false
+        },
+        {
+          "column_name": "deletion_reason",
+          "conflict_resolution": {
+            "code": "lww"
+          },
+          "data_type": "text",
+          "description": "Why a PE/PM deleted this activity from the Event Log. Written just before the soft delete; the platform's own deleted_at and modified_by record when and who. Matches the non-native app's event_deletions.reason. Null on live rows.",
+          "indexed": false,
+          "label": "Deletion Reason",
+          "masking": {
+            "masked": false
+          },
+          "name": "deletion_reason",
+          "nullable": true,
+          "pii": false,
+          "required": false,
+          "slug": "deletion_reason",
           "triggers_version_change": true,
           "type": "text",
           "unique": false
@@ -7146,7 +7167,7 @@ _RAW_DOMAINS_JSON = r'''
           "data_type": "numeric",
           "description": "",
           "indexed": false,
-          "label": "Volume Goal Sf",
+          "label": "Area Goal Sf",
           "masking": {
             "masked": false
           },
@@ -7154,7 +7175,7 @@ _RAW_DOMAINS_JSON = r'''
           "nullable": true,
           "pii": false,
           "required": false,
-          "slug": "volume_goal_sf",
+          "slug": "area_goal_sf",
           "triggers_version_change": true,
           "type": "numeric",
           "unique": false

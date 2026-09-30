@@ -1,0 +1,32 @@
+[
+  {
+    "name": "mode",
+    "value": "bootstrap_only",
+    "data_type": "string"
+  },
+  {
+    "name": "param_contract_version",
+    "value": "jfb_picklist_params_v1",
+    "data_type": "string"
+  },
+  {
+    "name": "dry_run",
+    "value": false,
+    "data_type": "boolean"
+  },
+  {
+    "name": "publish_config",
+    "value": true,
+    "data_type": "boolean"
+  },
+  {
+    "name": "item_scope",
+    "value": "all",
+    "data_type": "string"
+  },
+  {
+    "name": "output_shape",
+    "value": "summary",
+    "data_type": "string"
+  }
+]

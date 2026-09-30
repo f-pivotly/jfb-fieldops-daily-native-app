@@ -90,6 +90,7 @@ TABLE
 | step | text |
 | local_id | text (unique) |
 | device_id | text |
+| deletion_reason | text |
 
 ## jfb_delay_codes
 TABLE

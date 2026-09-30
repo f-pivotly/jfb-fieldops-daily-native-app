@@ -1,16 +1,17 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useDebouncedValue } from "@mantine/hooks";
 import { Box, Text, Group, Button, Table, Modal, TextInput, NumberInput, Checkbox } from "@mantine/core";
 import { useDomainData } from "../../../hooks/core/useDomainData";
 import { useConfirmDialog } from "../../../hooks/ui/useConfirmDialog";
 import { useAppConfig } from "../../../contexts/appConfigContext";
-import { createDomainRecord } from "../../../data";
+import { createDomainRecord, fetchFirstRecord, fetchNextSortOrder, fetchRecordPage } from "../../../data";
 import LoadingSpinner from "../../../components/LoadingSpinner";
 import SafeError from "../../../components/SafeError";
 import { uniqueSectionKey, slugifySectionKey } from "../../../lib/narrativeSectionKey";
 import TabToolbar from "./TabToolbar";
 import PaginationBar from "../../../components/PaginationBar";
-import { usePagedRows } from "../../../hooks/ui/usePagedRows";
 
+const DOMAIN = "jfb_project_report_narratives";
 const EMPTY_FORM = { section_key: "", narrative_label: "", date: "", sort_order: 0, is_active: true };
 
 function sanitizeSectionKey(value) {
@@ -25,15 +26,16 @@ export default function NarrativesTab({ project }) {
   const hasProject = !!project?.id;
   const { config } = useAppConfig();
   const { confirm, modal: confirmModal } = useConfirmDialog();
-  const { records, loading, error, creating, updating, reload, create, update, remove } = useDomainData({
-    domain: "jfb_project_report_narratives",
+  const { records: rows, loading, error, creating, updating, reload, create, update, remove, page, setPage, total, hasNext, pageLoading, pageSize } = useDomainData({
+    domain: DOMAIN,
     system: "core",
     projectId: project?.id,
+    paginate: true,
+    sortCol: "sort_order",
+    sortDir: "asc",
   });
   const { records: defaultSections } = useDomainData({ domain: "jfb_narrative_section_defaults", system: "core" });
 
-  const rows = hasProject ? [...records].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)) : [];
-  const { pageRows: rowsPageRows, page: rowsPage, setPage: setRowsPage, total: rowsTotal, pageSize: rowsPageSize } = usePagedRows(rows);
 
   const [addOpen, setAddOpen] = useState(false);
   const [editRow, setEditRow] = useState(null);
@@ -41,7 +43,18 @@ export default function NarrativesTab({ project }) {
   const [seeding, setSeeding] = useState(false);
 
   const addKey = (form.section_key ?? "").replace(/^_+|_+$/g, "");
-  const addKeyTaken = !!addKey && rows.some((r) => r.section_key === addKey);
+  const [debouncedAddKey] = useDebouncedValue(addOpen ? addKey : "", 300);
+  const [keyCheck, setKeyCheck] = useState({ key: null, taken: false });
+  const addKeyTaken = !!addKey && keyCheck.key === addKey && keyCheck.taken;
+
+  useEffect(() => {
+    if (!debouncedAddKey || !project?.id) return;
+    let cancelled = false;
+    fetchFirstRecord({ domain: DOMAIN, appSlug: config.appSlug, filters: { project_id: project.id, section_key: debouncedAddKey } })
+      .then((row) => { if (!cancelled) setKeyCheck({ key: debouncedAddKey, taken: !!row }); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [debouncedAddKey, project?.id, config.appSlug]);
 
   async function handleSeedDefaults() {
     if (!hasProject) return;
@@ -55,7 +68,7 @@ export default function NarrativesTab({ project }) {
         const sectionKey = uniqueSectionKey(d.label, usedKeys);
         usedKeys.push(sectionKey);
         await createDomainRecord({
-          domain: "jfb_project_report_narratives",
+          domain: DOMAIN,
           system: "core",
           appSlug: config.appSlug,
           recordData: { project_id: project.id, narrative_label: d.label, section_key: sectionKey, sort_order: d.sort_order, is_active: true },
@@ -71,10 +84,11 @@ export default function NarrativesTab({ project }) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
-  function openAdd() {
-    const nextSort = rows.length === 0 ? 10 : Math.max(...rows.map((r) => r.sort_order ?? 0)) + 10;
-    setForm({ ...EMPTY_FORM, sort_order: nextSort });
+  async function openAdd() {
+    setForm({ ...EMPTY_FORM, sort_order: 10 });
     setAddOpen(true);
+    const nextSort = await fetchNextSortOrder({ domain: DOMAIN, appSlug: config.appSlug, filters: { project_id: project.id } }).catch(() => null);
+    if (nextSort != null) setField("sort_order", nextSort);
   }
 
   function openEdit(row) {
@@ -88,9 +102,15 @@ export default function NarrativesTab({ project }) {
     });
   }
 
-  function handleSectionKeyBlur() {
+  async function handleSectionKeyBlur() {
     if (!form.section_key && form.narrative_label.trim()) {
-      setField("section_key", uniqueSectionKey(form.narrative_label, rows.map((r) => r.section_key).filter(Boolean)));
+      const base = slugifySectionKey(form.narrative_label);
+      const { rows: existing } = await fetchRecordPage({
+        domain: DOMAIN, appSlug: config.appSlug, pageSize: 200,
+        filters: { project_id: project.id, section_key: { like: `${base}*` } },
+      });
+      const key = uniqueSectionKey(form.narrative_label, existing.map((r) => r.section_key).filter(Boolean));
+      setForm((f) => (f.section_key ? f : { ...f, section_key: key }));
     } else if (form.section_key) {
       setField("section_key", slugifySectionKey(form.section_key));
     }
@@ -98,6 +118,10 @@ export default function NarrativesTab({ project }) {
 
   async function handleAddSave() {
     if (!addKey || addKeyTaken || !form.narrative_label.trim() || !hasProject) return;
+    if (await fetchFirstRecord({ domain: DOMAIN, appSlug: config.appSlug, filters: { project_id: project.id, section_key: addKey } })) {
+      setKeyCheck({ key: addKey, taken: true });
+      return;
+    }
     await create({
       project_id: project.id,
       narrative_label: form.narrative_label.trim(),
@@ -148,7 +172,7 @@ export default function NarrativesTab({ project }) {
             Select a project to manage its narrative sections.
           </Text>
         )}
-        {!loading && !error && hasProject && rows.length === 0 && (
+        {!loading && !error && hasProject && rows.length === 0 && page === 1 && (
           <Box ta="center" py={16}>
             <Text size="xs" c="dimmed" mb={10}>No narrative sections configured yet. Click + Add Section to start.</Text>
             <Button size="xs" variant="default" loading={seeding} onClick={handleSeedDefaults}>
@@ -158,7 +182,7 @@ export default function NarrativesTab({ project }) {
         )}
         {!loading && !error && hasProject && rows.length > 0 && (
           <>
-          <Table withTableBorder verticalSpacing="xs" fz="sm">
+          <Table withTableBorder verticalSpacing="xs" fz="sm" style={{ opacity: pageLoading ? 0.5 : 1 }}>
             <Table.Thead>
               <Table.Tr>
                 <Table.Th>Section Key</Table.Th>
@@ -170,7 +194,7 @@ export default function NarrativesTab({ project }) {
               </Table.Tr>
             </Table.Thead>
             <Table.Tbody>
-              {rowsPageRows.map((r) => (
+              {rows.map((r) => (
                 <Table.Tr key={r.id}>
                   <Table.Td style={{ fontFamily: "monospace", fontSize: 12 }}>{r.section_key || "—"}</Table.Td>
                   <Table.Td>{r.narrative_label}</Table.Td>
@@ -194,7 +218,7 @@ export default function NarrativesTab({ project }) {
               ))}
             </Table.Tbody>
           </Table>
-          <PaginationBar page={rowsPage} pageSize={rowsPageSize} count={rowsPageRows.length} total={rowsTotal} onChange={setRowsPage} noun="section" />
+          <PaginationBar page={page} pageSize={pageSize} count={rows.length} total={total} hasNext={hasNext} onChange={setPage} disabled={pageLoading} noun="section" />
           </>
         )}
       </Box>

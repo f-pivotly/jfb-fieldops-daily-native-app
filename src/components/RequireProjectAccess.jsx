@@ -4,7 +4,7 @@ import { useVisibleProjects } from "../hooks/project/useVisibleProjects";
 
 export default function RequireProjectAccess({ children }) {
   const { projectId } = useParams();
-  const { projects, loading, isCrossProject } = useVisibleProjects();
+  const { projects, loading, isCrossProject } = useVisibleProjects({ loadAll: false });
 
   if (loading) {
     return (

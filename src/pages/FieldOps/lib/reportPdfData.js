@@ -1,6 +1,15 @@
-import { fetchDomainRecords, fetchPicklistValues, downloadAttachment, executeDataView, fetchPublicAsset } from '../../../data'
+import { fetchDomainRecords, fetchAllDomainRecords, fetchRecordsByField, fetchPicklistValues, downloadAttachment, executeDataView, fetchPublicAsset, fetchUsersByDisplayName, fetchRoleByCode, fetchRoleUsersPage } from '../../../data'
+
+async function readAll(options) {
+  return { data: await fetchAllDomainRecords({ pageSize: 500, ...options }) }
+}
+
+async function readByIds({ domain, appSlug, field = 'id', values, filters }) {
+  return { data: await fetchRecordsByField({ domain, appSlug, field, values, filters }) }
+}
 import { renderWeeklyProgressCharts } from '../../../lib/dredge/weeklyChart'
 import { buildCombosFromActivities, comboNOH, isUnassigned } from '../../../lib/productionCombos'
+import { withTransitionState } from '../../../lib/transitionState'
 import { equipmentWorkType, isProductiveActivity, isTransitionActivity } from './workType'
 import { prettyDate, blobToDataUri, fmtNum, fmtHrs } from './realizedToDate'
 import { UNATTRIBUTED_CATEGORY, shiftTotals } from './eventTotals'
@@ -8,6 +17,7 @@ import { metricValueKey } from '../../../lib/metricValueKey'
 import { payGroupsOf, payQuantity, payQtyDecimals } from '../../../lib/capping/payGroups'
 import { isDirectImageUrl } from '../../../lib/imageSource'
 import { hhmm, utcDayRange } from '../../../lib/reportDates'
+import { uniqueSectionKey } from '../../../lib/narrativeSectionKey'
 import { airWindowUtc, buildAirDay } from '../../../lib/airQuality/data'
 import { buildAirChartSpecs, renderAirChart } from '../../../lib/airQuality/chart'
 import { reportWindowUtc, buildTurbidityDay, buildTidalTurbidityDay, isTidalConfig, tidalLimits } from '../../../lib/waterQuality/data'
@@ -86,9 +96,9 @@ export function buildEquipmentReportNumbers({ date, equipment }) {
 }
 
 export async function buildPhotoAssetsParam({ appSlug, reportId }) {
-  const photosRes = await fetchDomainRecords({
+  const photosRes = await readAll({
     domain: 'jfb_report_photos', system: 'core', appSlug,
-    filters: { report_id: reportId }, limit: 50,
+    filters: { report_id: reportId },
   })
   const photos = (photosRes?.data ?? []).filter((p) => p.photo_file_path)
 
@@ -102,23 +112,39 @@ export async function buildPhotoAssetsParam({ appSlug, reportId }) {
   return Object.fromEntries(entries)
 }
 
+function dredgeChartPaths(row) {
+  let paths = row.chart_paths
+  if (typeof paths === 'string') {
+    try {
+      paths = JSON.parse(paths)
+    } catch {
+      paths = null
+    }
+  }
+  const list = Array.isArray(paths) ? paths.filter(Boolean) : []
+  if (list.length) return list
+  return row.chart_path ? [row.chart_path] : []
+}
+
 export async function buildDredgeChartAssetsParam({ appSlug, reportId, project, equipment, dateISO }) {
   const [progressRes, placementRes, spreaderRes] = await Promise.all([
-    fetchDomainRecords({
+    readAll({
       domain: 'jfb_dredge_progress', system: 'core', appSlug,
-      filters: { report_id: reportId }, limit: 50,
+      filters: { report_id: reportId },
     }),
-    fetchDomainRecords({
+    readAll({
       domain: 'jfb_placement_progress', system: 'core', appSlug,
-      filters: { report_id: reportId }, limit: 50,
+      filters: { report_id: reportId },
     }).catch(() => null),
-    fetchDomainRecords({
+    readAll({
       domain: 'jfb_spreader_progress', system: 'core', appSlug,
-      filters: { report_id: reportId }, limit: 50,
+      filters: { report_id: reportId },
     }).catch(() => null),
   ])
-  const chartByEquipmentId = new Map(
-    (progressRes?.data ?? []).filter((r) => r.chart_path).map((r) => [String(r.equipment_id), r.chart_path]),
+  const chartsByEquipmentId = new Map(
+    (progressRes?.data ?? [])
+      .map((r) => [String(r.equipment_id), dredgeChartPaths(r)])
+      .filter(([, paths]) => paths.length > 0),
   )
   const placementChartByEquipmentId = new Map(
     (placementRes?.data ?? []).filter((r) => r.chart_path).map((r) => [String(r.equipment_id), r.chart_path]),
@@ -131,18 +157,20 @@ export async function buildDredgeChartAssetsParam({ appSlug, reportId, project, 
     (equipment ?? [])
       .map((eq) => {
         const capping = isCappingEquipment(project, eq, dateISO)
-        const chartPath = capping
+        const cappingPath = capping
           ? placementChartByEquipmentId.get(String(eq.id)) ??
             spreaderChartByEquipmentId.get(String(eq.id)) ??
             null
-          : chartByEquipmentId.get(String(eq.id)) ?? null
-        return { eq, include: !capping || !!chartPath, chartPath }
+          : null
+        const chartPaths = capping ? (cappingPath ? [cappingPath] : []) : chartsByEquipmentId.get(String(eq.id)) ?? []
+        return { eq, include: !capping || chartPaths.length > 0, chartPaths }
       })
       .filter((c) => c.include)
-      .map(async ({ eq, chartPath }) => {
-        const dataUri = chartPath ? await blobToDataUri(await downloadAttachment(chartPath)) : null
+      .map(async ({ eq, chartPaths }) => {
+        const dataUris = await Promise.all(chartPaths.map(async (path) => blobToDataUri(await downloadAttachment(path))))
         return [String(eq.id), {
-          dataUri,
+          dataUris,
+          dataUri: dataUris[0] ?? null,
           equipmentName: eq.name,
           projectName: project?.name ?? '',
           dateISO,
@@ -172,12 +200,24 @@ export function narrativeHtml(text) {
 
 export async function buildNarrativeSectionsParam({ appSlug, projectId, reportId }) {
   const [sectionRes, contentRes] = await Promise.all([
-    fetchDomainRecords({ domain: 'jfb_project_report_narratives', system: 'core', appSlug, filters: { project_id: projectId }, limit: 1000 }),
-    fetchDomainRecords({ domain: 'jfb_report_narratives_v2', system: 'core', appSlug, filters: { report_id: reportId }, limit: 1000 }),
+    readAll({ domain: 'jfb_project_report_narratives', system: 'core', appSlug, filters: { project_id: projectId } }),
+    readAll({ domain: 'jfb_report_narratives_v2', system: 'core', appSlug, filters: { report_id: reportId } }),
   ])
-  const sections = (sectionRes?.data ?? [])
+  let sections = (sectionRes?.data ?? [])
     .filter((r) => r.is_active !== false)
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+  if (sections.length === 0) {
+    const defaultsRes = await readAll({ domain: 'jfb_narrative_section_defaults', system: 'core', appSlug })
+    const usedKeys = []
+    sections = (defaultsRes?.data ?? [])
+      .filter((d) => d.is_active !== false)
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
+      .map((d) => {
+        const sectionKey = uniqueSectionKey(d.label, usedKeys)
+        usedKeys.push(sectionKey)
+        return { section_key: sectionKey, narrative_label: d.label }
+      })
+  }
   const contentByKey = new Map((contentRes?.data ?? []).map((c) => [c.section_key, c.content]))
 
   return sections.map((s) => {
@@ -300,9 +340,9 @@ function softBreakInsideParens(text) {
 }
 
 async function fetchAreaLevel1Label({ appSlug, projectId }) {
-  const res = await fetchDomainRecords({
+  const res = await readAll({
     domain: 'jfb_project_area_levels', system: 'core', appSlug,
-    filters: { project_id: projectId }, limit: 20,
+    filters: { project_id: projectId },
   })
   const level1 = (res?.data ?? []).find((r) => Number(r.depth) === 1)
   return String(level1?.label ?? '').trim() || 'Area'
@@ -343,25 +383,32 @@ function passLabelMap(...lists) {
 export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, project, dateISO, equipment }) {
   const { gte, lt } = utcDayRange(dateISO)
 
-  const [activityRes, areaLabelRows, projectDelayRes, masterDelayRes, passTypeRows, liftRows, operatorRes, areaLevelLabel, layerRes] = await Promise.all([
-    fetchDomainRecords({
+  const [activityRes, areaLabelRows, passTypeRows, liftRows, areaLevelLabel, layerRes] = await Promise.all([
+    readAll({
       domain: 'jfb_daily_activities', system: 'core', appSlug,
       filters: { project_id: projectId, report_date: dateISO },
-      limit: 1000,
     }),
     executeDataView('dvw-jfb-activity-area-labels-v2', {
       p_project_id: projectId,
       p_start_date: gte.slice(0, 10),
       p_end_date: lt.slice(0, 10),
     }),
-    fetchDomainRecords({ domain: 'jfb_project_delay_codes', system: 'core', appSlug, filters: { project_id: projectId }, limit: 1000 }),
-    fetchDomainRecords({ domain: 'jfb_delay_codes', system: 'core', appSlug, limit: 1000 }),
     fetchPicklistValues('pkl-jfb-pass-type'),
     fetchPicklistValues('pkl-jfb-lift'),
-    fetchDomainRecords({ domain: 'jfb_operators', system: 'core', appSlug, limit: 500 }),
     fetchAreaLevel1Label({ appSlug, projectId }),
-    fetchDomainRecords({ domain: 'jfb_project_layers', system: 'core', appSlug, filters: { project_id: projectId }, limit: 200 }),
+    readAll({ domain: 'jfb_project_layers', system: 'core', appSlug, filters: { project_id: projectId } }),
   ])
+  const dayActivities = activityRes?.data ?? []
+  const [projectDelayRes, operatorRes] = await Promise.all([
+    readByIds({
+      domain: 'jfb_project_delay_codes', appSlug,
+      values: dayActivities.map((a) => a.delay_code_id), filters: { project_id: projectId },
+    }),
+    readByIds({ domain: 'jfb_operators', appSlug, values: dayActivities.map((a) => a.operator_id) }),
+  ])
+  const masterDelayRes = await readByIds({
+    domain: 'jfb_delay_codes', appSlug, values: projectDelayRes.data.map((r) => r.delay_code_id),
+  })
 
   const areaLabelByActivityId = new Map(
     (areaLabelRows ?? []).map((r) => [r.activity_id, r.area_l1 ?? '']),
@@ -371,7 +418,7 @@ export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, p
   const passTypeLabels = passLabelMap(passTypeRows, liftRows)
   const operatorNameById = new Map((operatorRes?.data ?? []).map((o) => [o.id, o.name]))
   const projectLayers = layerRes?.data ?? []
-  const useLayerCol = payGroupsOf(projectLayers).length > 0
+  const useLayerCol = payGroupsOf(projectLayers.filter((l) => l.active === true)).length > 0
   const layerNameById = new Map(projectLayers.map((l) => [l.id, l.layer_report_name || l.layer_name]))
 
   const activities = (activityRes?.data ?? [])
@@ -392,7 +439,7 @@ export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, p
   const opSummaryByEquipment = {}
   for (const [equipmentId, rows] of byEquipment) {
     const isCapping = cappingEquipmentIds.has(equipmentId)
-    const sorted = rows.slice().sort((x, y) => new Date(x.start_date_time) - new Date(y.start_date_time))
+    const sorted = withTransitionState(rows).sort((x, y) => new Date(x.start_date_time) - new Date(y.start_date_time))
     const listed = sorted.filter((a) => !isTransitionActivity(a) && !isProductiveActivity(a))
     const shape = activityTableShape(isCapping, areaLevelLabel, useLayerCol)
     const rowValues = listed.map((a, i) => {
@@ -418,7 +465,7 @@ export async function buildDailyActivityByEquipmentParam({ appSlug, projectId, p
       rows: padActivityRows(rowValues, isCapping ? ACTIVITY_GRID_ROWS.capping : ACTIVITY_GRID_ROWS.dredge, shape.columns),
     }
     delaySummaryByEquipment[equipmentId] = buildDelaySummary(rows, projectDelayCodeById, masterDelayCodeById)
-    opSummaryByEquipment[equipmentId] = summarizeOperatorShift(sorted, operatorNameById)
+    opSummaryByEquipment[equipmentId] = summarizeOperatorShift(sorted.filter((a) => !isTransitionActivity(a)), operatorNameById)
   }
   return { activitiesByEquipment, delaySummaryByEquipment, opSummaryByEquipment }
 }
@@ -723,21 +770,23 @@ function shapeCappingSheet({ acts, eqStats, project, labels }) {
 }
 
 export async function buildProductionComboTotalsByEquipmentParam({ appSlug, projectId, project, reportId, dateISO, equipment }) {
-  const [activityRes, statsRes, areaRes, passTypeRows, liftRows, attachmentRes, layerRes, materialRes, areaLevelLabel] = await Promise.all([
-    fetchDomainRecords({
+  const [activityRes, statsRes, areaRes, passTypeRows, liftRows, layerRes, materialRes, areaLevelLabel] = await Promise.all([
+    readAll({
       domain: 'jfb_daily_activities', system: 'core', appSlug,
       filters: { project_id: projectId, report_date: dateISO },
-      limit: 1000,
     }),
-    fetchDomainRecords({ domain: 'jfb_production_stats', system: 'core', appSlug, filters: { report_id: reportId }, limit: 500 }),
-    fetchDomainRecords({ domain: 'jfb_project_areas', system: 'core', appSlug, filters: { project_id: projectId }, limit: 1000 }),
+    readAll({ domain: 'jfb_production_stats', system: 'core', appSlug, filters: { report_id: reportId } }),
+    readAll({ domain: 'jfb_project_areas', system: 'core', appSlug, filters: { project_id: projectId } }),
     fetchPicklistValues('pkl-jfb-pass-type'),
     fetchPicklistValues('pkl-jfb-lift'),
-    fetchDomainRecords({ domain: 'jfb_project_attachments', system: 'core', appSlug, filters: { project_id: projectId }, limit: 200 }),
-    fetchDomainRecords({ domain: 'jfb_project_layers', system: 'core', appSlug, filters: { project_id: projectId }, limit: 200 }),
-    fetchDomainRecords({ domain: 'jfb_project_materials', system: 'core', appSlug, filters: { project_id: projectId }, limit: 200 }),
+    readAll({ domain: 'jfb_project_layers', system: 'core', appSlug, filters: { project_id: projectId } }),
+    readAll({ domain: 'jfb_project_materials', system: 'core', appSlug, filters: { project_id: projectId } }),
     fetchAreaLevel1Label({ appSlug, projectId }),
   ])
+  const attachmentRes = await readByIds({
+    domain: 'jfb_project_attachments', appSlug,
+    values: (activityRes?.data ?? []).map((a) => a.attachment_id), filters: { project_id: projectId },
+  })
 
   const areaNameById = new Map((areaRes?.data ?? []).map((a) => [a.id, a.name]))
   const passLabels = passLabelMap(passTypeRows, liftRows)
@@ -746,7 +795,7 @@ export async function buildProductionComboTotalsByEquipmentParam({ appSlug, proj
     areaById: new Map((areaRes?.data ?? []).map((a) => [a.id, a])),
     areaNameById,
     areaLevelLabel,
-    layers: layerRes?.data ?? [],
+    layers: (layerRes?.data ?? []).filter((l) => l.active === true),
     passLabels,
     layerById: new Map(
       (layerRes?.data ?? []).map((l) => [l.id, { ...l, layer_name: l.layer_report_name || l.layer_name }]),
@@ -875,17 +924,18 @@ export async function buildCoverProductionTotalsParam({ appSlug, projectId, date
   const projectStart = NO_DATE_FLOOR
   const weekStart = sundayStartISO(dateISO)
 
-  const [metricRes, sourceRes] = await Promise.all([
-    fetchDomainRecords({
-      domain: 'jfb_metrics', system: 'core', appSlug,
-      filters: { project_id: projectId }, limit: 200,
-    }),
-    fetchDomainRecords({ domain: 'jfb_metric_sources', system: 'core', appSlug, limit: 100 }),
-  ])
+  const metricRes = await readAll({
+    domain: 'jfb_metrics', system: 'core', appSlug,
+    filters: { project_id: projectId },
+  })
   const metrics = (Array.isArray(metricRes) ? metricRes : (metricRes?.data ?? []))
     .filter((m) => m.active !== false)
     .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
   if (metrics.length === 0) return { rows: [] }
+  const sourceRes = await readByIds({
+    domain: 'jfb_metric_sources', appSlug, field: 'value',
+    values: metrics.map((m) => m.source),
+  })
 
   const resultColumn = new Map(
     (Array.isArray(sourceRes) ? sourceRes : (sourceRes?.data ?? []))
@@ -970,10 +1020,28 @@ function fmtFlow0(n) {
 }
 
 export async function buildFlowAndPipeByEquipmentParam({ appSlug, projectId, project, equipment, dateISO }) {
-  const [flowRes, pipeRes] = await Promise.all([
-    fetchDomainRecords({ domain: 'jfb_hydraulic_flow_stats', system: 'core', appSlug, filters: { project_id: projectId }, limit: 5000 }),
-    fetchDomainRecords({ domain: 'jfb_hydraulic_pipe_configurations', system: 'core', appSlug, filters: { project_id: projectId }, limit: 500 }),
-  ])
+  const showFlowAndPipeByEquipment = {}
+  for (const eq of equipment ?? []) {
+    const wt = equipmentWorkType(project, eq, dateISO).toLowerCase()
+    const capping = wt.includes('cap') || wt.includes('placement')
+    showFlowAndPipeByEquipment[eq.id] =
+      !!project?.is_pipe_tracking && (!capping || wt.includes('hydraulic'))
+  }
+  const flowEquipmentIds = Object.keys(showFlowAndPipeByEquipment).filter((id) => showFlowAndPipeByEquipment[id])
+  const { gte, lt } = utcDayRange(dateISO)
+
+  const [flowRes, pipeRes] = flowEquipmentIds.length
+    ? await Promise.all([
+      readByIds({
+        domain: 'jfb_hydraulic_flow_stats', appSlug, field: 'equipment_id',
+        values: flowEquipmentIds, filters: { project_id: projectId },
+      }),
+      readAll({
+        domain: 'jfb_hydraulic_pipe_configurations', system: 'core', appSlug,
+        filters: { project_id: projectId, log_date: { gte, lt } },
+      }),
+    ])
+    : [{ data: [] }, { data: [] }]
   const flowRows = flowRes?.data ?? []
   const pipeRows = pipeRes?.data ?? []
 
@@ -1006,14 +1074,6 @@ export async function buildFlowAndPipeByEquipmentParam({ appSlug, projectId, pro
   const pipeSegments = todaysPipeRows.map((r) => ({ id: r.id, name: r.segment_name, lengthFt: fmtFlow0(Number(r.length_ft) || 0) }))
   const pipeTotalLength = fmtFlow0(todaysPipeRows.reduce((a, r) => a + (Number(r.length_ft) || 0), 0))
 
-  const showFlowAndPipeByEquipment = {}
-  for (const eq of equipment ?? []) {
-    const wt = equipmentWorkType(project, eq, dateISO).toLowerCase()
-    const capping = wt.includes('cap') || wt.includes('placement')
-    showFlowAndPipeByEquipment[eq.id] =
-      !!project?.is_pipe_tracking && (!capping || wt.includes('hydraulic'))
-  }
-
   return { flowStatsByEquipment, pipeSegments, pipeTotalLength, showFlowAndPipeByEquipment }
 }
 
@@ -1028,9 +1088,9 @@ export async function validatePdfIssues({ appSlug, reportId, narrativeSections }
     })
   }
 
-  const photosRes = await fetchDomainRecords({
+  const photosRes = await readAll({
     domain: 'jfb_report_photos', system: 'core', appSlug,
-    filters: { report_id: reportId }, limit: 50,
+    filters: { report_id: reportId },
   })
   const photos = (photosRes?.data ?? []).filter((p) => p.photo_file_path)
 
@@ -1072,11 +1132,10 @@ function fmtClimate(value, unit, decimals) {
 }
 
 export async function buildSafetyPageDataParam({ appSlug, projectId, reportId, dateISO, project }) {
-  const [safetyRes, cultureRes, crewRes, equipmentRes, categoryLabelRows, precipSumRows, crewHoursRows] = await Promise.all([
+  const [safetyRes, crewRes, equipmentRes, categoryLabelRows, precipSumRows, crewHoursRows] = await Promise.all([
     fetchDomainRecords({ domain: 'jfb_report_safety_v2', system: 'core', appSlug, filters: { report_id: reportId }, limit: 1 }),
-    fetchDomainRecords({ domain: 'jfb_culture_tenants', system: 'core', appSlug, limit: 200 }),
-    fetchDomainRecords({ domain: 'jfb_report_crew_summary_v2', system: 'core', appSlug, filters: { report_id: reportId }, limit: 200 }),
-    fetchDomainRecords({ domain: 'jfb_project_site_equipment', system: 'core', appSlug, filters: { project_id: projectId }, limit: 1000 }),
+    readAll({ domain: 'jfb_report_crew_summary_v2', system: 'core', appSlug, filters: { report_id: reportId } }),
+    readAll({ domain: 'jfb_project_site_equipment', system: 'core', appSlug, filters: { project_id: projectId } }),
     fetchPicklistValues('pkl-jfb-site-equipment-category'),
     executeDataView('dvw-jfb-precip-sums-v2', {
       p_project_id: projectId, p_month_start: `${dateISO.slice(0, 7)}-01`, p_end_date: dateISO,
@@ -1086,7 +1145,7 @@ export async function buildSafetyPageDataParam({ appSlug, projectId, reportId, d
 
   const safety = (safetyRes?.data ?? [])[0] ?? null
   const tenant = safety?.culture_tenant_id
-    ? (cultureRes?.data ?? []).find((t) => t.id === safety.culture_tenant_id)
+    ? (await readByIds({ domain: 'jfb_culture_tenants', appSlug, values: [safety.culture_tenant_id], filters: { active: true } })).data[0] ?? null
     : null
   const categoryLabels = Object.fromEntries(
     (categoryLabelRows || []).filter((r) => r.is_active !== false).map((r) => [r.value, r.label ?? r.value]),
@@ -1099,8 +1158,8 @@ export async function buildSafetyPageDataParam({ appSlug, projectId, reportId, d
 
   const equipmentRows = (equipmentRes?.data ?? [])
     .filter((r) => {
-      if (!r.mobilized_at || r.mobilized_at > dateISO) return false
-      if (r.demobilized_at && r.demobilized_at < dateISO) return false
+      if (r.mobilized_at && String(r.mobilized_at).slice(0, 10) > dateISO) return false
+      if (r.demobilized_at && String(r.demobilized_at).slice(0, 10) <= dateISO) return false
       return true
     })
     .sort((a, b) => (a.category || '').localeCompare(b.category || '') || (a.sort_order ?? 0) - (b.sort_order ?? 0))
@@ -1132,12 +1191,8 @@ export async function buildSafetyPageDataParam({ appSlug, projectId, reportId, d
   }
 
   const [preparerSignatureDataUri, sshoSignatureDataUri] = await Promise.all([
-    safety?.signature_image_path
-      ? downloadAttachment(safety.signature_image_path).then(blobToDataUri)
-      : Promise.resolve(null),
-    safety?.ssho_signature_image_path
-      ? downloadAttachment(safety.ssho_signature_image_path).then(blobToDataUri)
-      : Promise.resolve(null),
+    resolveSignatureDataUri(appSlug, safety?.signature_image_path, safety?.signature_name),
+    resolveSignatureDataUri(appSlug, safety?.ssho_signature_image_path, safety?.ssho_name),
   ])
 
   const todayHours = crewRows.reduce((sum, r) => sum + r.hours, 0)
@@ -1195,16 +1250,15 @@ export async function buildSafetyPageDataParam({ appSlug, projectId, reportId, d
 export async function buildCompletionChecklist({ appSlug, projectId, reportId, dateISO }) {
 
   const [activityRes, narrativeSections, photosRes, productionRes, metricsRes, metricValuesRes] = await Promise.all([
-    fetchDomainRecords({
+    readAll({
       domain: 'jfb_daily_activities', system: 'core', appSlug,
       filters: { project_id: projectId, report_date: dateISO },
-      limit: 1000,
     }),
     buildNarrativeSectionsParam({ appSlug, projectId, reportId }),
-    fetchDomainRecords({ domain: 'jfb_report_photos', system: 'core', appSlug, filters: { report_id: reportId }, limit: 50 }),
-    fetchDomainRecords({ domain: 'jfb_production_stats', system: 'core', appSlug, filters: { report_id: reportId }, limit: 500 }),
-    fetchDomainRecords({ domain: 'jfb_metrics', system: 'core', appSlug, filters: { project_id: projectId }, limit: 200 }),
-    fetchDomainRecords({ domain: 'jfb_report_metric_value', system: 'core', appSlug, filters: { report_id: reportId }, limit: 200 }),
+    readAll({ domain: 'jfb_report_photos', system: 'core', appSlug, filters: { report_id: reportId } }),
+    readAll({ domain: 'jfb_production_stats', system: 'core', appSlug, filters: { report_id: reportId } }),
+    readAll({ domain: 'jfb_metrics', system: 'core', appSlug, filters: { project_id: projectId } }),
+    readAll({ domain: 'jfb_report_metric_value', system: 'core', appSlug, filters: { report_id: reportId } }),
   ])
 
   const activities = (activityRes?.data ?? [])
@@ -1239,14 +1293,13 @@ export async function buildCompletionChecklist({ appSlug, projectId, reportId, d
 export async function buildPmReviewChecklist({ appSlug, projectId, reportId, dateISO, equipment }) {
 
   const [activityRes, productionRes, narrativeSections, photosRes] = await Promise.all([
-    fetchDomainRecords({
+    readAll({
       domain: 'jfb_daily_activities', system: 'core', appSlug,
       filters: { project_id: projectId, report_date: dateISO },
-      limit: 1000,
     }),
-    fetchDomainRecords({ domain: 'jfb_production_stats', system: 'core', appSlug, filters: { report_id: reportId }, limit: 500 }),
+    readAll({ domain: 'jfb_production_stats', system: 'core', appSlug, filters: { report_id: reportId } }),
     buildNarrativeSectionsParam({ appSlug, projectId, reportId }),
-    fetchDomainRecords({ domain: 'jfb_report_photos', system: 'core', appSlug, filters: { report_id: reportId }, limit: 50 }),
+    readAll({ domain: 'jfb_report_photos', system: 'core', appSlug, filters: { report_id: reportId } }),
   ])
 
   const activities = (activityRes?.data ?? [])
@@ -1316,23 +1369,51 @@ export async function buildPmReviewChecklist({ appSlug, projectId, reportId, dat
   return checks
 }
 
-async function fetchMonitoringReadings({ domain, appSlug, projectId, startUtc, endUtc }) {
-  const PAGE = 1000
-  const out = []
-  for (let offset = 0; ; offset += PAGE) {
-    const res = await fetchDomainRecords({
-      domain,
-      system: 'core',
-      appSlug,
-      filters: { project_id: projectId, reading_at: { gte: startUtc, lt: endUtc } },
-      limit: PAGE,
-      offset,
-    })
-    const batch = Array.isArray(res) ? res : (res?.data ?? [])
-    out.push(...batch)
-    if (batch.length < PAGE) break
+const SIGNER_ROLE_CODES = ['jfb_project_engineers', 'jfb_project_managers']
+
+async function findUsersByName(name) {
+  try {
+    return await fetchUsersByDisplayName(name)
+  } catch {
+    const roles = await Promise.all(SIGNER_ROLE_CODES.map((code) => fetchRoleByCode(code).catch(() => null)))
+    const pages = await Promise.all(
+      roles.filter(Boolean).map((role) => fetchRoleUsersPage(role.id, { search: name, pageSize: 20 }).catch(() => ({ rows: [] }))),
+    )
+    return pages.flatMap((p) => p.rows)
   }
-  return out
+}
+
+async function resolveSignerSignaturePath(appSlug, signerName) {
+  const name = String(signerName ?? '').trim()
+  if (!name) return null
+  const users = await findUsersByName(name)
+  const match = users.find((u) => String(u.displayName ?? '').trim().toLowerCase() === name.toLowerCase())
+  if (!match?.userId) return null
+  const res = await fetchDomainRecords({
+    domain: 'jfb_user_signatures', system: 'core', appSlug,
+    filters: { user_id: match.userId }, limit: 1,
+  })
+  return res?.data?.[0]?.signature_image_path ?? null
+}
+
+async function resolveSignatureDataUri(appSlug, reportPath, signerName) {
+  try {
+    const path = reportPath || (await resolveSignerSignaturePath(appSlug, signerName))
+    if (!path) return null
+    return await blobToDataUri(await downloadAttachment(path))
+  } catch {
+    return null
+  }
+}
+
+async function fetchMonitoringReadings({ domain, appSlug, projectId, startUtc, endUtc }) {
+  return fetchAllDomainRecords({
+    domain,
+    system: 'core',
+    appSlug,
+    filters: { project_id: projectId, reading_at: { gte: startUtc, lt: endUtc } },
+    pageSize: 1000,
+  })
 }
 
 async function monitoringImageDataUri(pathOrId) {

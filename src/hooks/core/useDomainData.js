@@ -5,7 +5,7 @@ import { FETCH_PAGE_SIZE } from '../../constants/pagination'
 
 
 export function useDomainData(options) {
-  const { domain, system, projectId, reportId, includeDeleted, limit = 500, fetchAll = true, paginate = false, sortCol, sortDir, filters: extraFilters } = options
+  const { domain, system, projectId, reportId, includeDeleted, limit = 500, fetchAll = true, paginate = false, pageSize = FETCH_PAGE_SIZE, sortCol, sortDir, filters: extraFilters } = options
 
   const extraFiltersKey = JSON.stringify(extraFilters ?? null)
 
@@ -18,9 +18,10 @@ export function useDomainData(options) {
   const [updating, setUpdating] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [total, setTotal] = useState(null)
+  const [hasNext, setHasNext] = useState(false)
   const [pageLoading, setPageLoading] = useState(false)
   const pagedLoadedRef = useRef(false)
-  const scopeKey = `${domain}|${projectId ?? ''}|${reportId ?? ''}|${extraFiltersKey}`
+  const scopeKey = `${domain}|${projectId ?? ''}|${reportId ?? ''}|${extraFiltersKey}|${sortCol ?? ''}|${sortDir ?? ''}`
   const [pageState, setPageState] = useState({ key: scopeKey, page: 1 })
   const page = pageState.key === scopeKey ? pageState.page : 1
   const setPage = useCallback((next) => setPageState({ key: scopeKey, page: next }), [scopeKey])
@@ -39,6 +40,8 @@ export function useDomainData(options) {
       if (isCurrent()) {
         setRecords([])
         setError(null)
+        setTotal(null)
+        setHasNext(false)
       }
       return Promise.resolve()
     }
@@ -55,8 +58,8 @@ export function useDomainData(options) {
     if (paginate) {
       return fetchDomainRecords({
         domain, system, appSlug: config.appSlug, filters, sortCol, sortDir, includeDeleted,
-        limit: FETCH_PAGE_SIZE, offset: (page - 1) * FETCH_PAGE_SIZE,
-        countMode: 'exact', forceMeta: true, paged: true,
+        limit: pageSize, offset: (page - 1) * pageSize,
+        countMode: 'auto', forceMeta: true, paged: true,
       })
         .then((res) => {
           if (!isCurrent()) return
@@ -66,8 +69,9 @@ export function useDomainData(options) {
             return
           }
           pagedLoadedRef.current = true
-          setRecords(rows)
-          setTotal(res?.meta?.total_records ?? null)
+          setRecords(rows.slice(0, pageSize))
+          setTotal(res?.meta?.count_mode === 'exact' ? (res?.meta?.total_records ?? null) : null)
+          setHasNext(res?.meta?.has_more === true)
         })
         .catch((err) => {
           if (isCurrent()) setError(err.message)
@@ -93,7 +97,7 @@ export function useDomainData(options) {
       .finally(() => {
         if (isCurrent()) setLoading(false)
       })
-  }, [domain, system, config.appSlug, projectId, reportId, includeDeleted, limit, fetchAll, paginate, page, setPage, sortCol, sortDir, scopeMissing, extraFiltersKey])
+  }, [domain, system, config.appSlug, projectId, reportId, includeDeleted, limit, fetchAll, paginate, pageSize, page, setPage, sortCol, sortDir, scopeMissing, extraFiltersKey])
 
   useEffect(() => {
     load()
@@ -132,5 +136,5 @@ export function useDomainData(options) {
     }
   }, [domain, system, config.appSlug, load])
 
-  return { records, loading, error, creating, updating, deleting, reload: load, create, update, remove, page, setPage, total, pageLoading, pageSize: FETCH_PAGE_SIZE }
+  return { records, loading, error, creating, updating, deleting, reload: load, create, update, remove, page, setPage, total, hasNext, pageLoading, pageSize }
 }

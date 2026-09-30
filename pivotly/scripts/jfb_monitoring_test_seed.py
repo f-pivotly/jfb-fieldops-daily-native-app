@@ -33,7 +33,7 @@ except ModuleNotFoundError:
         raise RuntimeError("Pivotly runner secret helper is unavailable outside Pivotly.")
 
 
-SCRIPT_VERSION = "v1-jfb-monitoring-test-seed-r1"
+SCRIPT_VERSION = "v1-jfb-monitoring-test-seed-r2"
 
 PARAM_CONTRACT_VERSION = "jfb_monitoring_test_seed_params_v1"
 
@@ -126,9 +126,9 @@ WATER_CONFIGS = [
             "window_end": "18:00:00",
             "interval_minutes": 15,
             "locations": [
-                {"role": "background", "label": "Background", "hydrovu_location_id": "6462853912002560", "display_coords": "25897040.8125, 880341.4977"},
-                {"role": "early_warning", "label": "Early Warning", "hydrovu_location_id": "6346553277612032", "display_coords": "25897203.5923, 879457.7536"},
-                {"role": "compliance", "label": "Compliance", "hydrovu_location_id": "5732313999147008", "display_coords": "25897075.2974, 880144.4932"},
+                {"role": "background", "label": "Background", "hydrovu_location_id": "6462853912002560", "display_coords": "25896909.367, 879137.739"},
+                {"role": "early_warning", "label": "Early Warning", "hydrovu_location_id": "6346553277612032", "display_coords": "25896951.781, 879902.99"},
+                {"role": "compliance", "label": "Compliance", "hydrovu_location_id": "5732313999147008", "display_coords": "25896925.262, 879554.957"},
             ],
             "thresholds": {"early_warning_ntu": 13, "compliance_4hr_ntu": 26, "compliance_1hr_ntu": 50, "background_multiplier": 1.5},
             "mode": "compliance",
@@ -144,8 +144,8 @@ WATER_CONFIGS = [
             "window_end": "23:00:00",
             "interval_minutes": 60,
             "locations": [
-                {"role": "upstream", "label": "Upstream", "wqdatalive_device_id": 5566, "wqdatalive_device_name": "Upstream", "display_coords": "898356.31, 384806.3", "depth_ft": 3},
-                {"role": "downstream", "label": "Downstream", "wqdatalive_device_id": 5565, "wqdatalive_device_name": "Downstream", "display_coords": "897988.22, 383772.46", "depth_ft": 3},
+                {"role": "upstream", "label": "Upstream", "wqdatalive_device_id": 5566, "wqdatalive_device_name": "Upstream", "display_coords": "898353.02, 385454.87", "depth_ft": 3},
+                {"role": "downstream", "label": "Downstream", "wqdatalive_device_id": 5565, "wqdatalive_device_name": "Downstream", "display_coords": "897818.417, 383408.412", "depth_ft": 3},
             ],
             "thresholds": {"early_warning_delta_ntu": 20, "compliance_delta_ntu": 35},
             "mode": "compliance",

@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { Box, SimpleGrid, Text, Group } from '@mantine/core'
 import { useHover } from '@mantine/hooks'
 import { useVisibleProjects } from '../../hooks/project/useVisibleProjects'
+import { useDomainData } from '../../hooks/core/useDomainData'
 import { useAppConfig } from '../../contexts/appConfigContext'
-import { fetchDomainRecords, fetchAllDomainRecords } from '../../data'
+import { fetchDomainRecords, fetchRecordsByField } from '../../data'
 import { REPORT_STATUS_LABEL } from '../../config/reportStatus'
 import { todayISO, prettyDate } from './lib/realizedToDate'
 import LoadingSpinner from '../../components/LoadingSpinner'
@@ -22,8 +23,8 @@ const STATUS_STYLE = {
 
 async function loadDashboardDetails(appSlug, projectIds, today) {
   const [equipmentRes, todayRes, lastReportRows] = await Promise.all([
-    fetchAllDomainRecords({ domain: 'jfb_equipments', system: 'core', appSlug, filters: { is_active: true } }),
-    fetchAllDomainRecords({ domain: 'jfb_reports', system: 'core', appSlug, filters: { report_date: today } }),
+    fetchRecordsByField({ domain: 'jfb_equipments', appSlug, field: 'project_id', values: projectIds, filters: { is_active: true } }),
+    fetchRecordsByField({ domain: 'jfb_reports', appSlug, field: 'project_id', values: projectIds, filters: { report_date: today } }),
     Promise.all(
       projectIds.map((projectId) =>
         fetchDomainRecords({
@@ -51,15 +52,30 @@ async function loadDashboardDetails(appSlug, projectIds, today) {
 
 export default function DashboardPage() {
   const { config } = useAppConfig()
-  const { projects, loading, error } = useVisibleProjects()
-  const [details, setDetails] = useState(null)
-  const today = todayISO()
-
-  const activeProjects = projects
+  const { projects: myProjects, loading: visibleLoading, error: visibleError, isCrossProject } = useVisibleProjects({ loadAll: false })
+  const allPaged = useDomainData({
+    domain: !visibleLoading && isCrossProject ? 'jfb_projects' : null,
+    system: 'core',
+    filters: { is_active: true },
+    paginate: true,
+    sortCol: 'name',
+    sortDir: 'asc',
+  })
+  const myActiveProjects = myProjects
     .filter((p) => p.is_active)
     .slice()
     .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''))
-  const { pageRows: pagedProjects, page, setPage, total, pageSize } = usePagedRows(activeProjects)
+  const myPaged = usePagedRows(myActiveProjects)
+  const [details, setDetails] = useState(null)
+  const today = todayISO()
+
+  const loading = visibleLoading || (isCrossProject && allPaged.loading)
+  const error = visibleError || (isCrossProject ? allPaged.error : null)
+  const pagedProjects = isCrossProject ? allPaged.records : myPaged.pageRows
+  const pager = isCrossProject
+    ? { page: allPaged.page, setPage: allPaged.setPage, total: allPaged.total, hasNext: allPaged.hasNext, pageSize: allPaged.pageSize, disabled: allPaged.pageLoading }
+    : { page: myPaged.page, setPage: myPaged.setPage, total: myPaged.total, hasNext: false, pageSize: myPaged.pageSize, disabled: false }
+  const hasProjects = pagedProjects.length > 0 || pager.page > 1
   const projectIdsKey = pagedProjects.map((p) => p.id).join(',')
 
   const detailsKey = `${config.appSlug}|${today}|${projectIdsKey}`
@@ -90,14 +106,14 @@ export default function DashboardPage() {
 
       {!pageError && (loading || data === null) && <LoadingSpinner py={24} />}
 
-      {ready && activeProjects.length === 0 && (
+      {ready && !hasProjects && (
         <Box ta="center" px={24} py={40} style={{ background: '#fff', border: '1px solid #E5E7EB', borderRadius: 6 }}>
           <Text fw={500} c="#374151">No projects assigned.</Text>
           <Text size="sm" c="#6B7280" mt={4}>Contact your administrator to be assigned to a project.</Text>
         </Box>
       )}
 
-      {ready && activeProjects.length > 0 && (
+      {ready && hasProjects && (
         <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing={16}>
           {pagedProjects.map((project) => (
             <ProjectCard
@@ -110,8 +126,8 @@ export default function DashboardPage() {
           ))}
         </SimpleGrid>
       )}
-      {ready && activeProjects.length > 0 && (
-        <PaginationBar page={page} pageSize={pageSize} count={pagedProjects.length} total={total} onChange={setPage} noun="project" mt={16} />
+      {ready && hasProjects && (
+        <PaginationBar page={pager.page} pageSize={pager.pageSize} count={pagedProjects.length} total={pager.total} hasNext={pager.hasNext} onChange={pager.setPage} disabled={pager.disabled} noun="project" mt={16} />
       )}
     </>
   )

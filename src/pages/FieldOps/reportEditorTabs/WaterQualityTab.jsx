@@ -52,7 +52,7 @@ function useTide(enabled, dateISO) {
 
 export default function WaterQualityTab({ project, report }) {
   const { config, loading: configLoading, error: configError, update: updateConfig } = useWaterMonitoringConfig(project?.id)
-  const { readings, error: readingsError } = useWaterQualityReadings(config, report?.report_date)
+  const { readings, loading: readingsLoading, error: readingsError } = useWaterQualityReadings(config, report?.report_date)
   const notesHook = useWaterMonitoringNotes(report?.id)
   const form = useWaterMonitoringNotesForm({
     projectId: project?.id,
@@ -63,7 +63,7 @@ export default function WaterQualityTab({ project, report }) {
   })
   const { confirm, modal: confirmModal } = useConfirmDialog()
   const isTidal = isTidalConfig(config)
-  const { tideByMs, hiLo } = useTide(isTidal, report?.report_date)
+  const { tideByMs, hiLo, loading: tideLoading } = useTide(isTidal, report?.report_date)
 
   const [notes, setNotes] = useState(notesHook.notes?.notes ?? '')
   const [refInput, setRefInput] = useState(notesHook.notes?.reference_ntu != null ? String(notesHook.notes.reference_ntu) : '')
@@ -145,6 +145,12 @@ export default function WaterQualityTab({ project, report }) {
     }
   }, [isTidal, tidalDay, day, mode, config])
 
+  const loadKey = `${project?.id ?? ''}|${report?.id ?? ''}|${report?.report_date ?? ''}`
+  const stillLoading = configLoading || readingsLoading || (isTidal && tideLoading) || (!!report?.id && notesHook.loading)
+  const [readyKey, setReadyKey] = useState(null)
+  if (readyKey !== loadKey && !stillLoading) setReadyKey(loadKey)
+  const showLoading = readyKey !== loadKey && stillLoading
+
   const allSlots = activeDay?.slots ?? []
   const [shown, setShown] = useState(SLOT_PAGE)
   const visibleSlots = allSlots.slice(0, shown)
@@ -156,7 +162,7 @@ export default function WaterQualityTab({ project, report }) {
     setShown(SLOT_PAGE)
   }
 
-  if (configLoading) return <Text size="sm" c="dimmed">Loading water quality data...</Text>
+  if (showLoading) return <Text size="sm" c="dimmed">Loading water quality data...</Text>
   if (!config) return <Text size="sm" c="dimmed">No water monitoring configured for this project.</Text>
 
   const providerLabel = isTidal ? 'WQData LIVE' : 'HydroVu'
@@ -281,7 +287,7 @@ export default function WaterQualityTab({ project, report }) {
         <Box style={{ ...BOX, overflow: 'hidden' }}>
           <Box style={{ maxHeight: 540, overflowY: 'auto' }}>
             <Table withTableBorder={false} verticalSpacing={4} fz="xs" stickyHeader>
-              <Table.Thead bg="gray.0">
+              <Table.Thead>
                 {isTidal ? (
                   <Table.Tr>
                     <Table.Th>Time</Table.Th>

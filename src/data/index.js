@@ -2,7 +2,7 @@ import axios from 'axios'
 import { requestNewToken, setAuthToken } from '../helpers/pivotlyHelpers'
 import { FETCH_PAGE_SIZE } from '../constants/pagination'
 
-const IS_LOCAL = false
+const IS_LOCAL = true
 
 function resolveApiBase() {
   const runtimeConfig = window.__PIVOTLY_RUNTIME_CONFIG__;
@@ -80,11 +80,36 @@ export async function fetchPageDetails(appSlug, pageSlug) {
   console.log('Fetched page details:', data)
   return data
 }
-export async function fetchRoleUsers(roleId) {
+const ROLE_USERS_MAX_PAGE_SIZE = 100
+
+export async function fetchRoleUsersPage(roleId, { page = 1, pageSize = FETCH_PAGE_SIZE, search, userId } = {}) {
+  const filterModel = []
+  const term = String(search ?? '').trim()
+  if (term) filterModel.push({ field: 'displayName', operator: 'contains', value: term })
+  if (userId) filterModel.push({ field: 'userId', operator: 'equals', value: userId })
+  const size = Math.min(pageSize, ROLE_USERS_MAX_PAGE_SIZE)
   const { data } = await api.get(`/iam/user-roles/role/${roleId}/users`, {
-    params: { pageSize: 100 },
+    params: {
+      page: page - 1,
+      pageSize: size,
+      sortModel: JSON.stringify([{ field: 'displayName', sort: 'asc' }]),
+      ...(filterModel.length ? { filterModel: JSON.stringify(filterModel) } : {}),
+    },
   })
-  return data?.data ?? data ?? []
+  const rows = data?.data ?? []
+  const total = data?.pagination?.total_records ?? null
+  return { rows, total, hasNext: total != null ? page * size < total : rows.length === size }
+}
+
+export async function fetchUsersByDisplayName(name, { pageSize = 20 } = {}) {
+  const { data } = await api.get('/iam/users', {
+    params: {
+      page: 0,
+      pageSize,
+      filterModel: JSON.stringify([{ field: 'displayName', operator: 'contains', value: name }]),
+    },
+  })
+  return data?.data ?? []
 }
 
 export async function fetchRoleByCode(code) {
@@ -135,7 +160,7 @@ function onTruncation(detail) {
   if (truncationListener) truncationListener(detail)
 }
 
-export async function fetchDomainRecords({ domain, system, appSlug, limit = 25, offset = 0, filters, sortCol, sortDir, countMode, forceMeta, includeDeleted, paged = false }) {
+export async function fetchDomainRecords({ domain, system, appSlug, limit = 25, offset = 0, filters, sortCol, sortDir, countMode, forceMeta, includeDeleted, selectCols, paged = false }) {
   const { data } = await api.post('/core-data-read', {
     parameters: {
       domain, system, app_slug: appSlug, limit, offset,
@@ -145,6 +170,7 @@ export async function fetchDomainRecords({ domain, system, appSlug, limit = 25, 
       ...(countMode ? { count_mode: countMode } : {}),
       ...(forceMeta ? { force_meta: forceMeta } : {}),
       ...(includeDeleted ? { include_deleted_records: true } : {}),
+      ...(selectCols?.length ? { select_cols: selectCols } : {}),
     },
   })
 
@@ -156,11 +182,11 @@ export async function fetchDomainRecords({ domain, system, appSlug, limit = 25, 
   return data
 }
 
-export async function* iterateDomainRecords({ domain, system, appSlug, filters, sortCol, sortDir, includeDeleted, pageSize = FETCH_PAGE_SIZE }) {
+export async function* iterateDomainRecords({ domain, system, appSlug, filters, sortCol, sortDir, includeDeleted, selectCols, pageSize = FETCH_PAGE_SIZE }) {
   for (let offset = 0; ; offset += pageSize) {
     const res = await fetchDomainRecords({
-      domain, system, appSlug, filters, sortCol, sortDir, includeDeleted,
-      limit: pageSize, offset, paged: true,
+      domain, system, appSlug, filters, sortCol, sortDir, includeDeleted, selectCols,
+      limit: pageSize, offset, countMode: 'none', paged: true,
     })
     const page = Array.isArray(res) ? res : (res?.data ?? [])
     if (page.length) yield page
@@ -177,6 +203,36 @@ export async function fetchAllDomainRecords(options) {
     }
   }
   return all
+}
+
+export async function fetchRecordPage({ domain, system = 'core', appSlug, filters, sortCol, sortDir, page = 1, pageSize = FETCH_PAGE_SIZE }) {
+  const res = await fetchDomainRecords({
+    domain, system, appSlug, filters, sortCol, sortDir,
+    limit: pageSize, offset: (page - 1) * pageSize, countMode: 'none', paged: true,
+  })
+  const rows = res?.data ?? []
+  return { rows: rows.slice(0, pageSize), hasNext: res?.meta?.has_more === true }
+}
+
+export async function fetchFirstRecord({ domain, system = 'core', appSlug, filters, sortCol, sortDir }) {
+  const { rows } = await fetchRecordPage({ domain, system, appSlug, filters, sortCol, sortDir, pageSize: 1 })
+  return rows[0] ?? null
+}
+
+export async function fetchNextSortOrder({ domain, system = 'core', appSlug, filters, step = 10 }) {
+  const last = await fetchFirstRecord({ domain, system, appSlug, filters, sortCol: 'sort_order', sortDir: 'desc' })
+  return (Number(last?.sort_order) || 0) + step
+}
+
+export async function fetchRecordsByField({ domain, system = 'core', appSlug, field = 'id', values, filters, sortCol, sortDir }) {
+  const unique = [...new Set((values ?? []).filter((v) => v != null))]
+  if (!unique.length) return []
+  return fetchAllDomainRecords({ domain, system, appSlug, filters: { ...filters, [field]: unique }, sortCol, sortDir })
+}
+
+export function likeFilter(search) {
+  const term = String(search ?? '').replace(/[*?]/g, '').trim()
+  return term ? { like: `*${term}*` } : undefined
 }
 
 export function readWrittenRecordId(res) {
@@ -248,12 +304,17 @@ export async function uploadAttachment({ coreRecordId, domain, file, tags, timeo
   return data?.data ?? data
 }
 
-export async function getAttachments({ coreRecordId, domain, pageSize = 50 }) {
-  const { data } = await api.get(`/attachments/${domain}/${coreRecordId}`, {
-    params: { page: 0, pageSize },
-  })
-  const result = data?.data ?? data
-  return result?.rows ?? []
+export async function getAttachments({ coreRecordId, domain, pageSize = FETCH_PAGE_SIZE }) {
+  const all = []
+  for (let page = 0; ; page++) {
+    const { data } = await api.get(`/attachments/${domain}/${coreRecordId}`, {
+      params: { page, pageSize },
+    })
+    const result = data?.data ?? data
+    const rows = result?.rows ?? []
+    all.push(...rows)
+    if (rows.length < pageSize) return all
+  }
 }
 
 export async function fetchPublicAsset(url) {

@@ -1,30 +1,38 @@
 import { useState } from "react";
 import { Box, Text } from "@mantine/core";
-import { useDomainData } from "../../hooks/core/useDomainData";
+import { useAppConfig } from "../../contexts/appConfigContext";
+import { fetchRecordPage, likeFilter } from "../../data";
 import TeamTab from "./ProjectDetail/TeamTab";
-import PagedSelect from "../../components/PagedSelect";
+import ServerPagedSelect from "../../components/ServerPagedSelect";
 
 export default function AdminTeamSection() {
-  const { records: projects, loading } = useDomainData({ domain: "jfb_projects", system: "core" });
-  const [projectId, setProjectId] = useState(null);
+  const { config } = useAppConfig();
+  const [selectedProject, setSelectedProject] = useState(null);
 
-  const activeProjects = projects.filter((p) => p.is_active);
-  const selectedProject = activeProjects.find((p) => p.id === projectId) ?? null;
+  async function fetchProjectOptions({ search, page, pageSize }) {
+    const nameFilter = likeFilter(search);
+    const { rows, hasNext } = await fetchRecordPage({
+      domain: "jfb_projects", appSlug: config.appSlug, page, pageSize,
+      filters: { is_active: true, ...(nameFilter ? { name: nameFilter } : {}) },
+      sortCol: "name", sortDir: "asc",
+    });
+    return { items: rows.map((p) => ({ value: p.id, label: p.name, project: p })), hasNext };
+  }
 
   return (
     <Box>
       <Text fw={700} size="lg" mb={4}>Team</Text>
       <Text size="xs" c="dimmed" mb={16}>Assign PE/PM users to a project's team</Text>
 
-      <PagedSelect
+      <ServerPagedSelect
         label="Project"
-        placeholder={loading ? "Loading…" : "Search or choose a project"}
-        data={activeProjects.map((p) => ({ value: p.id, label: p.name }))}
-        value={projectId}
-        onChange={setProjectId}
+        placeholder="Search or choose a project"
+        fetchPage={fetchProjectOptions}
+        value={selectedProject?.id ?? null}
+        selectedLabel={selectedProject?.name ?? null}
+        onChange={(v, item) => setSelectedProject(item?.project ?? null)}
         nothingFoundMessage="No matching projects"
         noun="project"
-        disabled={loading}
         mb={20}
         w={360}
       />

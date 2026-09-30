@@ -1,13 +1,13 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Box, Text, Group, Button, Modal, TextInput, Checkbox, Avatar, SegmentedControl } from "@mantine/core";
 import { IconPlus, IconRefresh } from "@tabler/icons-react";
 import { useDomainData } from "../../../hooks/core/useDomainData";
 import { useConfirmDialog } from "../../../hooks/ui/useConfirmDialog";
 import { useDomainAccess } from "../../../contexts/adminAccessContext";
-import { readWrittenRecordId } from "../../../data";
-import { usePagedRows } from "../../../hooks/ui/usePagedRows";
+import { useAppConfig } from "../../../contexts/appConfigContext";
+import { createDomainRecord, fetchRecordPage, fetchRecordsByField, likeFilter, readWrittenRecordId } from "../../../data";
 import PaginationBar from "../../../components/PaginationBar";
-import PagedSelect from "../../../components/PagedSelect";
+import ServerPagedSelect from "../../../components/ServerPagedSelect";
 
 function initials(fullName) {
   return (fullName || "")
@@ -30,46 +30,71 @@ export default function OperatorsTab({ project }) {
     canDelete: canDeleteLink,
   } = useDomainAccess("jfb_project_operators");
 
-  const {
-    records: allOperators,
-    creating: creatingOperator,
-    create: createOperator,
-  } = useDomainData({ domain: "jfb_operators", system: "core" });
+  const { config } = useAppConfig();
+  const [creatingOperator, setCreatingOperator] = useState(false);
 
   const {
     records: links,
-    loading,
-    error,
+    loading: linksLoading,
+    error: linksError,
     creating: linking,
     updating,
     reload,
     create: createLink,
     update: updateLink,
     remove: removeLink,
-  } = useDomainData({ domain: "jfb_project_operators", system: "core", projectId: project?.id });
+    page, setPage, total, hasNext, pageLoading, pageSize,
+  } = useDomainData({ domain: "jfb_project_operators", system: "core", projectId: project?.id, paginate: true });
 
-  const operatorsById = new Map(allOperators.map((o) => [o.id, o]));
-  const rows = hasProject
-    ? [...links]
-        .map((link) => ({ link, operator: operatorsById.get(link.operator_id) }))
-        .filter((r) => r.operator)
+  const operatorIdsKey = links.map((l) => l.operator_id).join(",");
+  const [operatorsState, setOperatorsState] = useState({ key: null, rows: [], error: null });
+
+  useEffect(() => {
+    if (!operatorIdsKey || !config.appSlug) return;
+    let cancelled = false;
+    fetchRecordsByField({ domain: "jfb_operators", appSlug: config.appSlug, values: operatorIdsKey.split(",") })
+      .then((rows) => { if (!cancelled) setOperatorsState({ key: operatorIdsKey, rows, error: null }); })
+      .catch((err) => { if (!cancelled) setOperatorsState({ key: operatorIdsKey, rows: [], error: err.message }); });
+    return () => { cancelled = true; };
+  }, [config.appSlug, operatorIdsKey]);
+
+  const operatorsReady = !operatorIdsKey || operatorsState.key === operatorIdsKey;
+  const operatorsById = new Map((operatorsReady ? operatorsState.rows : []).map((o) => [o.id, o]));
+  const visibleRows = hasProject
+    ? links.map((link) => ({ link, operator: operatorsById.get(link.operator_id) })).filter((r) => r.operator)
     : [];
-
-  const { pageRows: visibleRows, page, setPage, total, pageSize } = usePagedRows(rows);
-
-  const linkedOperatorIds = new Set(links.filter((l) => l.is_active !== false).map((l) => l.operator_id));
-  const availableOperators = allOperators.filter((o) => !linkedOperatorIds.has(o.id));
+  const loading = linksLoading || !operatorsReady;
+  const error = linksError || (operatorIdsKey ? operatorsState.error : null);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [mode, setMode] = useState("existing");
   const [newOperator, setNewOperator] = useState(EMPTY_NEW_OPERATOR);
   const [existingOperatorId, setExistingOperatorId] = useState(null);
+  const [existingOperatorLabel, setExistingOperatorLabel] = useState(null);
 
   function openModal() {
-    setMode(availableOperators.length > 0 || !canCreateOperator ? "existing" : "new");
+    setMode("existing");
     setNewOperator(EMPTY_NEW_OPERATOR);
     setExistingOperatorId(null);
+    setExistingOperatorLabel(null);
     setModalOpen(true);
+  }
+
+  async function fetchOperatorOptions({ search, page: optionPage, pageSize: optionPageSize }) {
+    const nameFilter = likeFilter(search);
+    const { rows, hasNext: optionsHasNext } = await fetchRecordPage({
+      domain: "jfb_operators", appSlug: config.appSlug, page: optionPage, pageSize: optionPageSize,
+      filters: nameFilter ? { name: nameFilter } : undefined, sortCol: "name", sortDir: "asc",
+    });
+    const existingLinks = await fetchRecordsByField({
+      domain: "jfb_project_operators", appSlug: config.appSlug, field: "operator_id",
+      values: rows.map((o) => o.id), filters: { project_id: project.id },
+    });
+    const linkedIds = new Set(existingLinks.filter((l) => l.is_active !== false).map((l) => l.operator_id));
+    return {
+      items: rows.map((o) => ({ value: o.id, label: o.name, disabled: linkedIds.has(o.id), note: linkedIds.has(o.id) ? "already on project" : null })),
+      hasNext: optionsHasNext,
+    };
   }
 
   async function handleAddExisting() {
@@ -80,7 +105,13 @@ export default function OperatorsTab({ project }) {
 
   async function handleAddNew() {
     if (!newOperator.name.trim() || !hasProject) return;
-    const res = await createOperator({ name: newOperator.name.trim(), email: newOperator.email.trim() || null });
+    setCreatingOperator(true);
+    let res;
+    try {
+      res = await createDomainRecord({ domain: "jfb_operators", system: "core", appSlug: config.appSlug, recordData: { name: newOperator.name.trim(), email: newOperator.email.trim() || null } });
+    } finally {
+      setCreatingOperator(false);
+    }
     const operatorId = readWrittenRecordId(res);
     if (!operatorId) return;
     await createLink({ project_id: project.id, operator_id: operatorId, is_active: true });
@@ -125,11 +156,11 @@ export default function OperatorsTab({ project }) {
         {!loading && !error && !hasProject && (
           <Text size="xs" c="dimmed" ta="center" py={16}>Select a project to manage its operators.</Text>
         )}
-        {!loading && !error && hasProject && rows.length === 0 && (
+        {!loading && !error && hasProject && links.length === 0 && page === 1 && (
           <Text size="xs" c="dimmed" ta="center" py={16}>No operators assigned yet</Text>
         )}
         {!loading && !error && visibleRows.map(({ link, operator }) => (
-          <Group key={link.id} justify="space-between" p={8} mb={6} style={{ background: "#f5f6f8", border: "1px solid #ebebeb", borderRadius: 6, opacity: link.is_active === false ? 0.5 : 1 }}>
+          <Group key={link.id} justify="space-between" p={8} mb={6} style={{ background: "#f5f6f8", border: "1px solid #ebebeb", borderRadius: 6, opacity: link.is_active === false || pageLoading ? 0.5 : 1 }}>
             <Group gap={10}>
               <Avatar size={26} radius="xl" style={{ background: "#0F2744", color: "#fff", fontSize: 10, fontWeight: 700 }}>
                 {initials(operator.name)}
@@ -149,7 +180,7 @@ export default function OperatorsTab({ project }) {
             </Group>
           </Group>
         ))}
-        {!loading && !error && <PaginationBar page={page} pageSize={pageSize} count={visibleRows.length} total={total} onChange={setPage} noun="operator" />}
+        {!loading && !error && <PaginationBar page={page} pageSize={pageSize} count={links.length} total={total} hasNext={hasNext} onChange={setPage} disabled={pageLoading} noun="operator" />}
       </Box>
 
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">Add Operator</Text>} size="xs">
@@ -168,15 +199,19 @@ export default function OperatorsTab({ project }) {
 
         {mode === "existing" && (
           <>
-            <PagedSelect
+            <ServerPagedSelect
               label="Operator"
-              placeholder={availableOperators.length === 0 ? "No available operators" : "Choose an operator"}
-              data={availableOperators.map((o) => ({ value: o.id, label: o.name }))}
+              placeholder="Search or choose an operator"
+              fetchPage={fetchOperatorOptions}
+              reloadKey={project?.id ?? ""}
               value={existingOperatorId}
-              onChange={setExistingOperatorId}
+              selectedLabel={existingOperatorLabel}
+              onChange={(v, item) => {
+                setExistingOperatorId(v);
+                setExistingOperatorLabel(item?.label ?? null);
+              }}
               nothingFoundMessage="No matching operators"
               noun="operator"
-              disabled={availableOperators.length === 0}
               mb={16}
             />
             <Group justify="flex-end">

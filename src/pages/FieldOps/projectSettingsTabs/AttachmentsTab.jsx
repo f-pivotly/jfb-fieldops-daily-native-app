@@ -1,32 +1,38 @@
 import { useState } from 'react'
 import { Box, Text, Group, Button, Modal, TextInput, NumberInput, Switch, Table } from '@mantine/core'
 import { IconPlus, IconRefresh } from '@tabler/icons-react'
-import { useProjectAttachments } from '../../../hooks/project/useProjectAttachments'
+import { useDomainData } from '../../../hooks/core/useDomainData'
+import { useAppConfig } from '../../../contexts/appConfigContext'
+import { fetchNextSortOrder } from '../../../data'
 import { useConfirmDialog } from '../../../hooks/ui/useConfirmDialog'
 import LoadingSpinner from '../../../components/LoadingSpinner'
 import SafeError from '../../../components/SafeError'
 import PaginationBar from '../../../components/PaginationBar'
-import { usePagedRows } from '../../../hooks/ui/usePagedRows'
+
+const DOMAIN = 'jfb_project_attachments'
 
 export default function AttachmentsTab({ project }) {
   const hasProject = !!project?.id
   const { confirm, modal: confirmModal } = useConfirmDialog()
-  const { attachments, loading, error, creating, updating, reload, create, update, remove } =
-    useProjectAttachments(project?.id)
+  const { config } = useAppConfig()
+  const { records: attachments, loading, error, creating, updating, reload, create, update, remove, page, setPage, total, hasNext, pageLoading, pageSize } =
+    useDomainData({ domain: DOMAIN, system: 'core', projectId: project?.id, paginate: true, sortCol: 'sort_order', sortDir: 'asc' })
 
   const [addOpen, setAddOpen] = useState(false)
   const [addForm, setAddForm] = useState({ name: '', sort_order: 10 })
   const [editRow, setEditRow] = useState(null)
   const [formError, setFormError] = useState(null)
 
-  const sorted = [...attachments].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-  const { pageRows: sortedPageRows, page: sortedPage, setPage: setSortedPage, total: sortedTotal, pageSize: sortedPageSize } = usePagedRows(sorted)
-
-  function openAdd() {
-    const nextSort = sorted.length === 0 ? 10 : Math.max(...sorted.map((a) => a.sort_order ?? 0)) + 10
-    setAddForm({ name: '', sort_order: nextSort })
+  async function openAdd() {
+    setAddForm({ name: '', sort_order: 10 })
     setFormError(null)
     setAddOpen(true)
+    try {
+      const nextSort = await fetchNextSortOrder({ domain: DOMAIN, appSlug: config.appSlug, filters: { project_id: project.id } })
+      setAddForm((f) => ({ ...f, sort_order: nextSort }))
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'Failed to load the next sort order.')
+    }
   }
 
   async function saveAdd() {
@@ -104,15 +110,15 @@ export default function AttachmentsTab({ project }) {
         </Text>
       )}
 
-      {!loading && !error && hasProject && sorted.length === 0 && (
+      {!loading && !error && hasProject && attachments.length === 0 && (
         <Text size="xs" c="dimmed" ta="center" py={24}>
           No attachments configured yet.
         </Text>
       )}
 
-      {!loading && !error && hasProject && sorted.length > 0 && (
+      {!loading && !error && hasProject && attachments.length > 0 && (
         <>
-        <Table withTableBorder verticalSpacing="xs" fz="sm">
+        <Table withTableBorder verticalSpacing="xs" fz="sm" style={{ opacity: pageLoading ? 0.5 : 1 }}>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Name</Table.Th>
@@ -122,7 +128,7 @@ export default function AttachmentsTab({ project }) {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {sortedPageRows.map((row) => (
+            {attachments.map((row) => (
               <Table.Tr key={row.id}>
                 <Table.Td>{row.name}</Table.Td>
                 <Table.Td c="dimmed">{row.sort_order ?? '—'}</Table.Td>
@@ -139,7 +145,7 @@ export default function AttachmentsTab({ project }) {
             ))}
           </Table.Tbody>
         </Table>
-        <PaginationBar page={sortedPage} pageSize={sortedPageSize} count={sortedPageRows.length} total={sortedTotal} onChange={setSortedPage} noun="attachment" />
+        <PaginationBar page={page} pageSize={pageSize} count={attachments.length} total={total} hasNext={hasNext} onChange={setPage} disabled={pageLoading} noun="attachment" />
         </>
       )}
 

@@ -4,7 +4,9 @@ import {
   Textarea, Switch, Table, Badge,
 } from '@mantine/core'
 import { IconPencil, IconTrash, IconPlus } from '@tabler/icons-react'
-import { useRealizedScopes } from '../../../hooks/project/useRealizedScopes'
+import { useDomainData } from '../../../hooks/core/useDomainData'
+import { useAppConfig } from '../../../contexts/appConfigContext'
+import { fetchNextSortOrder } from '../../../data'
 import { useProjectAreas } from '../../../hooks/project/useProjectAreas'
 import { usePicklist } from '../../../hooks/core/usePicklist'
 import { useConfirmDialog } from '../../../hooks/ui/useConfirmDialog'
@@ -13,7 +15,8 @@ import LoadingSpinner from '../../../components/LoadingSpinner'
 import SafeError from '../../../components/SafeError'
 import { prettyDate } from '../lib/realizedToDate'
 import PaginationBar from '../../../components/PaginationBar'
-import { usePagedRows } from '../../../hooks/ui/usePagedRows'
+
+const DOMAIN = 'jfb_realized_scopes'
 
 const emptyDraft = () => ({
   label: '',
@@ -82,7 +85,9 @@ function payloadFromDraft(d, projectId) {
 export default function RealizedScopesTab({ project }) {
   const hasProject = !!project?.id
   const { confirm, modal: confirmModal } = useConfirmDialog()
-  const { scopes, loading, error, create, update, remove } = useRealizedScopes(project?.id)
+  const { config } = useAppConfig()
+  const { records: scopes, loading, error, create, update, remove, page, setPage, total, hasNext, pageLoading, pageSize } =
+    useDomainData({ domain: DOMAIN, system: 'core', projectId: project?.id, paginate: true, sortCol: 'sort_order', sortDir: 'asc' })
   const { areas } = useProjectAreas(project?.id)
   const { values: regionValues, labels: regionLabels } = usePicklist('pkl-jfb-scope-chart-region')
   const { busy, error: saveError, run } = useAsyncAction()
@@ -98,9 +103,6 @@ export default function RealizedScopesTab({ project }) {
   const areaNameById = new Map(areaOptions.map((o) => [o.value, o.label]))
   const regionOptions = regionValues.map((v) => ({ value: v, label: regionLabels[v] ?? v }))
 
-  const sorted = [...(scopes ?? [])].sort(
-    (a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0) || String(a.label).localeCompare(String(b.label)),
-  )
 
   const set = (k) => (v) => setDraft((d) => ({ ...d, [k]: v }))
   const setText = (k) => (e) => {
@@ -108,9 +110,13 @@ export default function RealizedScopesTab({ project }) {
     setDraft((d) => ({ ...d, [k]: v }))
   }
 
-  function openAdd() {
-    setDraft({ ...emptyDraft(), sort_order: (sorted[sorted.length - 1]?.sort_order ?? 0) + 10 })
+  async function openAdd() {
+    setDraft(emptyDraft())
     setAddOpen(true)
+    await run(async () => {
+      const nextSort = await fetchNextSortOrder({ domain: DOMAIN, appSlug: config.appSlug, filters: { project_id: project.id } })
+      setDraft((d) => ({ ...d, sort_order: nextSort }))
+    })
   }
 
   function openEdit(row) {
@@ -149,7 +155,6 @@ export default function RealizedScopesTab({ project }) {
     return 'All areas'
   }
 
-  const { pageRows: sortedPageRows, page: sortedPage, setPage: setSortedPage, total: sortedTotal, pageSize: sortedPageSize } = usePagedRows(sorted)
   if (!hasProject) return null
   if (loading) return <LoadingSpinner />
 
@@ -234,7 +239,7 @@ export default function RealizedScopesTab({ project }) {
         </Button>
       </Group>
 
-      {sorted.length === 0 ? (
+      {scopes.length === 0 ? (
         <Box p={30} ta="center" style={{ border: '1px dashed var(--mantine-color-gray-4)', borderRadius: 8 }}>
           <Text size="sm" fw={500}>No scopes for this project.</Text>
           <Text size="xs" c="dimmed" mt={4}>
@@ -244,7 +249,7 @@ export default function RealizedScopesTab({ project }) {
         </Box>
       ) : (
         <>
-        <Table withTableBorder verticalSpacing="xs" fz="xs">
+        <Table withTableBorder verticalSpacing="xs" fz="xs" style={{ opacity: pageLoading ? 0.5 : 1 }}>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Label</Table.Th>
@@ -258,7 +263,7 @@ export default function RealizedScopesTab({ project }) {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {sortedPageRows.map((r) => (
+            {scopes.map((r) => (
               <Table.Tr key={r.id}>
                 <Table.Td fw={500}>{r.label}</Table.Td>
                 <Table.Td>{r.start_date ? prettyDate(String(r.start_date).slice(0, 10)) : '—'}</Table.Td>
@@ -289,7 +294,7 @@ export default function RealizedScopesTab({ project }) {
             ))}
           </Table.Tbody>
         </Table>
-        <PaginationBar page={sortedPage} pageSize={sortedPageSize} count={sortedPageRows.length} total={sortedTotal} onChange={setSortedPage} noun="scope" />
+        <PaginationBar page={page} pageSize={pageSize} count={scopes.length} total={total} hasNext={hasNext} onChange={setPage} disabled={pageLoading} noun="scope" />
         </>
       )}
 

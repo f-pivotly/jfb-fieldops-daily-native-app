@@ -101,7 +101,7 @@ export default function AdminProjectsSection({ onConfigure }) {
   const { canCreate: canCreateProject } = useDomainAccess("jfb_projects");
   const { canCreate: canCreateAreaLevels, canUpdate: canUpdateAreaLevels, canDelete: canDeleteAreaLevels } = useDomainAccess("jfb_project_area_levels");
   const canEditAreaLevels = canCreateAreaLevels || canUpdateAreaLevels;
-  const { records, loading, error, creating, updating, reload, create, update, page, setPage, total, pageLoading, pageSize } = useDomainData({
+  const { records, loading, error, creating, updating, reload, create, update, page, setPage, total, hasNext, pageLoading, pageSize } = useDomainData({
     domain: "jfb_projects",
     system: "core",
     paginate: true,
@@ -268,7 +268,7 @@ export default function AdminProjectsSection({ onConfigure }) {
             </Box>
           )}
           {!loading && !error && (
-            <PaginationBar page={page} pageSize={pageSize} count={records.length} total={total} onChange={setPage} disabled={pageLoading} noun="project" />
+            <PaginationBar page={page} pageSize={pageSize} count={records.length} total={total} hasNext={hasNext} onChange={setPage} disabled={pageLoading} noun="project" />
           )}
         </Box>
       </Box>

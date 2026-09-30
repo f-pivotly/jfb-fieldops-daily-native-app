@@ -1,17 +1,21 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useDebouncedValue } from '@mantine/hooks'
 import { Box, Text, Group, Button, Modal, TextInput, NumberInput, Select, Checkbox, Table } from '@mantine/core'
 import { IconPlus, IconRefresh } from '@tabler/icons-react'
-import { useMetrics } from '../../../hooks/metrics/useMetrics'
+import { useDomainData } from '../../../hooks/core/useDomainData'
 import { useMetricSources } from '../../../hooks/metrics/useMetricSources'
 import { useMetricDefaults } from '../../../hooks/metrics/useMetricDefaults'
 import { useEquipment } from '../../../hooks/project/useEquipment'
 import { usePicklist } from '../../../hooks/core/usePicklist'
 import { useConfirmDialog } from '../../../hooks/ui/useConfirmDialog'
 import { useFieldOpsDomainAccess, useFieldOpsAction } from '../../../contexts/fieldOpsAccessContext'
+import { useAppConfig } from '../../../contexts/appConfigContext'
+import { fetchFirstRecord, fetchNextSortOrder, fetchRecordPage } from '../../../data'
 import LoadingSpinner from '../../../components/LoadingSpinner'
 import SafeError from '../../../components/SafeError'
 import PaginationBar from '../../../components/PaginationBar'
-import { usePagedRows } from '../../../hooks/ui/usePagedRows'
+
+const DOMAIN = 'jfb_metrics'
 
 function slugify(label) {
   const trimmed = label.trim().toLowerCase()
@@ -57,11 +61,13 @@ const DEFAULT_ROLLUP_OPTIONS = [
 export default function CoverMetricsTab({ project }) {
   const hasProject = !!project?.id
   const { confirm, modal: confirmModal } = useConfirmDialog()
-  const { metrics, loading, error, creating, updating, reload, create, update, remove } = useMetrics(project?.id)
+  const { config } = useAppConfig()
+  const { records: metrics, loading, error, creating, updating, reload, create, update, remove, page, setPage, total, hasNext, pageLoading, pageSize } =
+    useDomainData({ domain: DOMAIN, system: 'core', projectId: project?.id, paginate: true, sortCol: 'sort_order', sortDir: 'asc' })
   const { metricSources } = useMetricSources()
   const { metricDefaults } = useMetricDefaults()
   const { equipment } = useEquipment(project?.id)
-  const { canCreate, canUpdate, canDelete } = useFieldOpsDomainAccess('jfb_metrics')
+  const { canCreate, canUpdate, canDelete } = useFieldOpsDomainAccess(DOMAIN)
   const canManageSourceType = useFieldOpsAction('manage_metric_source_type')
   const [seeding, setSeeding] = useState(false)
 
@@ -85,25 +91,52 @@ export default function CoverMetricsTab({ project }) {
   const [editRow, setEditRow] = useState(null)
   const [formError, setFormError] = useState(null)
 
-  const sorted = [...metrics].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0))
-  const { pageRows: sortedPageRows, page: sortedPage, setPage: setSortedPage, total: sortedTotal, pageSize: sortedPageSize } = usePagedRows(sorted)
   const addKey = (addForm.metric_key ?? '').replace(/^_+|_+$/g, '')
-  const addKeyTaken = !!addKey && metrics.some((m) => m.metric_key === addKey)
+  const [debouncedAddKey] = useDebouncedValue(addOpen ? addKey : '', 300)
+  const [keyCheck, setKeyCheck] = useState({ key: null, taken: false })
+  const addKeyTaken = !!addKey && keyCheck.key === addKey && keyCheck.taken
 
-  function handleMetricKeyBlur() {
+  function findMetricByKey(key) {
+    return fetchFirstRecord({ domain: DOMAIN, appSlug: config.appSlug, filters: { project_id: project.id, metric_key: key } })
+  }
+
+  useEffect(() => {
+    if (!debouncedAddKey || !project?.id) return
+    let cancelled = false
+    fetchFirstRecord({ domain: DOMAIN, appSlug: config.appSlug, filters: { project_id: project.id, metric_key: debouncedAddKey } })
+      .then((row) => { if (!cancelled) setKeyCheck({ key: debouncedAddKey, taken: !!row }) })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [debouncedAddKey, project?.id, config.appSlug])
+
+  async function handleMetricKeyBlur() {
     if (!addForm.metric_key && addForm.label.trim()) {
-      const key = uniqueMetricKey(addForm.label, metrics.map((m) => m.metric_key).filter(Boolean))
-      setAddForm((f) => ({ ...f, metric_key: key }))
+      const base = slugify(addForm.label)
+      try {
+        const { rows } = await fetchRecordPage({
+          domain: DOMAIN, appSlug: config.appSlug, pageSize: 200,
+          filters: { project_id: project.id, metric_key: { like: `${base}*` } },
+        })
+        const key = uniqueMetricKey(addForm.label, rows.map((m) => m.metric_key).filter(Boolean))
+        setAddForm((f) => (f.metric_key ? f : { ...f, metric_key: key }))
+      } catch (e) {
+        setFormError(e instanceof Error ? e.message : 'Failed to check existing metric keys.')
+      }
     } else if (addForm.metric_key) {
       setAddForm((f) => ({ ...f, metric_key: slugify(f.metric_key) }))
     }
   }
 
-  function openAdd() {
-    const nextSort = sorted.length === 0 ? 10 : Math.max(...sorted.map((r) => r.sort_order ?? 0)) + 10
-    setAddForm({ ...emptyDraft(), sort_order: nextSort })
+  async function openAdd() {
+    setAddForm({ ...emptyDraft(), sort_order: 10 })
     setFormError(null)
     setAddOpen(true)
+    try {
+      const nextSort = await fetchNextSortOrder({ domain: DOMAIN, appSlug: config.appSlug, filters: { project_id: project.id } })
+      setAddForm((f) => ({ ...f, sort_order: nextSort }))
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : 'Failed to load the next sort order.')
+    }
   }
 
   async function saveAdd() {
@@ -112,16 +145,17 @@ export default function CoverMetricsTab({ project }) {
       setFormError('Metric key is required.')
       return
     }
-    if (addKeyTaken) {
-      setFormError(`A metric with key "${addKey}" already exists.`)
-      return
-    }
     if (!label) {
       setFormError('Label is required.')
       return
     }
     setFormError(null)
     try {
+      if (await findMetricByKey(addKey)) {
+        setKeyCheck({ key: addKey, taken: true })
+        setFormError(`A metric with key "${addKey}" already exists.`)
+        return
+      }
       await create({
         project_id: project.id,
         metric_key: addKey,
@@ -245,7 +279,7 @@ export default function CoverMetricsTab({ project }) {
         </Text>
       )}
 
-      {!loading && !error && hasProject && sorted.length === 0 && (
+      {!loading && !error && hasProject && metrics.length === 0 && (
         <Box style={{ border: '1px solid var(--mantine-color-gray-3)', borderRadius: 8 }} py={24} ta="center">
           <Text size="xs" c="dimmed" mb={canCreate && metricDefaults.length > 0 ? 10 : 0}>
             No metrics configured yet.{canCreate ? ' Click + Add Metric to start.' : ''}
@@ -258,9 +292,9 @@ export default function CoverMetricsTab({ project }) {
         </Box>
       )}
 
-      {!loading && !error && hasProject && sorted.length > 0 && (
+      {!loading && !error && hasProject && metrics.length > 0 && (
         <>
-        <Table withTableBorder verticalSpacing="xs" fz="sm">
+        <Table withTableBorder verticalSpacing="xs" fz="sm" style={{ opacity: pageLoading ? 0.5 : 1 }}>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Metric Key</Table.Th>
@@ -273,7 +307,7 @@ export default function CoverMetricsTab({ project }) {
             </Table.Tr>
           </Table.Thead>
           <Table.Tbody>
-            {sortedPageRows.map((row) => (
+            {metrics.map((row) => (
               <Table.Tr key={row.id}>
                 <Table.Td style={{ fontFamily: 'monospace', fontSize: 12 }}>{row.metric_key || '—'}</Table.Td>
                 <Table.Td>{row.label}</Table.Td>
@@ -303,7 +337,7 @@ export default function CoverMetricsTab({ project }) {
             ))}
           </Table.Tbody>
         </Table>
-        <PaginationBar page={sortedPage} pageSize={sortedPageSize} count={sortedPageRows.length} total={sortedTotal} onChange={setSortedPage} noun="metric" />
+        <PaginationBar page={page} pageSize={pageSize} count={metrics.length} total={total} hasNext={hasNext} onChange={setPage} disabled={pageLoading} noun="metric" />
         </>
       )}
 

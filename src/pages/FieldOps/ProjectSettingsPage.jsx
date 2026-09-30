@@ -3,7 +3,6 @@ import { useParams, Link } from 'react-router-dom'
 import { Box, Text, Group, Tabs, TextInput, Button } from '@mantine/core'
 import { useProject } from '../../hooks/project/useProject'
 import { useEquipment } from '../../hooks/project/useEquipment'
-import { useRealizedExcludedDays } from '../../hooks/project/useRealizedExcludedDays'
 import { projectShowsDredgeChart } from '../../config/dredgeProgress'
 import { isPlacementEquipment } from '../../config/placementProgress'
 import ScheduledOffDaysCard from '../../components/ScheduledOffDaysCard'
@@ -21,7 +20,6 @@ export default function ProjectSettingsPage() {
   const { projectId } = useParams()
   const { project, update: updateProject } = useProject(projectId)
   const { equipment } = useEquipment(projectId)
-  const { excludedDays, create: createExcluded, remove: removeExcluded } = useRealizedExcludedDays(projectId)
   const isDredging = projectShowsDredgeChart(project)
   const isPlacement =
     isPlacementEquipment(project, null, null) ||
@@ -40,13 +38,7 @@ export default function ProjectSettingsPage() {
       </Box>
 
       <Box mb={16}>
-        <ScheduledOffDaysCard
-          projectId={projectId}
-          excludedDays={excludedDays}
-          today={todayISO()}
-          onCreate={createExcluded}
-          onRemove={removeExcluded}
-        />
+        <ScheduledOffDaysCard projectId={projectId} today={todayISO()} />
       </Box>
 
       <Box mb={16}>

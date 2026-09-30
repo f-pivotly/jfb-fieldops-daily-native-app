@@ -1,5 +1,6 @@
+import { normalizedCategory, TRANSITION_CATEGORY } from './operationalCategory'
 
-function hasArea(a) {
+export function hasArea(a) {
   const area = a?.area
   if (!area || typeof area !== 'object') return false
   return ['area_id', 'sub_area_id', 'sub_sub_area_id']
@@ -24,6 +25,7 @@ export function computeAreaFillTargets(activities, editedId) {
   for (let i = start + 1; i < sorted.length; i++) {
     const a = sorted[i]
     if (a.is_deleted) continue
+    if (normalizedCategory(a.category).toUpperCase() === TRANSITION_CATEGORY) break
     if (hasArea(a) && a.area_source !== 'pe') break
     targets.push(a)
   }

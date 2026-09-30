@@ -2,11 +2,10 @@ import { useEffect, useState } from "react";
 import { Box, Text, SimpleGrid, Table } from "@mantine/core";
 import { useDomainData } from "../../hooks/core/useDomainData";
 import { useAppConfig } from "../../contexts/appConfigContext";
-import { fetchDomainRecords, fetchAllDomainRecords } from "../../data";
+import { fetchDomainRecords, fetchAllDomainRecords, fetchRecordsByField } from "../../data";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import SafeError from "../../components/SafeError";
 import PaginationBar from "../../components/PaginationBar";
-import { usePagedRows } from "../../hooks/ui/usePagedRows";
 
 const NAVY = "#0F2744";
 const BLUE = "#1A5CA8";
@@ -30,7 +29,7 @@ function todayUtcRange() {
 }
 
 function useDashboardCounts(appSlug) {
-  const [counts, setCounts] = useState({ operators: null, equipment: null, events: null });
+  const [counts, setCounts] = useState({ projects: null, operators: null, equipment: null, events: null });
 
   useEffect(() => {
     if (!appSlug) return;
@@ -38,6 +37,7 @@ function useDashboardCounts(appSlug) {
     const settle = (key) => (value) => { if (!cancelled) setCounts((c) => ({ ...c, [key]: value })); };
     const fail = (key) => () => { if (!cancelled) setCounts((c) => ({ ...c, [key]: null })); };
 
+    countRecords(appSlug, "jfb_projects", { is_active: true }).then(settle("projects")).catch(fail("projects"));
     countActiveOperators(appSlug).then(settle("operators")).catch(fail("operators"));
     countRecords(appSlug, "jfb_equipments", { is_active: true }).then(settle("equipment")).catch(fail("equipment"));
     countRecords(appSlug, "jfb_daily_activities", { start_date_time: todayUtcRange() }).then(settle("events")).catch(fail("events"));
@@ -50,12 +50,28 @@ function useDashboardCounts(appSlug) {
 
 export default function AdminDashboardSection() {
   const { config } = useAppConfig();
-  const { records, loading, error } = useDomainData({ domain: "jfb_projects", system: "core" });
-  const { records: areaLevels } = useDomainData({ domain: "jfb_project_area_levels", system: "core" });
+  const { records: activeProjects, loading, error, page, setPage, total, hasNext, pageLoading, pageSize } = useDomainData({
+    domain: "jfb_projects",
+    system: "core",
+    filters: { is_active: true },
+    paginate: true,
+    sortCol: "name",
+    sortDir: "asc",
+  });
   const counts = useDashboardCounts(config.appSlug);
-  const activeProjects = records.filter((r) => r.is_active);
-  const { pageRows: activeProjectsPageRows, page: activeProjectsPage, setPage: setActiveProjectsPage, total: activeProjectsTotal, pageSize: activeProjectsPageSize } = usePagedRows(activeProjects);
+  const projectIdsKey = activeProjects.map((p) => p.id).join(",");
+  const [areaLevelsState, setAreaLevelsState] = useState({ key: null, rows: [] });
 
+  useEffect(() => {
+    if (!config.appSlug || !projectIdsKey) return;
+    let cancelled = false;
+    fetchRecordsByField({ domain: "jfb_project_area_levels", appSlug: config.appSlug, field: "project_id", values: projectIdsKey.split(",") })
+      .then((rows) => { if (!cancelled) setAreaLevelsState({ key: projectIdsKey, rows }); })
+      .catch(() => { if (!cancelled) setAreaLevelsState({ key: projectIdsKey, rows: [] }); });
+    return () => { cancelled = true; };
+  }, [config.appSlug, projectIdsKey]);
+
+  const areaLevels = areaLevelsState.key === projectIdsKey ? areaLevelsState.rows : [];
   const levelPathByProject = {};
   for (const level of areaLevels.slice().sort((a, b) => (a.depth ?? 0) - (b.depth ?? 0))) {
     if (!level.label) continue;
@@ -69,7 +85,7 @@ export default function AdminDashboardSection() {
       </Text>
 
       <SimpleGrid cols={{ base: 2, sm: 4 }} spacing={14} mb={20}>
-        <Kpi label="Active Projects" value={loading ? "—" : activeProjects.length} />
+        <Kpi label="Active Projects" value={counts.projects} />
         <Kpi label="Total Operators" value={counts.operators} />
         <Kpi label="Equipment Units" value={counts.equipment} />
         <Kpi label="Events Today" value={counts.events} />
@@ -97,7 +113,7 @@ export default function AdminDashboardSection() {
               borderColor="#EBF0F7"
               horizontalSpacing={14}
               verticalSpacing={10}
-              style={{ fontSize: 12, minWidth: 760 }}
+              style={{ fontSize: 12, minWidth: 760, opacity: pageLoading ? 0.5 : 1 }}
               styles={{ th: { fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.75)", letterSpacing: "0.04em", padding: "9px 14px" }, td: { color: NAVY } }}
             >
               <Table.Thead>
@@ -111,7 +127,7 @@ export default function AdminDashboardSection() {
                 </Table.Tr>
               </Table.Thead>
               <Table.Tbody>
-                {activeProjectsPageRows.map((row) => (
+                {activeProjects.map((row) => (
                   <Table.Tr key={row.id}>
                     <Table.Td style={{ fontWeight: 700 }}>{row.name}</Table.Td>
                     <Table.Td>{row.client_name || "—"}</Table.Td>
@@ -132,7 +148,7 @@ export default function AdminDashboardSection() {
           </Box>
         )}
         {!loading && !error && activeProjects.length > 0 && (
-          <Box px={16} pb={16}><PaginationBar page={activeProjectsPage} pageSize={activeProjectsPageSize} count={activeProjectsPageRows.length} total={activeProjectsTotal} onChange={setActiveProjectsPage} noun="project" /></Box>
+          <Box px={16} pb={16}><PaginationBar page={page} pageSize={pageSize} count={activeProjects.length} total={total} hasNext={hasNext} onChange={setPage} disabled={pageLoading} noun="project" /></Box>
         )}
       </Box>
     </Box>

@@ -32,7 +32,7 @@ except ModuleNotFoundError:
         raise RuntimeError("Pivotly runner secret helper is unavailable outside Pivotly.")
 
 
-SCRIPT_VERSION = "v1-jfb-monitoring-pull-r5"
+SCRIPT_VERSION = "v1-jfb-monitoring-pull-r6"
 
 PARAM_CONTRACT_VERSION = "jfb_monitoring_pull_params_v1"
 
@@ -96,7 +96,12 @@ SECRET_ERROR_REMEDIATION = {
 
 def safe_text(value, max_length=400):
     text = str(value or "")
-    for marker in ["Authorization:", "authorization:", "Bearer ", "bearer ", "apiKey=", "password="]:
+    for marker in ("apiKey=", "password="):
+        while marker in text and marker + "[REDACTED]" not in text:
+            head, _sep, tail = text.partition(marker)
+            cut = min([i for i in (tail.find(c) for c in "&\"' ),") if i >= 0] or [len(tail)])
+            text = head + marker + "[REDACTED]" + tail[cut:]
+    for marker in ["Authorization:", "authorization:", "Bearer ", "bearer "]:
         if marker in text:
             head, _sep, _tail = text.partition(marker)
             text = head + marker + "[REDACTED]"

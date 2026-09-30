@@ -6,6 +6,7 @@ import SaveIndicator from '../../../../components/SaveIndicator'
 import { hoursBetween } from '../../lib/eventTotals'
 import { isProductiveActivity } from '../../lib/workType'
 import { deriveCap, fmt, num, LIFT_THICKNESS_WARN_IN } from '../../../../lib/productionValues'
+import { withTransitionState } from '../../../../lib/transitionState'
 
 const DEBOUNCE_MS = 1500
 
@@ -19,7 +20,7 @@ function areaKeyOfPersisted(p) {
 
 function buildCappingAreaGroups(acts) {
   const m = new Map()
-  for (const a of acts ?? []) {
+  for (const a of withTransitionState(acts)) {
     const areaId = a.area?.area_id ?? null
     const subAreaId = a.area?.sub_area_id ?? null
     const subSubAreaId = a.area?.sub_sub_area_id ?? null

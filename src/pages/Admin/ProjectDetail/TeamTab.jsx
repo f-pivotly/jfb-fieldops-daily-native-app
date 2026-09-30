@@ -1,17 +1,28 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Box, Text, Group, Button, Modal, Checkbox, Avatar, SegmentedControl } from "@mantine/core";
 import { IconPlus, IconRefresh } from "@tabler/icons-react";
 import { useDomainData } from "../../../hooks/core/useDomainData";
 import { useConfirmDialog } from "../../../hooks/ui/useConfirmDialog";
 import { useDomainAccess } from "../../../contexts/adminAccessContext";
-import { useRoleUsers } from "../../../hooks/iam/useRoleUsers";
 import { useRoleByCode } from "../../../hooks/iam/useRoleByCode";
+import { useAppConfig } from "../../../contexts/appConfigContext";
+import { fetchRecordsByField, fetchRoleUsersPage } from "../../../data";
 import PaginationBar from "../../../components/PaginationBar";
-import { usePagedRows } from "../../../hooks/ui/usePagedRows";
-import PagedSelect from "../../../components/PagedSelect";
+import ServerPagedSelect from "../../../components/ServerPagedSelect";
 
 const PE_ROLE_CODE = "jfb_project_engineers";
 const PM_ROLE_CODE = "jfb_project_managers";
+
+async function resolveRoleUsers(roleIds, userIds) {
+  const entries = await Promise.all(
+    userIds.map(async (userId) => {
+      const results = await Promise.all(roleIds.map((roleId) => fetchRoleUsersPage(roleId, { userId, pageSize: 1 })));
+      const user = results.map((r) => r.rows[0]).find(Boolean) ?? null;
+      return [userId, user];
+    })
+  );
+  return new Map(entries.filter(([, user]) => user));
+}
 
 function initials(fullName) {
   return (fullName || "")
@@ -27,54 +38,79 @@ export default function TeamTab({ project }) {
   const { confirm, modal: confirmModal } = useConfirmDialog();
   const { canCreate, canUpdate, canDelete } = useDomainAccess("jfb_project_members");
 
+  const { config } = useAppConfig();
   const {
     records: links,
-    loading,
-    error,
+    loading: linksLoading,
+    error: linksError,
     creating,
     updating,
     reload,
     create,
     update,
     remove,
-  } = useDomainData({ domain: "jfb_project_members", system: "core", projectId: project?.id });
+    page, setPage, total, hasNext, pageLoading, pageSize,
+  } = useDomainData({ domain: "jfb_project_members", system: "core", projectId: project?.id, paginate: true });
 
   const { roleId: peRoleId, loading: peRoleLoading } = useRoleByCode(PE_ROLE_CODE, { enabled: canCreate });
   const { roleId: pmRoleId, loading: pmRoleLoading } = useRoleByCode(PM_ROLE_CODE, { enabled: canCreate });
-  const { users: peUsers, loading: peUsersLoading } = useRoleUsers(peRoleId, { enabled: canCreate && !!peRoleId });
-  const { users: pmUsers, loading: pmUsersLoading } = useRoleUsers(pmRoleId, { enabled: canCreate && !!pmRoleId });
-  const usersLoading = peRoleLoading || pmRoleLoading || peUsersLoading || pmUsersLoading;
+  const roleIdsKey = [peRoleId, pmRoleId].filter(Boolean).join(",");
+  const userIdsKey = [...new Set(links.map((l) => l.user_id).filter(Boolean))].join(",");
+  const usersKey = `${userIdsKey}|${roleIdsKey}`;
+  const [usersState, setUsersState] = useState({ key: null, byId: new Map(), error: null });
 
-  const usersById = new Map(
-    [...peUsers, ...pmUsers].map((u) => [u.userId, u])
-  );
+  useEffect(() => {
+    if (!userIdsKey || !roleIdsKey) return;
+    let cancelled = false;
+    resolveRoleUsers(roleIdsKey.split(","), userIdsKey.split(","))
+      .then((byId) => { if (!cancelled) setUsersState({ key: usersKey, byId, error: null }); })
+      .catch((err) => { if (!cancelled) setUsersState({ key: usersKey, byId: new Map(), error: err.message }); });
+    return () => { cancelled = true; };
+  }, [userIdsKey, roleIdsKey, usersKey]);
+
+  const needsUsers = !!userIdsKey && !!roleIdsKey;
+  const usersReady = !needsUsers || usersState.key === usersKey;
+  const usersById = needsUsers && usersReady ? usersState.byId : new Map();
   const rows = hasProject
     ? links.map((link) => ({ link, user: usersById.get(link.user_id) })).filter((r) => r.user)
     : [];
-
-  const { pageRows: rowsPageRows, page: rowsPage, setPage: setRowsPage, total: rowsTotal, pageSize: rowsPageSize } = usePagedRows(rows);
-  const linkedUserIds = new Set(links.filter((l) => l.is_active !== false).map((l) => l.user_id));
+  const loading = linksLoading || peRoleLoading || pmRoleLoading || !usersReady;
+  const error = linksError || (needsUsers ? usersState.error : null);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [roleFilter, setRoleFilter] = useState("pe");
-  const [selectedUserId, setSelectedUserId] = useState(null);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const selectedUserId = selectedUser?.userId ?? null;
+  const activeRoleId = roleFilter === "pe" ? peRoleId : pmRoleId;
 
-  const availableUsers = (roleFilter === "pe" ? peUsers : pmUsers).filter(
-    (u) => !linkedUserIds.has(u.userId)
-  );
-  let userSelectPlaceholder = "Choose a user";
-  if (usersLoading) userSelectPlaceholder = "Loading…";
-  else if (availableUsers.length === 0) userSelectPlaceholder = "No available users";
+  async function fetchUserOptions({ search, page: optionPage, pageSize: optionPageSize }) {
+    if (!activeRoleId) return { items: [], hasNext: false };
+    const { rows: users, hasNext: optionsHasNext } = await fetchRoleUsersPage(activeRoleId, { page: optionPage, pageSize: optionPageSize, search });
+    const existingLinks = await fetchRecordsByField({
+      domain: "jfb_project_members", appSlug: config.appSlug, field: "user_id",
+      values: users.map((u) => u.userId), filters: { project_id: project.id },
+    });
+    const linkedIds = new Set(existingLinks.filter((l) => l.is_active !== false).map((l) => l.user_id));
+    return {
+      items: users.map((u) => ({
+        value: u.userId,
+        label: u.displayName || u.email,
+        user: u,
+        disabled: linkedIds.has(u.userId),
+        note: linkedIds.has(u.userId) ? "already on team" : null,
+      })),
+      hasNext: optionsHasNext,
+    };
+  }
 
   function openModal() {
     setRoleFilter("pe");
-    setSelectedUserId(null);
+    setSelectedUser(null);
     setModalOpen(true);
   }
 
   async function handleAdd() {
     if (!selectedUserId || !hasProject) return;
-    const selectedUser = availableUsers.find((u) => u.userId === selectedUserId);
     await create({
       project_id: project.id,
       user_id: selectedUserId,
@@ -122,11 +158,11 @@ export default function TeamTab({ project }) {
         {!loading && !error && !hasProject && (
           <Text size="xs" c="dimmed" ta="center" py={16}>Select a project to manage its team.</Text>
         )}
-        {!loading && !error && hasProject && rows.length === 0 && (
+        {!loading && !error && hasProject && rows.length === 0 && page === 1 && (
           <Text size="xs" c="dimmed" ta="center" py={16}>No team members assigned yet</Text>
         )}
-        {!loading && !error && rowsPageRows.map(({ link, user }) => (
-          <Group key={link.id} justify="space-between" p={8} mb={6} style={{ background: "#f5f6f8", border: "1px solid #ebebeb", borderRadius: 6, opacity: link.is_active === false ? 0.5 : 1 }}>
+        {!loading && !error && rows.map(({ link, user }) => (
+          <Group key={link.id} justify="space-between" p={8} mb={6} style={{ background: "#f5f6f8", border: "1px solid #ebebeb", borderRadius: 6, opacity: link.is_active === false || pageLoading ? 0.5 : 1 }}>
             <Group gap={10}>
               <Avatar size={26} radius="xl" style={{ background: "#0F2744", color: "#fff", fontSize: 10, fontWeight: 700 }}>
                 {initials(user.displayName || user.email)}
@@ -146,7 +182,7 @@ export default function TeamTab({ project }) {
             </Group>
           </Group>
         ))}
-        {!loading && !error && hasProject && <PaginationBar page={rowsPage} pageSize={rowsPageSize} count={rowsPageRows.length} total={rowsTotal} onChange={setRowsPage} noun="member" />}
+        {!loading && !error && hasProject && <PaginationBar page={page} pageSize={pageSize} count={links.length} total={total} hasNext={hasNext} onChange={setPage} disabled={pageLoading} noun="member" />}
       </Box>
 
       <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title={<Text fw={700} size="sm">Add to Team</Text>} size="xs">
@@ -156,22 +192,24 @@ export default function TeamTab({ project }) {
           value={roleFilter}
           onChange={(v) => {
             setRoleFilter(v);
-            setSelectedUserId(null);
+            setSelectedUser(null);
           }}
           data={[
             { label: "PE", value: "pe" },
             { label: "PM", value: "pm" },
           ]}
         />
-        <PagedSelect
+        <ServerPagedSelect
           label="User"
-          placeholder={userSelectPlaceholder}
-          data={availableUsers.map((u) => ({ value: u.userId, label: u.displayName || u.email }))}
+          placeholder={activeRoleId ? "Search or choose a user" : "Loading…"}
+          fetchPage={fetchUserOptions}
+          reloadKey={`${project?.id ?? ""}|${activeRoleId ?? ""}`}
           value={selectedUserId}
-          onChange={setSelectedUserId}
+          selectedLabel={selectedUser ? selectedUser.displayName || selectedUser.email : null}
+          onChange={(v, item) => setSelectedUser(item?.user ?? null)}
           nothingFoundMessage="No matching users"
           noun="user"
-          disabled={usersLoading || availableUsers.length === 0}
+          disabled={!activeRoleId}
           mb={16}
         />
         <Group justify="flex-end">

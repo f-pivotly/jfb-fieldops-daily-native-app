@@ -40,7 +40,7 @@ export function useAirQualityReadings(config, dateISO) {
       for (;;) {
         const res = await fetchDomainRecords({
           domain: 'jfb_air_quality_readings', system: 'core', appSlug: appConfig.appSlug,
-          filters, limit: PAGE_SIZE, offset,
+          filters, limit: PAGE_SIZE, offset, paged: true,
         })
         const page = res?.data ?? []
         all.push(...page)
