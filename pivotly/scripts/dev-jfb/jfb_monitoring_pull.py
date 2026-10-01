@@ -1,3 +1,4 @@
+import base64
 import json
 from datetime import datetime, timedelta, timezone
 
@@ -32,7 +33,7 @@ except ModuleNotFoundError:
         raise RuntimeError("Pivotly runner secret helper is unavailable outside Pivotly.")
 
 
-SCRIPT_VERSION = "v1-jfb-monitoring-pull-r6"
+SCRIPT_VERSION = "v1-jfb-monitoring-pull-r9"
 
 PARAM_CONTRACT_VERSION = "jfb_monitoring_pull_params_v1"
 
@@ -52,10 +53,12 @@ VALID_MODES = ["self_check", "dry_run", "pull", "backfill"]
 
 VALID_PROVIDERS = ["hydrovu", "wqdatalive", "ecomzen"]
 
-TOKEN_ENDPOINT = "https://login.microsoftonline.com/39f6cf5e-725d-4087-a1e3-e7b4442c867e/oauth2/v2.0/token"
-API_SCOPE = "https://pivotlyidentityplatformdev.onmicrosoft.com/api/.default"
+TOKEN_ENDPOINT = "https://login.microsoftonline.com/856436c2-a60d-486d-bca3-9c1367fa632a/oauth2/v2.0/token"
+API_SCOPE = "api://1a10b2a3-2fbf-4cc8-b32c-634766e1172b/.default"
 PIVOTLY_CLIENT_ID_SECRET = "jfb-pivotly-api-client-id"
 PIVOTLY_CLIENT_SECRET_SECRET = "jfb-pivotly-api-client-secret"
+
+TOKEN_CLAIMS_TO_SHOW = ["aud", "iss", "ver", "tid", "appid", "azp", "roles", "scp", "exp"]
 
 VENDOR_SECRETS = {
     "hydrovu": {"client_id": "jfb-hydrovu-client-id", "client_secret": "jfb-hydrovu-client-secret"},
@@ -78,6 +81,7 @@ BACKFILL_PAD_HOURS = 6
 HYDROVU_BASE = "https://www.hydrovu.com/public-api"
 WQDATALIVE_BASE = "https://www.wqdatalive.com/api/v1"
 WQDATALIVE_WANTED = [("turbidity", "turbid"), ("conductivity", "cond")]
+DIAG_MAX_PARAMETERS = 25
 
 PARAM_DEBUG = {}
 
@@ -87,7 +91,10 @@ SECRET_ERROR_REMEDIATION = {
         "Admin -> Variables -> Allowed Secrets: Consumer Type=script, "
         "Consumer Slug=<this script's slug>, Variable Slug=<secret slug>, Status=approved."
     ),
-    "secret_not_found": "The Secret Variable slug does not exist in this environment. Check Admin -> Variables.",
+    "secret_not_found": (
+        "The Runner reports every failed secret read this way. Check the Secret Variable exists under exactly "
+        "this slug and that an approved Allowed Secrets row names this script's slug."
+    ),
     "runner_signed_token_rejected": "The runner signed-token was rejected. Re-run from the Portal.",
     "secret_accessor_missing": "Unexpected Secret wrapper shape; report the runner version.",
     "secret_read_exception": "Inspect error_detail for the raw runner message.",
@@ -192,6 +199,16 @@ def read_secrets(slug_map):
     return ok, values, report
 
 
+def token_claims(token):
+    try:
+        payload = str(token or "").split(".")[1]
+        payload += "=" * (-len(payload) % 4)
+        claims = json.loads(base64.urlsafe_b64decode(payload.encode("ascii")).decode("utf-8"))
+    except Exception as exc:
+        return {"decode_error": safe_text(exc)}
+    return {key: claims.get(key) for key in TOKEN_CLAIMS_TO_SHOW if key in claims}
+
+
 def get_pivotly_api():
     diag = {"stage": "start"}
     if not PIVOTLY_AVAILABLE or PivotlyAPI is None:
@@ -216,6 +233,7 @@ def get_pivotly_api():
         if response.status_code >= 400 or not body.get("access_token"):
             diag.update(stage="token_post", error=str(body.get("error", "token_http_error")), status=response.status_code)
             return None, diag
+        diag["token_claims"] = token_claims(body.get("access_token"))
         api = PivotlyAPI(client_id=creds["client_id"], client_secret=creds["client_secret"], token_endpoint=TOKEN_ENDPOINT, api_scope=API_SCOPE)
         api._access_token = body.get("access_token")
         diag["stage"] = "ok"
@@ -308,6 +326,10 @@ def now_utc():
     return datetime.now(timezone.utc)
 
 
+def diagnostics_for(state, config):
+    return state.setdefault("diagnostics", {}).setdefault(str(config.get("project_id")), [])
+
+
 def hydrovu_token(creds):
     response = requests.post(
         HYDROVU_BASE + "/oauth/token",
@@ -344,16 +366,22 @@ def hydrovu_pull(creds, config, start_dt, end_dt, state):
         state["hydrovu_names"] = pages[0] if pages else {"parameters": {}, "units": {}}
     token, names = state["hydrovu_token"], state["hydrovu_names"]
     fetched_at = iso_utc(now_utc())
+    diag = diagnostics_for(state, config)
     rows = []
     for loc in config.get("locations") or []:
         location_id = loc.get("hydrovu_location_id")
         if location_id is None:
+            diag.append({"role": loc.get("role"), "error": "missing hydrovu_location_id"})
             continue
         pages = hydrovu_get(token, f"/v1/locations/{location_id}/data",
                             {"startTime": int(start_dt.timestamp()), "endTime": int(end_dt.timestamp())})
+        entry = {"role": loc.get("role"), "location_id": str(location_id), "pages": len(pages), "parameters": [], "points": 0}
+        diag.append(entry)
         for page in pages:
             for param in page.get("parameters") or []:
                 pname = str((names.get("parameters") or {}).get(param.get("parameterId"), param.get("parameterId")))
+                if pname not in entry["parameters"] and len(entry["parameters"]) < DIAG_MAX_PARAMETERS:
+                    entry["parameters"].append(pname)
                 if "turbid" not in pname.lower():
                     continue
                 unit = str((names.get("units") or {}).get(param.get("unitId"), param.get("unitId") or "NTU"))
@@ -361,6 +389,7 @@ def hydrovu_pull(creds, config, start_dt, end_dt, state):
                     value = reading.get("value")
                     if not isinstance(value, (int, float)) or isinstance(value, bool) or value != value:
                         continue
+                    entry["points"] += 1
                     rows.append({
                         "project_id": config["project_id"],
                         "location_id": str(location_id),
@@ -414,17 +443,35 @@ def wqdatalive_parameter_data(api_key, device_id, parameter_id, start_dt, end_dt
 def wqdatalive_pull(creds, config, start_dt, end_dt, state):
     api_key = creds["api_key"]
     fetched_at = iso_utc(now_utc())
+    diag = diagnostics_for(state, config)
     rows = []
     for loc in config.get("locations") or []:
         device_id = loc.get("wqdatalive_device_id", loc.get("device_id"))
         if device_id is None:
+            diag.append({"role": loc.get("role"), "error": "missing wqdatalive_device_id"})
             continue
         params = wqdatalive_get(api_key, f"/devices/{device_id}/parameters").get("parameters") or []
+        entry = {
+            "role": loc.get("role"),
+            "device_id": device_id,
+            "parameters": [safe_text(p.get("name"), 60) for p in params[:DIAG_MAX_PARAMETERS]],
+            "matched": {},
+        }
+        diag.append(entry)
         for parameter, needle in WQDATALIVE_WANTED:
             match = next((p for p in params if needle in str(p.get("name") or "").lower()), None)
             if not match:
+                entry["matched"][parameter] = None
                 continue
-            for reading_at, value in wqdatalive_parameter_data(api_key, device_id, match.get("id"), start_dt, end_dt):
+            points = wqdatalive_parameter_data(api_key, device_id, match.get("id"), start_dt, end_dt)
+            entry["matched"][parameter] = {
+                "id": match.get("id"),
+                "name": safe_text(match.get("name"), 60),
+                "points": len(points),
+                "last_in_window": points[-1][0] if points else None,
+                **{k: safe_text(v, 60) for k, v in match.items() if "last" in str(k).lower()},
+            }
+            for reading_at, value in points:
                 rows.append({
                     "project_id": config["project_id"],
                     "location_id": str(device_id),
@@ -553,13 +600,27 @@ def ecomzen_pull(creds, config, start_dt, end_dt, state):
     session = state[session_key]
     tz_name = config.get("timezone") or "America/New_York"
     fetched_at = iso_utc(now_utc())
+    diag = diagnostics_for(state, config)
+    entries = {}
+    for station in config.get("stations") or []:
+        entry = {"key": station.get("key"), "sensor_id": str(station.get("sensor_id")), "downloads": 0, "empty_downloads": 0, "points": 0, "last_in_window": None}
+        entries[entry["sensor_id"]] = entry
+        diag.append(entry)
     rows = []
     day = start_dt
     while day < end_dt:
         chunk_end = min(day + timedelta(days=1), end_dt)
         for station in config.get("stations") or []:
+            entry = entries[str(station.get("sensor_id"))]
             csv_text = ecomzen_download(session, base_url, station.get("sensor_id"), format_local(day, tz_name), format_local(chunk_end, tz_name))
-            for reading_at, value in parse_pm10_csv(csv_text):
+            points = parse_pm10_csv(csv_text)
+            entry["downloads"] += 1
+            if not csv_text:
+                entry["empty_downloads"] += 1
+            entry["points"] += len(points)
+            if points:
+                entry["last_in_window"] = points[-1][0]
+            for reading_at, value in points:
                 rows.append({
                     "project_id": config["project_id"],
                     "sensor_id": str(station.get("sensor_id")),
@@ -698,10 +759,11 @@ def run_provider(config, api):
                 "written": written,
                 "updated": updated,
                 "by_series": summarize_rows(rows, target["key_field"]),
+                "devices": diagnostics_for(state, cfg),
             }
         except Exception as exc:
             summary[project_id] = -1
-            details[project_id] = {"error": safe_text(exc)}
+            details[project_id] = {"error": safe_text(exc), "devices": diagnostics_for(state, cfg)}
     output.update(ok=all(v != -1 for v in summary.values()), summary=summary, details=details)
     return output
 

@@ -36,7 +36,7 @@ except ModuleNotFoundError:
         raise RuntimeError("Pivotly runner secret helper is unavailable outside Pivotly.")
 
 
-SCRIPT_VERSION = "v4-jfb-domain-sync-58-r8"
+SCRIPT_VERSION = "v4-jfb-domain-sync-58-r10"
 
 SCRIPT_NAMESPACE = uuid.uuid5(uuid.NAMESPACE_URL, "pivotly:jfb:config-bootstrap:v2")
 
@@ -61,22 +61,21 @@ PARAM_DEBUG = {}
 
 TOKEN_ENDPOINT = "https://login.microsoftonline.com/856436c2-a60d-486d-bca3-9c1367fa632a/oauth2/v2.0/token"
 API_SCOPE = "api://1a10b2a3-2fbf-4cc8-b32c-634766e1172b/.default"
+
 CLIENT_ID_SECRET = "jfb-pivotly-api-client-id"
 CLIENT_SECRET_SECRET = "jfb-pivotly-api-client-secret"
 
 PIVOTLY_API_DIAGNOSTIC = {}
 
-TOKEN_CLAIMS_TO_SHOW = ["aud", "iss", "ver", "tid", "appid", "azp", "roles", "scp", "exp"]
-
 SECRET_ERROR_REMEDIATION = {
     "secret_not_allowed": (
-        "No approved Allowed Secrets grant for this script. "
-        "Admin -> Variables -> Allowed Secrets: Consumer Type=script, "
-        "Consumer Slug=<this script's slug>, Variable Slug=<secret slug>, Status=approved."
+        "No approved Allowed Secrets row for this script. Admin -> Variables -> Allowed Secrets: "
+        "Consumer Type=script, Consumer Slug=<this script's slug>, Variable Slug=<secret slug>, Status=approved."
     ),
     "secret_not_found": (
-        "The Secret Variable slug does not exist in this environment. "
-        "Check spelling against Admin -> Variables, or point the constant at the right slug."
+        "The Runner reports every failed secret read this way, so check all of these in this instance: "
+        "the Secret Variable exists under exactly this slug; an approved Allowed Secrets row names this "
+        "script's slug; and the value has been re-entered and saved, since saving is what writes it to the vault."
     ),
     "runner_signed_token_rejected": (
         "The runner signed-token was rejected for this job. Re-run from the Portal "
@@ -85,6 +84,8 @@ SECRET_ERROR_REMEDIATION = {
     "secret_accessor_missing": "Unexpected Secret wrapper shape; report the runner version.",
     "secret_read_exception": "Inspect error_detail in secret_reads for the raw runner message.",
 }
+
+TOKEN_CLAIMS_TO_SHOW = ["aud", "iss", "ver", "tid", "appid", "azp", "roles", "scp", "exp"]
 
 RESERVED_ATTRIBUTE_NAMES = {
     "id", "version", "subversion", "domain", "superseded_by_id", "is_deleted",
@@ -13791,8 +13792,7 @@ def get_pivotly_api_safe():
         if not client_id or not client_secret:
             PIVOTLY_API_DIAGNOSTIC["token_error"] = "missing_client_credential_value"
             PIVOTLY_API_DIAGNOSTIC["remediation"] = (
-                "The Allowed Secrets grant resolved but the Variable is empty. "
-                "Store the actual credential value, not a secret ID."
+                "The secret read worked but the Variable is empty. Store the actual credential value, not a secret ID."
             )
             return None
 

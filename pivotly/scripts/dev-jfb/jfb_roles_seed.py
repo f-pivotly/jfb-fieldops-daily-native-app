@@ -1,3 +1,4 @@
+import base64
 import json
 
 try:
@@ -33,7 +34,7 @@ except ModuleNotFoundError:
         raise RuntimeError("Pivotly runner secret helper is unavailable outside Pivotly.")
 
 
-SCRIPT_VERSION = "v2-jfb-iam-roles-seed-r3"
+SCRIPT_VERSION = "v2-jfb-iam-roles-seed-r5"
 
 PARAM_CONTRACT_VERSION = "jfb_iam_roles_params_v1"
 
@@ -57,10 +58,12 @@ ROLE_SCOPE = "app"
 
 PRIVILEGED_USER_ID = "00000000-0000-7000-8000-a00000000001"
 
-TOKEN_ENDPOINT = "https://login.microsoftonline.com/39f6cf5e-725d-4087-a1e3-e7b4442c867e/oauth2/v2.0/token"
-API_SCOPE = "https://pivotlyidentityplatformdev.onmicrosoft.com/api/.default"
+TOKEN_ENDPOINT = "https://login.microsoftonline.com/856436c2-a60d-486d-bca3-9c1367fa632a/oauth2/v2.0/token"
+API_SCOPE = "api://1a10b2a3-2fbf-4cc8-b32c-634766e1172b/.default"
 CLIENT_ID_SECRET = "jfb-pivotly-api-client-id"
 CLIENT_SECRET_SECRET = "jfb-pivotly-api-client-secret"
+
+TOKEN_CLAIMS_TO_SHOW = ["aud", "iss", "ver", "tid", "appid", "azp", "roles", "scp", "exp"]
 
 TRANSPORT_DIAGNOSTIC = {}
 
@@ -466,6 +469,16 @@ def dac_plan(role_prefix):
     return plan
 
 
+def token_claims(token):
+    try:
+        payload = str(token or "").split(".")[1]
+        payload += "=" * (-len(payload) % 4)
+        claims = json.loads(base64.urlsafe_b64decode(payload.encode("ascii")).decode("utf-8"))
+    except Exception as exc:
+        return {"decode_error": safe_text(exc)}
+    return {key: claims.get(key) for key in TOKEN_CLAIMS_TO_SHOW if key in claims}
+
+
 def read_client_secret(slug):
     try:
         secret = get_privileged_secret(slug)
@@ -524,6 +537,7 @@ class HttpTransport:
                 + " "
                 + safe_text(body.get("error_description", ""), 200)
             )
+        TRANSPORT_DIAGNOSTIC["token_claims"] = token_claims(body.get("access_token"))
         self.api = PivotlyAPI(
             client_id=client_id,
             client_secret=client_secret,

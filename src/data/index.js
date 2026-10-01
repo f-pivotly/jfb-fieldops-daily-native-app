@@ -2,12 +2,25 @@ import axios from 'axios'
 import { requestNewToken, setAuthToken } from '../helpers/pivotlyHelpers'
 import { FETCH_PAGE_SIZE } from '../constants/pagination'
 
-const IS_LOCAL = true
+const ENVIRONMENTS = {
+  local: { apiPrefix: '', fallbackApiBaseUrl: 'https://dev.pivotly.com/vm/api/v3' },
+  dev: { apiPrefix: '/vm', fallbackApiBaseUrl: 'https://dev.pivotly.com/vm/api/v3' },
+  jfb: { fixedApiBaseUrl: 'https://app-jfbrennan-dev-core-api-cus-001.azurewebsites.net/vm/api/v3' },
+}
+
+const ENVIRONMENT = 'jfb'
+
+const { apiPrefix = '', fallbackApiBaseUrl, fixedApiBaseUrl } = ENVIRONMENTS[ENVIRONMENT]
+const DEFAULT_API_BASE_URL = import.meta.env.VITE_API_BASE_URL || fixedApiBaseUrl || fallbackApiBaseUrl
 
 function resolveApiBase() {
+  if (fixedApiBaseUrl) {
+    return fixedApiBaseUrl
+  }
+
   const runtimeConfig = window.__PIVOTLY_RUNTIME_CONFIG__;
   if (!runtimeConfig?.apiBaseUrl) {
-    return import.meta.env.VITE_API_BASE_URL || 'https://dev.pivotly.com/vm/api/v3'
+    return DEFAULT_API_BASE_URL
   }
 
   let parentOrigin
@@ -25,14 +38,10 @@ function resolveApiBase() {
   }
 
   if (!parentOrigin) {
-    return import.meta.env.VITE_API_BASE_URL || 'https://dev.pivotly.com/vm/api/v3'
+    return DEFAULT_API_BASE_URL
   }
 
-  const apiPath = IS_LOCAL
-    ? runtimeConfig.apiBaseUrl
-    : '/vm' + runtimeConfig.apiBaseUrl
-
-  return parentOrigin + apiPath
+  return parentOrigin + apiPrefix + runtimeConfig.apiBaseUrl
 }
 
 const API_BASE_URL = resolveApiBase()

@@ -15,6 +15,8 @@ import AttachmentsTab from './projectSettingsTabs/AttachmentsTab'
 import SiteEquipmentTab from './projectSettingsTabs/SiteEquipmentTab'
 import CoverMetricsTab from './projectSettingsTabs/CoverMetricsTab'
 import RealizedScopesTab from './projectSettingsTabs/RealizedScopesTab'
+import WaterMonitoringTab from './projectSettingsTabs/WaterMonitoringTab'
+import AirMonitoringTab from './projectSettingsTabs/AirMonitoringTab'
 
 export default function ProjectSettingsPage() {
   const { projectId } = useParams()
@@ -52,6 +54,8 @@ export default function ProjectSettingsPage() {
           <Tabs.Tab value="siteEquipment">Site Equipment</Tabs.Tab>
           <Tabs.Tab value="realizedScopes">Realized Scopes</Tabs.Tab>
           <Tabs.Tab value="attachments">Attachments</Tabs.Tab>
+          <Tabs.Tab value="waterMonitoring">Water Monitoring</Tabs.Tab>
+          <Tabs.Tab value="airMonitoring">Air Monitoring</Tabs.Tab>
           {isDredging && <Tabs.Tab value="dredgeChart">Dredge Chart</Tabs.Tab>}
           {isPlacement && <Tabs.Tab value="placementChart">Placement Chart</Tabs.Tab>}
           {isSpreader && <Tabs.Tab value="spreaderChart">Spreader Chart</Tabs.Tab>}
@@ -71,6 +75,12 @@ export default function ProjectSettingsPage() {
         </Tabs.Panel>
         <Tabs.Panel value="attachments">
           <AttachmentsTab project={project} />
+        </Tabs.Panel>
+        <Tabs.Panel value="waterMonitoring">
+          <WaterMonitoringTab project={project} />
+        </Tabs.Panel>
+        <Tabs.Panel value="airMonitoring">
+          <AirMonitoringTab project={project} />
         </Tabs.Panel>
         {isDredging && (
           <Tabs.Panel value="dredgeChart">
