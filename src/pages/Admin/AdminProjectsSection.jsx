@@ -20,6 +20,7 @@ import { usePicklist } from "../../hooks/core/usePicklist";
 import { useDomainAccess } from "../../contexts/adminAccessContext";
 import LoadingSpinner from "../../components/LoadingSpinner";
 import SafeError from "../../components/SafeError";
+import { timeZoneOptions } from "../../lib/timeZones";
 
 const FALLBACK_PRIMARY_MEASURE = "CY";
 
@@ -306,7 +307,17 @@ export default function AdminProjectsSection({ onConfigure }) {
           <Select label="Primary Measure" data={primaryMeasureData} value={form.primary_measure} onChange={(v) => setField("primary_measure", v ?? FALLBACK_PRIMARY_MEASURE)} />
           <TextInput label="Site City" placeholder="e.g. Crofton" value={form.site_city} onChange={(e) => setField("site_city", e.currentTarget.value)} />
           <TextInput label="Site State" placeholder="e.g. NE" maxLength={2} value={form.site_state} onChange={(e) => setField("site_state", e.currentTarget.value.toUpperCase())} />
-          <TextInput label="Report Timezone" placeholder="e.g. America/Chicago" description="Clock times on reports display in this zone. Blank uses the viewer's own." inputWrapperOrder={["label", "input", "description"]} value={form.report_timezone} onChange={(e) => setField("report_timezone", e.currentTarget.value.trim())} />
+          <Select
+            label="Report Timezone"
+            placeholder="Viewer's own time zone"
+            description="Clock times on reports display in this zone. Blank uses the viewer's own."
+            inputWrapperOrder={["label", "input", "description"]}
+            data={timeZoneOptions(form.report_timezone)}
+            value={form.report_timezone || null}
+            onChange={(v) => setField("report_timezone", v ?? "")}
+            clearable
+            limit={60}
+          />
         </SimpleGrid>
 
         <Text size="10px" fw={700} c="dimmed" mb={8} style={{ textTransform: "uppercase", letterSpacing: ".5px" }}>

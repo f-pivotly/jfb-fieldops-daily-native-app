@@ -1,5 +1,6 @@
 import { downloadAttachment } from '../../../data'
-import { blobToDataUri, rate } from './realizedToDate'
+import { rate } from './realizedToDate'
+import { IMAGE_PRESETS, imageBlobToDataUri } from '../../../lib/imageResize'
 
 export async function buildPhotoAssetsParam(photos, weekStart) {
   const weekPhotos = photos.filter((p) => p.week_start === weekStart && p.photo_file_path)
@@ -7,7 +8,7 @@ export async function buildPhotoAssetsParam(photos, weekStart) {
   const entries = await Promise.all(
     weekPhotos.map(async (p) => {
       const blob = await downloadAttachment(p.photo_file_path)
-      const dataUri = await blobToDataUri(blob)
+      const dataUri = await imageBlobToDataUri(blob, IMAGE_PRESETS.pdfPhoto)
       return [String(p.photo_number), { label: p.label || '', dataUri }]
     }),
   )

@@ -11,7 +11,9 @@ import { useDomainData } from '../../hooks/core/useDomainData'
 import { useWeeklySummaries } from '../../hooks/weekly/useWeeklySummaries'
 import { useWeeklySummaryPhotos } from '../../hooks/weekly/useWeeklySummaryPhotos'
 import { useAttachmentUpload } from '../../hooks/ui/useAttachmentUpload'
-import { useAsyncAction } from '../../hooks/ui/useAsyncAction'
+import { usePdfJob } from '../../hooks/ui/usePdfJob'
+import PdfJobStatus from '../../components/PdfJobStatus'
+import { shrinkPhotoFile } from '../../lib/imageResize'
 import PhotoSlot from './reportEditorTabs/components/PhotoSlot'
 import LoadingSpinner from '../../components/LoadingSpinner'
 import SafeError from '../../components/SafeError'
@@ -151,7 +153,7 @@ export default function WeeklySummaryPage() {
   const photoFor = (n) => photos.find((p) => p.week_start === weekStart && p.photo_number === n) ?? null
 
   const photoUpload = useAttachmentUpload()
-  const { busy: downloadingPdf, error: pdfError, run: runDownloadPdf } = useAsyncAction()
+  const pdfJob = usePdfJob()
 
   async function handlePhotoUpload(slot, file, label) {
     setPhotoUploading((u) => ({ ...u, [slot]: true }))
@@ -183,11 +185,12 @@ export default function WeeklySummaryPage() {
       }
       if (!recordId) throw new Error('Could not resolve the saved photo record.')
 
+      const prepared = await shrinkPhotoFile(file)
       await photoUpload.upload({
         recordId,
         domain: PHOTO_DOMAIN,
         field: 'photo_file_path',
-        file: withUniqueName(file, recordId),
+        file: withUniqueName(prepared, recordId),
         previousFileId,
         update: updatePhoto,
       })
@@ -245,7 +248,7 @@ export default function WeeklySummaryPage() {
 
   async function handleDownloadPdf() {
     if (!report) return
-    await runDownloadPdf(async () => {
+    await pdfJob.run(async () => {
       const narrativeSections = buildNarrativeSectionsParam(sections, summaries, weekStart)
       const weeklyPhotoAssets = await buildPhotoAssetsParam(photos, weekStart)
       const weeklyChartAssets = dredgeConfigRecords.length > 0
@@ -335,13 +338,14 @@ export default function WeeklySummaryPage() {
         <Text fw={700} size="lg">Weekly Summary</Text>
         <Group gap="md">
           {report && report.releasedCount > 0 && (
-            <Button size="xs" variant="outline" loading={downloadingPdf} onClick={handleDownloadPdf}>
-              {downloadingPdf ? 'Generating…' : 'Download PDF'}
+            <Button size="xs" variant="outline" loading={pdfJob.busy} onClick={handleDownloadPdf}>
+              Download PDF
             </Button>
           )}
           <Link to={`/projects/${projectId}/reports`} style={{ fontSize: 13 }}>← Reports</Link>
         </Group>
       </Group>
+      <PdfJobStatus job={pdfJob} ta="right" mb={4} />
       <Text size="sm" c="dimmed" mb={16}>
         Client-facing roll-up of the week's daily narratives, production, and delays.
       </Text>
@@ -465,7 +469,6 @@ export default function WeeklySummaryPage() {
           </>
           )}
 
-          <SafeError message={pdfError} />
 
           <Modal
             opened={removingSlot != null}

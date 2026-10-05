@@ -9,6 +9,8 @@ import { pickDensity } from './lib/coverDensity'
 import { dayOfWeek, prettyDate } from '../../lib/reportDates'
 import { equipmentForReport } from './lib/workType'
 import { downloadAndLogReport } from './lib/reportDownload'
+import { usePdfJob } from '../../hooks/ui/usePdfJob'
+import PdfJobStatus from '../../components/PdfJobStatus'
 import { useProject } from '../../hooks/project/useProject'
 import { useReports } from '../../hooks/report/useReports'
 import { useEquipment } from '../../hooks/project/useEquipment'
@@ -98,7 +100,7 @@ export default function ReportEditorPage() {
   const mobDay = report?.no_production_day ?? false
   const [selectedEquipment, setSelectedEquipment] = useState(null)
   const [tab, setTab] = useState('event_log')
-  const [downloadingPdf, setDownloadingPdf] = useState(false)
+  const pdfJob = usePdfJob()
   const [checklist, setChecklist] = useState(null)
   const [pdfIssues, setPdfIssues] = useState(null)
   const canSkipPdfValidation = useFieldOpsAction('skip_pdf_validation')
@@ -169,9 +171,8 @@ export default function ReportEditorPage() {
   }
 
   async function handleDownloadPdf(opts = {}) {
-    setDownloadingPdf(true)
-    setPdfIssues(null)
-    try {
+    await pdfJob.run(async () => {
+      setPdfIssues(null)
       const reportId = report?.id
       const narrativeSections = await buildNarrativeSectionsParam({ appSlug: config.appSlug, projectId, reportId })
 
@@ -242,11 +243,7 @@ export default function ReportEditorPage() {
           report_type: 'daily',
         },
       })
-    } catch (err) {
-      console.error('Report generation failed:', err.message)
-    } finally {
-      setDownloadingPdf(false)
-    }
+    })
   }
 
   return (
@@ -340,9 +337,10 @@ export default function ReportEditorPage() {
 
             {canDownloadPdf && (
               <Stack gap={6}>
-                <Button size="xs" loading={downloadingPdf} onClick={() => handleDownloadPdf()}>
+                <Button size="xs" loading={pdfJob.busy} onClick={() => handleDownloadPdf()}>
                   Download PDF
                 </Button>
+                <PdfJobStatus job={pdfJob} />
                 {pdfIssues && pdfIssues.length > 0 && (
                   <Box p={8} style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 6 }}>
                     <Text size="xs" fw={700} c="#92400E" mb={4}>PDF blocked — fix these first:</Text>
@@ -351,7 +349,7 @@ export default function ReportEditorPage() {
                         <Text key={issue.key} size="xs" c="#92400E">• {issue.message}</Text>
                       ))}
                     </Stack>
-                    {canSkipPdfValidation && (
+                    {canSkipPdfValidation && !pdfJob.busy && (
                       <Text
                         size="xs"
                         fw={600}

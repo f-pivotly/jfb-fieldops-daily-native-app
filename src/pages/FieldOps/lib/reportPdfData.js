@@ -16,6 +16,7 @@ import { UNATTRIBUTED_CATEGORY, shiftTotals } from './eventTotals'
 import { metricValueKey } from '../../../lib/metricValueKey'
 import { payGroupsOf, payQuantity, payQtyDecimals } from '../../../lib/capping/payGroups'
 import { isDirectImageUrl } from '../../../lib/imageSource'
+import { IMAGE_PRESETS, imageBlobToDataUri } from '../../../lib/imageResize'
 import { hhmm, utcDayRange } from '../../../lib/reportDates'
 import { uniqueSectionKey } from '../../../lib/narrativeSectionKey'
 import { airWindowUtc, buildAirDay } from '../../../lib/airQuality/data'
@@ -105,7 +106,7 @@ export async function buildPhotoAssetsParam({ appSlug, reportId }) {
   const entries = await Promise.all(
     photos.map(async (p) => {
       const blob = await downloadAttachment(p.photo_file_path)
-      const dataUri = await blobToDataUri(blob)
+      const dataUri = await imageBlobToDataUri(blob, IMAGE_PRESETS.pdfPhoto)
       return [String(p.photo_number), { label: p.label || `Photo ${p.photo_number}`, dataUri }]
     }),
   )
@@ -167,7 +168,7 @@ export async function buildDredgeChartAssetsParam({ appSlug, reportId, project, 
       })
       .filter((c) => c.include)
       .map(async ({ eq, chartPaths }) => {
-        const dataUris = await Promise.all(chartPaths.map(async (path) => blobToDataUri(await downloadAttachment(path))))
+        const dataUris = await Promise.all(chartPaths.map(async (path) => imageBlobToDataUri(await downloadAttachment(path), IMAGE_PRESETS.pdfChart)))
         return [String(eq.id), {
           dataUris,
           dataUri: dataUris[0] ?? null,
@@ -1419,8 +1420,8 @@ async function fetchMonitoringReadings({ domain, appSlug, projectId, startUtc, e
 async function monitoringImageDataUri(pathOrId) {
   if (!pathOrId) return null
   try {
-    if (isDirectImageUrl(pathOrId)) return await blobToDataUri(await fetchPublicAsset(pathOrId))
-    return await blobToDataUri(await downloadAttachment(pathOrId))
+    if (isDirectImageUrl(pathOrId)) return await imageBlobToDataUri(await fetchPublicAsset(pathOrId), IMAGE_PRESETS.pdfAerial)
+    return await imageBlobToDataUri(await downloadAttachment(pathOrId), IMAGE_PRESETS.pdfAerial)
   } catch {
     return null
   }

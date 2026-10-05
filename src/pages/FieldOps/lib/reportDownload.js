@@ -1,7 +1,7 @@
-import { api, fetchCurrentUser, fetchFileById, createDomainRecord } from '../../../data'
+import { api, fetchCurrentUser, fetchFileById, createDomainRecord, REPORT_TIMEOUT_MS } from '../../../data'
 
 export async function downloadAndLogReport({ result, filename, appSlug, recordData }) {
-  const fileRes = await api.get(result.downloadUrl, { responseType: 'blob' })
+  const fileRes = await api.get(result.downloadUrl, { responseType: 'blob', timeout: REPORT_TIMEOUT_MS })
   const blobUrl = URL.createObjectURL(new Blob([fileRes.data], { type: 'application/pdf' }))
   const link = document.createElement('a')
   link.href = blobUrl

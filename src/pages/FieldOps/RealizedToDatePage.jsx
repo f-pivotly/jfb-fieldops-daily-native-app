@@ -13,6 +13,8 @@ import ScheduledOffDaysCard from '../../components/ScheduledOffDaysCard'
 import { buildRealizedReport, tonnageMeasure, todayISO, prettyDate, addDaysISO, mondayStartISO } from './lib/realizedToDate'
 import { buildRealizedReportParams } from './lib/realizedPdfData'
 import { downloadAndLogReport } from './lib/reportDownload'
+import { usePdfJob } from '../../hooks/ui/usePdfJob'
+import PdfJobStatus from '../../components/PdfJobStatus'
 
 function fmtRate(n) {
   return (n ?? 0).toLocaleString(undefined, { maximumFractionDigits: 1 })
@@ -183,11 +185,10 @@ export default function RealizedToDatePage() {
     }
   }
 
-  const [pdfBusy, setPdfBusy] = useState(false)
+  const pdfJob = usePdfJob()
   async function handleDownloadPdf() {
     if (!report || !project) return
-    setPdfBusy(true)
-    try {
+    await pdfJob.run(async () => {
       const generatedISO = todayISO()
       const params = buildRealizedReportParams({ report, project, projectCode: project.project_code, generatedISO })
       const result = await executeReport('rpt-jfb-realized-to-date', { parameters: params })
@@ -201,11 +202,7 @@ export default function RealizedToDatePage() {
           report_type: 'realized_to_date',
         },
       })
-    } catch (e) {
-      setActionError(e.message)
-    } finally {
-      setPdfBusy(false)
-    }
+    })
   }
 
   const loading = projectLoading || (!!project?.id && dailyTotals === null)
@@ -231,13 +228,14 @@ export default function RealizedToDatePage() {
         </Group>
         <Group gap="md">
           {report && report.weeks.length > 0 && (
-            <Button size="xs" variant="outline" loading={pdfBusy} onClick={handleDownloadPdf}>
-              {pdfBusy ? 'Generating…' : 'Download PDF'}
+            <Button size="xs" variant="outline" loading={pdfJob.busy} onClick={handleDownloadPdf}>
+              Download PDF
             </Button>
           )}
           <Link to={`/projects/${projectId}/reports`} style={{ fontSize: 13 }}>← Reports</Link>
         </Group>
       </Group>
+      <PdfJobStatus job={pdfJob} ta="right" mb={4} />
       <Text size="sm" c="dimmed" mb={20}>
         Cumulative production vs goal and completion forecast. Internal report — not client-facing.
       </Text>

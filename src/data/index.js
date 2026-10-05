@@ -142,8 +142,10 @@ export async function executeDataView(slug, parameters) {
   return data?.data ?? []
 }
 
+export const REPORT_TIMEOUT_MS = 120000
+
 export async function executeReport(slug, { parameters, filters } = {}) {
-  const { data } = await api.post(`/reports/${slug}/execute?wait=true`, { parameters, filters })
+  const { data } = await api.post(`/reports/${slug}/execute?wait=true`, { parameters, filters }, { timeout: REPORT_TIMEOUT_MS })
   return data?.data ?? data
 }
 

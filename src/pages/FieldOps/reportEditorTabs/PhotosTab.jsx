@@ -8,6 +8,7 @@ import { useReportPhotos } from '../../../hooks/report/useReportPhotos'
 import { useAppConfig } from '../../../contexts/appConfigContext'
 import { uploadAttachment, deleteAttachment, readWrittenRecordId } from '../../../data'
 import { useFieldOpsAction } from '../../../contexts/fieldOpsAccessContext'
+import { shrinkPhotoFile } from '../../../lib/imageResize'
 
 const DOMAIN = 'jfb_report_photos'
 const SLOTS = [1, 2]
@@ -64,10 +65,11 @@ export default function PhotosTab({ project, report }) {
       }
       if (!recordId) throw new Error('Could not resolve the saved photo record.')
 
+      const prepared = await shrinkPhotoFile(file)
       const uploadRes = await uploadAttachment({
         coreRecordId: recordId,
         domain: DOMAIN,
-        file: withUniqueName(file, recordId),
+        file: withUniqueName(prepared, recordId),
       })
       await update(recordId, { photo_file_path: uploadRes.fileId })
 

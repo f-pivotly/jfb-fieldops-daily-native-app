@@ -1,7 +1,5 @@
 # JFB Field Ops: what only the native app has
 
-Screens, modals and fields in `jfb-fieldops-daily-native-app` (Pivotly) that the non-native system (`jfb-fieldops-daily` and its admin console `jfb-fieldops-daily/admin/index.html`) doesn't have, with how each one is done in non-native and how to find it in native.
-
 
 ## Summary
 
